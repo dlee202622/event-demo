@@ -1,0 +1,23 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.3.1
+    command: sh mqnamesrv
+    ports:
+      - "9876:9876"
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.3.1
+    command: sh mqbroker -n rocketmq-namesrv:9876 --enable-proxy
+    depends_on:
+      - rocketmq-namesrv
+    environment:
+      NAMESRV_ADDR: rocketmq-namesrv:9876
+    ports:
+      - "10911:10911"
+      - "8091:8081"
