@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: ddd-event-driven-demo
+
+server:
+  port: 8080
+
+# ── 演示参数 ───────────────────────────────────────────────
+demo:
+  outbox:
+    # Outbox 中继轮询间隔（毫秒），生产上一般 100~1000ms
+    relay-interval-ms: 3000
+
+logging:
+  level:
+    root: INFO
+    com.example.demo: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+
+# ── 如果接入真实 Kafka，可添加如下配置（本 demo 未引入依赖）──
+# spring:
+#   kafka:
+#     bootstrap-servers: localhost:9092
+#     producer:
+#       key-serializer: org.apache.kafka.common.serialization.StringSerializer
+#       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+#       acks: all
+#       enable-idempotence: true

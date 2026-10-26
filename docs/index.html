@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DDD 事件驱动 Demo · 技术文档</title>
+<style>
+:root{
+  --bg:#f6f7f9;
+  --panel:#ffffff;
+  --thead:#f1f3f7;
+  --text:#141821;
+  --text-2:#4a5260;
+  --text-3:#818b9c;
+  --border:#e3e6ec;
+  --accent:#4f46e5;
+  --accent-soft:#eef0ff;
+  --accent-line:#c7cbf5;
+  --code-bg:#1a2030;
+  --code-head:#151a26;
+  --code-text:#dde5f2;
+  --code-border:#2a3446;
+  --inline-bg:#eef0ff;
+  --inline-text:#4338ca;
+  --ok:#0f766e;
+  --warn:#b45309;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 10px 30px rgba(16,24,40,.05);
+  --svg-fill:#f3f4ff;
+  --svg-stroke:#c9cdf7;
+  --svg-t1:#2b2f45;
+  --svg-t2:#666e8f;
+  --svg-line:#b3bad6;
+  --svg-core-fill:#4f46e5;
+  --svg-core-stroke:#4338ca;
+  --svg-core-t1:#ffffff;
+  --svg-core-t2:#d5dafb;
+}
+[data-theme="dark"]{
+  --bg:#0e1116;
+  --panel:#151a22;
+  --thead:#11161e;
+  --text:#e8ecf4;
+  --text-2:#a8b2c3;
+  --text-3:#788396;
+  --border:#242c38;
+  --accent:#8b93ff;
+  --accent-soft:#1c2138;
+  --accent-line:#39406a;
+  --code-bg:#10151f;
+  --code-head:#0c1017;
+  --code-text:#d8e0ee;
+  --code-border:#222b3a;
+  --inline-bg:#1d2337;
+  --inline-text:#a5b4fc;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.35);
+  --svg-fill:#1a2130;
+  --svg-stroke:#39435c;
+  --svg-t1:#e6ebf5;
+  --svg-t2:#9aa4bb;
+  --svg-line:#5a6580;
+  --svg-core-fill:#4338ca;
+  --svg-core-stroke:#6d75e8;
+  --svg-core-t1:#eef2ff;
+  --svg-core-t2:#c7d2fe;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased;
+}
+.layout{display:grid;grid-template-columns:246px minmax(0,1fr);max-width:1260px;margin:0 auto}
+aside{
+  position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;
+  padding:38px 18px 40px 30px;border-right:1px solid var(--border);
+}
+.brand{display:block;font-size:14px;font-weight:650;letter-spacing:-.01em;margin-bottom:4px}
+.brand span{display:block;font-size:12px;font-weight:400;color:var(--text-3);margin-top:2px}
+.nav{margin-top:26px}
+.nav-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);margin:0 0 10px 10px}
+.nav a{display:block;padding:6px 10px;border-radius:7px;color:var(--text-2);text-decoration:none;font-size:13.5px;transition:background .15s,color .15s}
+.nav a:hover{background:var(--panel);color:var(--text)}
+.nav a.active{background:var(--accent-soft);color:var(--accent);font-weight:500}
+main{padding:44px 52px 110px;max-width:920px;min-width:0}
+.hero{margin-bottom:52px}
+.hero-top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+.eyebrow{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
+.btn-ghost{
+  font:inherit;font-size:12.5px;color:var(--text-2);background:var(--panel);
+  border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;
+}
+.btn-ghost:hover{border-color:var(--accent-line);color:var(--accent)}
+h1{font-size:33px;line-height:1.25;letter-spacing:-.022em;margin:0 0 12px;font-weight:650}
+.lead{font-size:15.5px;color:var(--text-2);margin:0 0 22px;max-width:660px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{
+  font-size:12.5px;color:var(--text-2);background:var(--panel);
+  border:1px solid var(--border);border-radius:999px;padding:4px 11px;
+}
+.chip b{font-weight:600;color:var(--text)}
+h2{
+  font-size:21px;font-weight:640;letter-spacing:-.015em;margin:56px 0 18px;
+  padding-bottom:10px;border-bottom:1px solid var(--border);
+}
+h3{font-size:15.5px;font-weight:640;margin:30px 0 10px}
+p{margin:0 0 14px;color:var(--text-2)}
+ul,ol{margin:0 0 16px;padding-left:22px;color:var(--text-2)}
+li{margin:5px 0}
+a{color:var(--accent)}
+strong{color:var(--text);font-weight:600}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));gap:12px;margin:22px 0 8px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
+.card h3{margin:0 0 6px;font-size:14px}
+.card p{margin:0;font-size:13px;color:var(--text-3);line-height:1.65}
+.layers{display:flex;flex-direction:column;align-items:center;margin:26px 0 10px}
+.layer{
+  width:100%;display:flex;align-items:center;justify-content:space-between;gap:18px;
+  background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 20px;
+}
+.layer.w2{width:95%}
+.layer.w3{width:90%}
+.layer.w4{width:85%}
+.layer.core{border-color:var(--accent-line);background:var(--accent-soft)}
+.layer .l-name{font-size:14px;font-weight:630;white-space:nowrap}
+.layer .l-desc{font-size:12.5px;color:var(--text-3);text-align:right;line-height:1.55}
+.layer-arrow{font-size:12px;color:var(--text-3);padding:7px 0;letter-spacing:.04em}
+.layer-arrow span{opacity:.75}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--panel);margin:18px 0 8px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{
+  text-align:left;font-weight:600;color:var(--text-2);background:var(--thead);
+  padding:10px 14px;border-bottom:1px solid var(--border);white-space:nowrap;
+}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text-2);vertical-align:top;line-height:1.6}
+tr:last-child td{border-bottom:none}
+code{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;font-size:.88em}
+p code,li code,td code{
+  background:var(--inline-bg);color:var(--inline-text);padding:1px 5px;border-radius:5px;font-size:12.5px;
+}
+.code{border:1px solid var(--code-border);border-radius:12px;overflow:hidden;background:var(--code-bg);margin:16px 0 20px}
+.code-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:9px 16px;background:var(--code-head);border-bottom:1px solid var(--code-border);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:#7d8aa0;
+}
+.code-head .lang{text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;opacity:.8}
+pre{margin:0;padding:16px 18px;overflow-x:auto;font-size:12.8px;line-height:1.72;color:var(--code-text)}
+pre code{font-size:inherit}
+pre .k{color:#c792ea}
+pre .s{color:#a8d488}
+pre .c{color:#68768c;font-style:italic}
+pre .a{color:#e0af68}
+pre .n{color:#7fb3e8}
+.note{
+  border-left:3px solid var(--accent-line);background:var(--panel);
+  padding:13px 18px;border-radius:0 10px 10px 0;margin:18px 0;font-size:13.5px;color:var(--text-2);
+}
+.note b{color:var(--text)}
+figure{margin:22px 0}
+figcaption{font-size:12.5px;color:var(--text-3);margin-top:10px;text-align:center}
+svg{width:100%;height:auto;display:block}
+svg .box{fill:var(--svg-fill);stroke:var(--svg-stroke);stroke-width:1}
+svg .core{fill:var(--svg-core-fill);stroke:var(--svg-core-stroke);stroke-width:1}
+svg .line{fill:none;stroke:var(--svg-line);stroke-width:1.4}
+svg .t{fill:var(--svg-t1);font-family:inherit;font-size:13.5px;font-weight:600}
+svg .t2{fill:var(--svg-t2);font-family:inherit;font-size:11.5px}
+svg .ct{fill:var(--svg-core-t1)}
+svg .cs{fill:var(--svg-core-t2)}
+svg .lbl{fill:var(--svg-t2);font-family:inherit;font-size:11px}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:8px 18px;font-size:13.5px;margin:16px 0}
+.kv dt{color:var(--text-3)}
+.kv dd{margin:0;color:var(--text-2)}
+footer{margin-top:64px;padding-top:22px;border-top:1px solid var(--border);font-size:12.5px;color:var(--text-3)}
+@media (max-width:1000px){
+  .layout{display:block}
+  aside{display:none}
+  main{padding:32px 22px 80px;max-width:none}
+  h1{font-size:27px}
+  .layer .l-desc{display:none}
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<aside>
+  <a class="brand" href="#top">DDD 事件驱动 Demo<span>技术文档 · v0.0.1</span></a>
+  <nav class="nav">
+    <p class="nav-label">目录</p>
+    <a href="#overview">1 · 项目概览</a>
+    <a href="#quickstart">2 · 快速开始</a>
+    <a href="#layers">3 · 分层结构</a>
+    <a href="#eventflow">4 · 事件流</a>
+    <a href="#code">5 · 核心实现</a>
+    <a href="#api">6 · 接口一览</a>
+    <a href="#design">7 · 设计决策</a>
+    <a href="#verify">8 · 测试与验证</a>
+    <a href="#mq">9 · 接入中间件</a>
+  </nav>
+</aside>
+
+<main id="top">
+
+<header class="hero">
+  <div class="hero-top">
+    <span class="eyebrow">技术文档 · 2026-10-26</span>
+    <button id="themeBtn" class="btn-ghost" type="button">切换深色</button>
+  </div>
+  <h1>DDD 事件驱动 Demo</h1>
+  <p class="lead">
+    以「订单」限界上下文为主线，把领域建模、领域事件、CQRS 读模型与 Outbox 可靠投递串成一条可运行、可验证的完整链路。
+    不依赖任何外部中间件，启动即用；每一层都留好了替换成 MySQL、Kafka、RocketMQ 的接缝。
+  </p>
+  <div class="chips">
+    <span class="chip"><b>Java</b> 21</span>
+    <span class="chip"><b>Spring Boot</b> 4.1.2</span>
+    <span class="chip"><b>零</b> 外部中间件</span>
+    <span class="chip"><b>7</b> 个测试通过</span>
+    <span class="chip"><b>12</b> 个 HTTP 接口</span>
+  </div>
+</header>
+
+<section id="overview">
+  <h2>1 · 项目概览</h2>
+  <p>
+    这不是一个只展示注解的脚手架，而是一份「边界清晰」的最小可运行示例。四个能力点各自独立，又能串成一条链路：
+    下单写聚合、聚合发事件、事件驱动下游、下游投影读模型、Outbox 把事件送到 MQ。
+  </p>
+  <div class="cards">
+    <div class="card">
+      <h3>聚合自守</h3>
+      <p>状态流转与不变量写在 <code>Order</code> 内部，外部拿不到 setter，规则无法被绕过。</p>
+    </div>
+    <div class="card">
+      <h3>事件解耦</h3>
+      <p>订单不感知库存、积分、通知。新增一个下游只需加订阅者，用例代码零改动。</p>
+    </div>
+    <div class="card">
+      <h3>读写分离</h3>
+      <p>查询走 <code>OrderView</code> 读模型，不为展示一个列表而重建整个聚合。</p>
+    </div>
+    <div class="card">
+      <h3>可靠投递</h3>
+      <p>Outbox 表 + 定时中继 + 消费端 eventId 幂等，扛住至少一次语义。</p>
+    </div>
+  </div>
+
+  <h3>一次下单请求发生了什么</h3>
+  <dl class="kv">
+    <dt>写模型</dt>
+    <dd><code>Order.place()</code> 校验并创建聚合，登记 <code>OrderCreatedEvent</code>，但此刻还没有发出去。</dd>
+    <dt>持久化</dt>
+    <dd>应用服务先 <code>save(order)</code>，保证读侧能查到数据，再拉取并发布事件。</dd>
+    <dt>扇出</dt>
+    <dd>事件被 4 类订阅者消费：库存预占、读模型投影、通知、Outbox 发件箱。</dd>
+    <dt>投递</dt>
+    <dd>Outbox 中继定时把事件发到 <code>topic=order-events</code>，消息 key 使用 orderId 保证同聚合有序。</dd>
+  </dl>
+</section>
+
+<section id="quickstart">
+  <h2>2 · 快速开始</h2>
+  <div class="code">
+    <div class="code-head"><span>terminal</span><span class="lang">shell</span></div>
+<pre><code>cd /Users/donglee/IdeaProjects/demo
+
+./mvnw spring-boot:run      # 启动，默认 8080
+./mvnw test                 # 跑测试，7 个用例
+</code></pre>
+  </div>
+
+  <p>下单一次，观察完整链路：</p>
+  <div class="code">
+    <div class="code-head"><span>POST /api/orders</span><span class="lang">bash</span></div>
+<pre><code>curl -s -X POST http://localhost:8080/api/orders \
+  -H 'Content-Type: application/json' \
+  -d '{"customerId":"C-1001","items":[
+        {"productId":"P-1001","productName":"机械键盘","unitPrice":399.00,"quantity":2}]}'
+</code></pre>
+  </div>
+  <div class="code">
+    <div class="code-head"><span>201 Created</span><span class="lang">json</span></div>
+<pre><code>{
+  "orderId": "ORD-F4021666",
+  "customerId": "C-1001",
+  "status": "CREATED",
+  "statusDesc": "已创建",
+  "totalAmount": 798.00,
+  "currency": "CNY",
+  "itemCount": 1,
+  "createdAt": "2026-10-26T12:33:42.943726Z"
+}
+</code></pre>
+  </div>
+  <div class="note">
+    <b>端口提示：</b>若 8080 被占用，或环境里存在 <code>SERVER_PORT</code> 之类的变量，
+    用 <code>./mvnw spring-boot:run -Dspring-boot.run.arguments=--server.port=18080</code> 显式指定。
+    所有请求也整理在仓库根目录的 <code>api-examples.http</code> 中，可在 IDE 里直接点击执行。
+  </div>
+</section>
+
+<section id="layers">
+  <h2>3 · 分层结构</h2>
+  <p>
+    依赖方向只有一个：外层依赖内层，内层完全不知道外层的存在。
+    <strong>领域层零框架依赖</strong>——没有 <code>@Service</code>、没有 <code>@Entity</code>，可以直接单测、也随时能迁走。
+  </p>
+
+  <div class="layers">
+    <div class="layer"><span class="l-name">接口层 · interfaces</span><span class="l-desc">OrderController · DTO · 异常映射</span></div>
+    <div class="layer-arrow">↓ <span>依赖</span></div>
+    <div class="layer w2"><span class="l-name">应用层 · application</span><span class="l-desc">用例编排 · 事务边界 · 发布事件</span></div>
+    <div class="layer-arrow">↓ <span>依赖</span></div>
+    <div class="layer w3 core"><span class="l-name">领域层 · domain</span><span class="l-desc">聚合 · 值对象 · 领域事件 · 仓储端口</span></div>
+    <div class="layer-arrow">↑ <span>实现</span></div>
+    <div class="layer w4"><span class="l-name">基础设施 · infrastructure</span><span class="l-desc">持久化 · 投影 · 事件总线 · Outbox</span></div>
+  </div>
+
+  <h3>代码目录</h3>
+  <div class="code">
+    <div class="code-head"><span>src/main/java/com/example/demo</span><span class="lang">tree</span></div>
+<pre><code>com/example/demo
+├── DemoApplication.java              @SpringBootApplication + @EnableScheduling
+├── shared/
+│   ├── domain/                       DomainEvent · AggregateRoot · DomainEventPublisher · DomainException
+│   └── infrastructure/
+│       ├── event/                    SpringDomainEventPublisher · DomainEventStore
+│       ├── outbox/                   OutboxEvent · OutboxStore · OutboxRelay · DomainEventOutboxHandler
+│       └── idempotency/              ProcessedEventRegistry
+├── order/
+│   ├── domain/model/                 Order · OrderId · OrderItem · Money · OrderStatus
+│   ├── domain/event/                 OrderCreated/Confirmed/Paid/Cancelled Event
+│   ├── domain/repository/            OrderRepository · OrderNotFoundException
+│   ├── application/                  OrderApplicationService · command/ · query/
+│   ├── infrastructure/               persistence/ · projection/ · listener/
+│   └── interfaces/rest/              OrderController · GlobalExceptionHandler · dto/
+├── inventory/                        InventoryService · event/InventoryEventListener
+├── loyalty/                          LoyaltyPointsService · event/LoyaltyEventListener
+└── admin/                            DiagnosticsController
+</code></pre>
+  </div>
+
+  <h3>各层职责与红线</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>层</th><th>目录</th><th>职责</th><th>红线</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>接口层</td><td><code>order/interfaces/rest</code></td><td>HTTP 协议转换、DTO 校验、异常到状态码的映射</td><td>不写业务判断，不直接访问仓储</td></tr>
+        <tr><td>应用层</td><td><code>order/application</code></td><td>编排用例、确定事务边界、保存后发布事件</td><td>不承载业务规则</td></tr>
+        <tr><td>领域层</td><td><code>order/domain</code></td><td>聚合、值对象、领域事件、仓储端口定义</td><td>不依赖 Spring、JPA、Jackson</td></tr>
+        <tr><td>基础设施层</td><td><code>order/infrastructure</code>、<code>shared/infrastructure</code></td><td>实现端口：内存仓储、投影器、事件总线、Outbox</td><td>不被领域层反向依赖</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="eventflow">
+  <h2>4 · 事件流</h2>
+  <p>
+    聚合只负责「登记」事件，应用服务在保存之后统一「发布」，发布器再写事件存储并交给 Spring 的事件多播器。
+    订阅者之间互不感知，谁订阅了什么，只有订阅者自己知道。
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 680 392" role="img" aria-label="领域事件从聚合扇出到四个订阅者">
+      <defs>
+        <marker id="arw" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="var(--svg-line)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <rect class="box" x="180" y="10" width="320" height="52" rx="10"/>
+      <text class="t" x="340" y="29" text-anchor="middle" dominant-baseline="central">接口层 · OrderController</text>
+      <text class="t2" x="340" y="46" text-anchor="middle" dominant-baseline="central">HTTP 请求转成 Command</text>
+
+      <rect class="box" x="180" y="80" width="320" height="52" rx="10"/>
+      <text class="t" x="340" y="99" text-anchor="middle" dominant-baseline="central">应用层 · OrderApplicationService</text>
+      <text class="t2" x="340" y="116" text-anchor="middle" dominant-baseline="central">save 之后发布事件</text>
+
+      <rect class="core" x="180" y="150" width="320" height="52" rx="10"/>
+      <text class="t ct" x="340" y="169" text-anchor="middle" dominant-baseline="central">聚合根 · Order</text>
+      <text class="t2 cs" x="340" y="186" text-anchor="middle" dominant-baseline="central">不变量 · 状态机 · registerEvent</text>
+
+      <rect class="box" x="180" y="220" width="320" height="52" rx="10"/>
+      <text class="t" x="340" y="239" text-anchor="middle" dominant-baseline="central">DomainEventPublisher</text>
+      <text class="t2" x="340" y="256" text-anchor="middle" dominant-baseline="central">写 EventStore + 事件多播</text>
+
+      <path class="line" d="M340 62 V74" marker-end="url(#arw)"/>
+      <path class="line" d="M340 132 V144" marker-end="url(#arw)"/>
+      <path class="line" d="M340 202 V214" marker-end="url(#arw)"/>
+
+      <path class="line" d="M340 272 V292 H106 V310" marker-end="url(#arw)"/>
+      <path class="line" d="M340 272 V292 H262 V310" marker-end="url(#arw)"/>
+      <path class="line" d="M340 272 V292 H418 V310" marker-end="url(#arw)"/>
+      <path class="line" d="M340 272 V292 H574 V310" marker-end="url(#arw)"/>
+      <text class="lbl" x="348" y="286">领域事件扇出</text>
+
+      <rect class="box" x="40" y="316" width="132" height="56" rx="10"/>
+      <text class="t" x="106" y="336" text-anchor="middle" dominant-baseline="central" font-size="13">库存上下文</text>
+      <text class="t2" x="106" y="354" text-anchor="middle" dominant-baseline="central">预占 / 释放</text>
+
+      <rect class="box" x="196" y="316" width="132" height="56" rx="10"/>
+      <text class="t" x="262" y="336" text-anchor="middle" dominant-baseline="central" font-size="13">积分上下文</text>
+      <text class="t2" x="262" y="354" text-anchor="middle" dominant-baseline="central">幂等发放</text>
+
+      <rect class="box" x="352" y="316" width="132" height="56" rx="10"/>
+      <text class="t" x="418" y="336" text-anchor="middle" dominant-baseline="central" font-size="13">读模型投影</text>
+      <text class="t2" x="418" y="354" text-anchor="middle" dominant-baseline="central">OrderView</text>
+
+      <rect class="box" x="508" y="316" width="132" height="56" rx="10"/>
+      <text class="t" x="574" y="336" text-anchor="middle" dominant-baseline="central" font-size="13">Outbox 发件箱</text>
+      <text class="t2" x="574" y="354" text-anchor="middle" dominant-baseline="central">投递到 MQ</text>
+    </svg>
+    <figcaption>图 1 · 一次状态变更的事件扇出路径</figcaption>
+  </figure>
+
+  <h3>事件清单</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>领域事件</th><th>触发时机</th><th>订阅者</th><th>关键载荷</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>OrderCreatedEvent</code></td><td><code>Order.place()</code></td>
+          <td>库存预占、读模型、通知、Outbox</td>
+          <td>orderId、customerId、totalAmount、items 快照</td>
+        </tr>
+        <tr>
+          <td><code>OrderConfirmedEvent</code></td><td><code>confirm()</code></td>
+          <td>读模型、通知、Outbox</td>
+          <td>orderId、occurredOn</td>
+        </tr>
+        <tr>
+          <td><code>OrderPaidEvent</code></td><td><code>pay(paymentId)</code></td>
+          <td>积分发放、读模型、通知、Outbox</td>
+          <td>orderId、customerId、paidAmount、paymentId</td>
+        </tr>
+        <tr>
+          <td><code>OrderCancelledEvent</code></td><td><code>cancel(reason)</code></td>
+          <td>库存释放、读模型、通知、Outbox</td>
+          <td>orderId、reason、items 快照</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <b>为什么取消事件要带 items？</b>库存上下文释放占用时需要商品明细。如果只给 orderId，
+    它就必须反向调用订单服务查询——那已经退化成伪装成事件的 RPC。事件必须自解释，
+    这也是「事件驱动」和「消息通知」的分水岭。
+  </div>
+</section>
+
+<section id="code">
+  <h2>5 · 核心实现</h2>
+
+  <h3>5.1 聚合根基类：先登记，后发布</h3>
+  <p>
+    聚合在业务方法里只登记事件，不接触任何事件总线。发布时机交给应用层，这样领域层保持纯净，
+    也不会出现「事件已经发出去、数据却写失败」的错序。
+  </p>
+  <div class="code">
+    <div class="code-head"><span>shared/domain/AggregateRoot.java</span><span class="lang">java</span></div>
+<pre><code>public abstract class AggregateRoot {
+
+    private final transient List&lt;DomainEvent&gt; domainEvents = new ArrayList&lt;&gt;();
+
+    protected void registerEvent(DomainEvent event) {
+        this.domainEvents.add(event);
+    }
+
+    public List&lt;DomainEvent&gt; pullDomainEvents() {
+        List&lt;DomainEvent&gt; events = List.copyOf(this.domainEvents);
+        this.domainEvents.clear();          // 拉取即清空，天然防重复投递
+        return events;
+    }
+}
+</code></pre>
+  </div>
+
+  <h3>5.2 聚合根：创建即合法</h3>
+  <p>
+    工厂方法把「金额 = 各行小计之和」「至少一个商品」「客户不能为空」这些不变量一次性守住，
+    外部无法构造出半个不合法的订单。
+  </p>
+  <div class="code">
+    <div class="code-head"><span>order/domain/model/Order.java</span><span class="lang">java</span></div>
+<pre><code>public static Order place(OrderId id, String customerId, List&lt;OrderItem&gt; items) {
+    if (customerId == null || customerId.isBlank()) {
+        throw new DomainException("客户 ID 不能为空");
+    }
+    if (items == null || items.isEmpty()) {
+        throw new DomainException("订单至少需要包含一个商品");
+    }
+    Money total = items.stream()
+            .map(OrderItem::subtotal)
+            .reduce(Money.ZERO, Money::add);
+
+    Instant now = Instant.now();
+    Order order = new Order(id, customerId, items, OrderStatus.CREATED, total, null, now, now);
+
+    order.registerEvent(new OrderCreatedEvent(
+            UUID.randomUUID().toString(), id.value(), customerId, total, order.items, now));
+    return order;
+}
+</code></pre>
+  </div>
+
+  <h3>5.3 应用服务：四步用例</h3>
+  <p>加载或创建聚合 → 调用业务方法 → 保存 → 发布事件。所有用例都只有这几行，业务规则不在这里。</p>
+  <div class="code">
+    <div class="code-head"><span>order/application/OrderApplicationService.java</span><span class="lang">java</span></div>
+<pre><code>public OrderId placeOrder(PlaceOrderCommand command) {
+    List&lt;OrderItem&gt; items = command.lines().stream()
+            .map(line -&gt; new OrderItem(line.productId(), line.productName(),
+                    new Money(line.unitPrice(), Money.CNY), line.quantity()))
+            .toList();
+
+    Order order = Order.place(orderRepository.nextId(), command.customerId(), items);
+
+    orderRepository.save(order);      // 1. 先落库
+    publishEvents(order);             // 2. 再发事件
+
+    log.info("[应用服务] 下单成功 orderId={} 金额={}",
+            order.id().value(), order.totalAmount().display());
+    return order.id();
+}
+</code></pre>
+  </div>
+
+  <h3>5.4 消费端：幂等是硬要求</h3>
+  <p>
+    事件驱动默认为「至少一次」语义，重试、重投、重启都会造成重复消费。
+    每个订阅者都必须用 eventId 做去重，越靠前的检查越好。
+  </p>
+  <div class="code">
+    <div class="code-head"><span>loyalty/event/LoyaltyEventListener.java</span><span class="lang">java</span></div>
+<pre><code>@EventListener
+public void on(OrderPaidEvent event) {
+    if (!processedEventRegistry.markIfAbsent(event.eventId())) {
+        log.warn("[积分上下文] 重复事件已跳过 eventId={}", event.eventId());
+        return;
+    }
+
+    int earned = event.paidAmount().amount()
+            .divide(BigDecimal.TEN, 0, RoundingMode.DOWN)
+            .intValue();
+
+    int total = loyaltyPointsService.earn(event.customerId(), earned);
+    log.info("[积分上下文] 客户 {} 本次 +{} 积分，累计 {}",
+            event.customerId(), earned, total);
+}
+</code></pre>
+  </div>
+
+  <h3>5.5 Outbox 中继：把事件可靠地送出去</h3>
+  <p>
+    「业务数据落库」和「事件投递到 MQ」无法在同一个本地事务里完成。做法是先把事件写进 outbox 表
+    （与业务写入同事务），再由独立线程轮询投递，投递成功才标记。
+  </p>
+  <div class="code">
+    <div class="code-head"><span>shared/infrastructure/outbox/OutboxRelay.java</span><span class="lang">java</span></div>
+<pre><code>@Scheduled(fixedDelayString = "${demo.outbox.relay-interval-ms:3000}", initialDelay = 2000)
+public void relay() {
+    if (!relayEnabled) return;
+    flush();
+}
+
+public synchronized int flush() {
+    List&lt;OutboxEvent&gt; batch = outboxStore.pending();
+    if (batch.isEmpty()) return 0;
+
+    for (OutboxEvent event : batch) {
+        // 生产上替换为 producer.send(new ProducerRecord&lt;&gt;(TOPIC, aggregateId, payload))
+        log.info("[Outbox→MQ] topic={} key={} type={} eventId={}",
+                TOPIC, event.aggregateId(), event.eventType(), event.eventId());
+        event.markDelivered();
+    }
+    log.info("[Outbox→MQ] 本轮投递 {} 条，剩余待投递 {} 条", batch.size(), outboxStore.pendingCount());
+    return batch.size();
+}
+</code></pre>
+  </div>
+
+  <div class="note">
+    <b>三个容易被忽略的细节：</b>消息 key 用 <code>aggregateId</code>，同一订单的事件落到同一分区，顺序有保证；
+    多实例部署时用 <code>SELECT ... FOR UPDATE SKIP LOCKED</code> 抢占待投递记录，避免重复投递；
+    设置最大重试次数并落死信表，防止单条毒消息阻塞整个中继。
+  </div>
+</section>
+
+<section id="api">
+  <h2>6 · 接口一览</h2>
+  <p>写侧走命令、读侧走读模型，诊断类接口把链路中间态暴露出来，方便观察与排障。</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>方法</th><th>路径</th><th>说明</th><th>触发事件</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>POST</td><td><code>/api/orders</code></td><td>下单</td><td>OrderCreatedEvent</td></tr>
+        <tr><td>GET</td><td><code>/api/orders</code></td><td>订单列表（读模型）</td><td>—</td></tr>
+        <tr><td>GET</td><td><code>/api/orders/{orderId}</code></td><td>订单详情（读模型）</td><td>—</td></tr>
+        <tr><td>POST</td><td><code>/api/orders/{orderId}/confirm</code></td><td>确认订单</td><td>OrderConfirmedEvent</td></tr>
+        <tr><td>POST</td><td><code>/api/orders/{orderId}/pay</code></td><td>支付订单</td><td>OrderPaidEvent</td></tr>
+        <tr><td>POST</td><td><code>/api/orders/{orderId}/cancel</code></td><td>取消订单</td><td>OrderCancelledEvent</td></tr>
+        <tr><td>GET</td><td><code>/api/orders/{orderId}/events</code></td><td>单个订单的事件流（审计 / 溯源）</td><td>—</td></tr>
+        <tr><td>GET</td><td><code>/api/diagnostics/events</code></td><td>全局事件流</td><td>—</td></tr>
+        <tr><td>GET</td><td><code>/api/diagnostics/outbox</code></td><td>发件箱状态</td><td>—</td></tr>
+        <tr><td>POST</td><td><code>/api/diagnostics/outbox/flush</code></td><td>手动触发一轮投递</td><td>—</td></tr>
+        <tr><td>POST</td><td><code>/api/diagnostics/projections/rebuild</code></td><td>清空并按事件流重建读模型</td><td>—</td></tr>
+        <tr><td>GET</td><td><code>/api/diagnostics/stats</code></td><td>事件数、发件箱、库存、积分总览</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>事件流响应</h3>
+  <div class="code">
+    <div class="code-head"><span>GET /api/orders/ORD-F4021666/events</span><span class="lang">json</span></div>
+<pre><code>[
+  {
+    "eventId": "082075cf-b637-4a62-b7fc-9319922df2af",
+    "eventType": "OrderCreatedEvent",
+    "aggregateId": "ORD-F4021666",
+    "occurredOn": "2026-10-26T12:33:42.943726Z",
+    "payload": "OrderCreatedEvent[orderId=ORD-F4021666, customerId=C-1001, ...]"
+  },
+  {
+    "eventId": "f6fd7ba4-e1fd-4637-9035-b2170352ea11",
+    "eventType": "OrderConfirmedEvent",
+    "aggregateId": "ORD-F4021666",
+    "occurredOn": "2026-10-26T12:33:48.784783Z",
+    "payload": "OrderConfirmedEvent[orderId=ORD-F4021666, ...]"
+  }
+]
+</code></pre>
+  </div>
+
+  <h3>异常到状态码的映射</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>场景</th><th>状态码</th><th>响应 detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>订单不存在</td><td>404</td><td>订单不存在或读模型尚未同步</td></tr>
+        <tr><td>重复支付 / 支付已取消订单</td><td>400</td><td>订单已取消，不能支付</td></tr>
+        <tr><td>空商品行、负金额</td><td>400</td><td>订单至少需要包含一个商品</td></tr>
+        <tr><td>技术故障</td><td>500</td><td>由容器兜底，不把领域异常暴露成 500</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="design">
+  <h2>7 · 设计决策与生产建议</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>关注点</th><th>本项目的做法</th><th>生产建议</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>事件何时发布</td>
+          <td>聚合内登记，<strong>保存聚合之后</strong>统一发布</td>
+          <td>业务写入与 outbox 写入放到同一本地事务</td>
+        </tr>
+        <tr>
+          <td>领域层是否依赖框架</td>
+          <td>否，<code>Order</code> 只依赖 <code>AggregateRoot</code> 与 <code>DomainException</code></td>
+          <td>保持纯净，领域层可单测、可迁移</td>
+        </tr>
+        <tr>
+          <td>事件与数据的原子性</td>
+          <td>OutboxStore 模拟 outbox 表，中继轮询投递</td>
+          <td>outbox 表 + SKIP LOCKED 抢占，或 CDC（Debezium）</td>
+        </tr>
+        <tr>
+          <td>重复投递</td>
+          <td><code>ProcessedEventRegistry</code> 按 eventId 去重</td>
+          <td>Redis SETNX + TTL，或唯一索引（event_id, consumer_group）</td>
+        </tr>
+        <tr>
+          <td>事件顺序</td>
+          <td>内存按写入顺序，投递 key 用 aggregateId</td>
+          <td>Kafka 分区 key = aggregateId，同聚合严格有序</td>
+        </tr>
+        <tr>
+          <td>读写分离</td>
+          <td><code>OrderView</code> 由投影维护，查询不加载聚合</td>
+          <td>读模型落 ES / 只读库，独立扩容</td>
+        </tr>
+        <tr>
+          <td>读模型重建</td>
+          <td>清空后按事件流重放（<code>rebuild()</code>）</td>
+          <td>投影版本化 + 影子表切换，避免重建期不可用</td>
+        </tr>
+        <tr>
+          <td>跨上下文耦合</td>
+          <td>只共享事件契约，不共享聚合与仓储</td>
+          <td>事件字段只增不删，语义向后兼容</td>
+        </tr>
+        <tr>
+          <td>失败补偿</td>
+          <td>库存不足仅告警（示例简化）</td>
+          <td>发布 <code>StockReservationFailedEvent</code> 驱动订单取消（Saga）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="verify">
+  <h2>8 · 测试与验证</h2>
+  <p>共 7 个测试：1 个上下文加载用例 + 6 个业务链路用例，全部通过。</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>用例</th><th>验证点</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>下单 → 确认 → 支付</td><td>3 条事件、库存 100→98、积分 +79、Outbox 3 条待投递并全部投递</td></tr>
+        <tr><td>取消订单</td><td>库存 15→20 回补、状态 CANCELLED、仅 2 条事件</td></tr>
+        <tr><td>聚合不变量</td><td>重复支付、取消已支付订单均抛 DomainException，且事件流未被污染</td></tr>
+        <tr><td>消费幂等</td><td>同一 OrderPaidEvent 重复投递两次，积分保持不变</td></tr>
+        <tr><td>读模型可重建</td><td>清空读模型后重放 3 条事件，恢复为 PAID</td></tr>
+        <tr><td>下单校验</td><td>空商品行、非法订单号、不存在的订单各自抛出对应异常</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>实机运行日志摘录</h3>
+  <div class="code">
+    <div class="code-head"><span>console</span><span class="lang">log</span></div>
+<pre><code>[事件发布] type=OrderCreatedEvent aggregateId=ORD-F4021666 eventId=082075cf-b637-4a62-b7fc-9319922df2af
+[库存上下文] 收到 OrderCreatedEvent orderId=ORD-F4021666
+[库存] 预占成功 productId=P-1001 数量=2 剩余=98
+[通知] 下单成功短信 → 客户 C-1001，订单 ORD-F4021666，应付 ¥798.00
+[应用服务] 下单成功 orderId=ORD-F4021666 金额=¥798.00
+
+[事件发布] type=OrderPaidEvent aggregateId=ORD-F4021666 eventId=c4fa6394-acdc-4c10-b985-97c1dc7d8e00
+[积分上下文] 客户 C-1001 本次 +79 积分（订单 ORD-F4021666，金额 ¥798.00），累计 79
+[Outbox→MQ] topic=order-events key=ORD-F4021666 type=OrderPaidEvent eventId=c4fa6394...
+[Outbox→MQ] 本轮投递 2 条，剩余待投递 0 条
+</code></pre>
+  </div>
+
+  <p>关键状态快照（<code>GET /api/diagnostics/stats</code>）：</p>
+  <div class="code">
+    <div class="code-head"><span>stats</span><span class="lang">json</span></div>
+<pre><code>{
+  "eventCount": 3,
+  "outboxTotal": 3,
+  "outboxPending": 0,
+  "processedEvents": 1,
+  "inventory": { "P-1001": 98, "P-1002": 50, "P-1003": 20 },
+  "loyaltyPoints": { "C-1001": 79 }
+}
+</code></pre>
+  </div>
+</section>
+
+<section id="mq">
+  <h2>9 · 接入真实中间件</h2>
+  <p>从内存实现切到 Kafka / RocketMQ 只需要四步，领域层与应用层代码一行都不用改。</p>
+  <ol>
+    <li>在 <code>pom.xml</code> 中加入 <code>spring-kafka</code> 或 <code>rocketmq-spring-boot-starter</code>。</li>
+    <li>把 <code>OutboxRelay.flush()</code> 里的日志替换为 <code>kafkaTemplate.send(topic, aggregateId, payload)</code>，成功回调中标记已投递，失败进入重试与死信。</li>
+    <li>下游把 <code>@EventListener</code> 换成 <code>@KafkaListener(topics = "order-events")</code>，幂等与业务逻辑原样复用。</li>
+    <li>需要跨实例事务一致性时，把内存 Store 换成 MySQL/JPA，用 <code>@Transactional</code> 包住「业务写入 + outbox 写入」。</li>
+  </ol>
+
+  <div class="code">
+    <div class="code-head"><span>application.yaml（生产者示例，当前为注释状态）</span><span class="lang">yaml</span></div>
+<pre><code>spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      acks: all
+      enable-idempotence: true
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+</code></pre>
+  </div>
+
+  <div class="note">
+    <b>上线前请确认三件事：</b>消费者是否都做了幂等；消息 key 是否用了聚合 ID；Outbox 是否有重试上限和死信兜底。
+    这三条决定了链路在故障时是「自愈」还是「雪崩」。
+  </div>
+</section>
+
+<footer>
+  DDD 事件驱动 Demo · 文档随代码演进，最后更新 2026-10-26 ·
+  源码位于 <code>src/main/java/com/example/demo</code>，请求示例见 <code>api-examples.http</code>。
+</footer>
+
+</main>
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var btn = document.getElementById('themeBtn');
+  var saved = null;
+  try { saved = localStorage.getItem('ddd-doc-theme'); } catch (e) {}
+  if (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    saved = 'dark';
+  }
+  if (saved === 'dark') {
+    root.setAttribute('data-theme', 'dark');
+  }
+  function syncBtn() {
+    btn.textContent = root.getAttribute('data-theme') === 'dark' ? '切换浅色' : '切换深色';
+  }
+  syncBtn();
+  btn.addEventListener('click', function () {
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    if (next === 'dark') { root.setAttribute('data-theme', 'dark'); }
+    else { root.removeAttribute('data-theme'); }
+    try { localStorage.setItem('ddd-doc-theme', next); } catch (e) {}
+    syncBtn();
+  });
+
+  var links = Array.prototype.slice.call(document.querySelectorAll('.nav a'));
+  var sections = Array.prototype.slice.call(document.querySelectorAll('main section[id]'));
+  if ('IntersectionObserver' in window) {
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        var id = '#' + entry.target.id;
+        links.forEach(function (link) {
+          link.classList.toggle('active', link.getAttribute('href') === id);
+        });
+      });
+    }, { rootMargin: '-15% 0px -70% 0px', threshold: 0 });
+    sections.forEach(function (section) { observer.observe(section); });
+  }
+
+  function escapeHtml(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  var KEYWORDS = ['public', 'private', 'protected', 'static', 'final', 'abstract', 'class', 'interface',
+    'record', 'enum', 'extends', 'implements', 'return', 'new', 'void', 'if', 'else', 'for', 'while',
+    'throw', 'throws', 'try', 'catch', 'import', 'package', 'default', 'this', 'super', 'true',
+    'false', 'null', 'var', 'instanceof', 'synchronized'];
+
+  function highlight(code) {
+    var stash = [];
+    function hold(html) {
+      stash.push(html);
+      return '\u0001' + (stash.length - 1) + '\u0001';
+    }
+    var text = code;
+    text = text.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, function (m) {
+      return hold('<span class="c">' + escapeHtml(m) + '</span>');
+    });
+    text = text.replace(/"(?:[^"\\\n]|\\.)*"/g, function (m) {
+      return hold('<span class="s">' + escapeHtml(m) + '</span>');
+    });
+    text = text.replace(/@[A-Za-z_][A-Za-z0-9_]*/g, function (m) {
+      return hold('<span class="a">' + escapeHtml(m) + '</span>');
+    });
+    text = text.replace(/[A-Za-z_$][A-Za-z0-9_$]*/g, function (m) {
+      if (KEYWORDS.indexOf(m) !== -1) return '<span class="k">' + m + '</span>';
+      if (/^[A-Z][A-Za-z0-9_]*$/.test(m)) return '<span class="n">' + m + '</span>';
+      return m;
+    });
+    text = text.replace(/\u0001(\d+)\u0001/g, function (_, index) {
+      return stash[Number(index)];
+    });
+    return text;
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('pre > code'), function (block) {
+    var isLog = block.textContent.indexOf('[Outbox') === 0 || /^\d{2}:\d{2}/.test(block.textContent);
+    if (isLog) return;
+    block.innerHTML = highlight(block.textContent);
+  });
+})();
+</script>
+</body>
+</html>

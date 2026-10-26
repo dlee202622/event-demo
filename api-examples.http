@@ -1,0 +1,55 @@
+### DDD 事件驱动 Demo —— 手工验证脚本（IntelliJ HTTP Client / VS Code REST Client 可直接执行）
+### 建议顺序：先执行「下单」，把返回的 orderId 填到下面的变量里
+
+@host = http://localhost:8080
+@orderId = ORD-XXXXXXXX
+
+### 1. 下单（总价 399 × 2 = 798）
+POST {{host}}/api/orders
+Content-Type: application/json
+
+{
+  "customerId": "C-1001",
+  "items": [
+    { "productId": "P-1001", "productName": "机械键盘", "unitPrice": 399.00, "quantity": 2 }
+  ]
+}
+
+### 2. 查询订单（走读模型）
+GET {{host}}/api/orders/{{orderId}}
+
+### 3. 订单列表
+GET {{host}}/api/orders
+
+### 4. 确认订单
+POST {{host}}/api/orders/{{orderId}}/confirm
+
+### 5. 支付订单
+POST {{host}}/api/orders/{{orderId}}/pay
+Content-Type: application/json
+
+{ "paymentId": "PAY-20261026-001" }
+
+### 6. 取消订单（已支付订单会被拒绝，符合不变量）
+POST {{host}}/api/orders/{{orderId}}/cancel
+Content-Type: application/json
+
+{ "reason": "用户改主意了" }
+
+### 7. 事件流（审计 / 溯源）
+GET {{host}}/api/orders/{{orderId}}/events
+
+### 8. 全局事件流
+GET {{host}}/api/diagnostics/events
+
+### 9. 发件箱状态
+GET {{host}}/api/diagnostics/outbox
+
+### 10. 手动触发 Outbox 投递
+POST {{host}}/api/diagnostics/outbox/flush
+
+### 11. 读模型全量重建（清空后按事件流重放）
+POST {{host}}/api/diagnostics/projections/rebuild
+
+### 12. 各上下文状态：事件数、发件箱、库存、积分
+GET {{host}}/api/diagnostics/stats
