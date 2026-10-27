@@ -22,3 +22,12 @@ services:
       - ./broker.conf:/opt/rocketmq/conf/broker.conf
     ports:
       - "10911:10911"
+
+  rocketmq-dashboard:
+    image: styletang/rocketmq-console-ng:latest
+    depends_on:
+      - rocketmq-namesrv
+    environment:
+      JAVA_OPTS: "-Drocketmq.namesrv.addr=rocketmq-namesrv:9876"
+    ports:
+      - "19876:8080"
