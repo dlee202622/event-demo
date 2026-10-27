@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>微服务事件驱动 Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+        .header { background: #1a1a2e; color: #fff; padding: 16px 24px; font-size: 20px; font-weight: 600; }
+        .container { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+        .section { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 24px; margin-bottom: 24px; }
+        .section-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #1a1a2e; border-bottom: 2px solid #1a1a2e; padding-bottom: 8px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 500; color: #555; }
+        .form-group input, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; font-family: inherit; }
+        .form-group textarea { min-height: 140px; font-family: 'Courier New', monospace; }
+        .btn { padding: 10px 24px; background: #1a1a2e; color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; margin-right: 8px; margin-bottom: 8px; }
+        .btn:hover { background: #16213e; }
+        .btn.secondary { background: #455a64; }
+        .response-box { margin-top: 16px; padding: 16px; background: #1e1e1e; color: #d4d4d4; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto; }
+        .info-box { padding: 12px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px; margin-bottom: 16px; font-size: 13px; color: #1565c0; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+        .card { padding: 14px; background: #f9f9f9; border-left: 3px solid #1a1a2e; border-radius: 4px; font-size: 13px; line-height: 1.7; }
+        .card strong { color: #1a1a2e; display: block; margin-bottom: 4px; }
+        code { background: #eee; padding: 1px 5px; border-radius: 3px; }
+        a { color: #1565c0; }
+    </style>
+</head>
+<body>
+    <div class="header">微服务事件驱动 Demo — Order / Inventory / Loyalty</div>
+
+    <div class="container">
+        <div class="info-box">
+            <strong>架构：</strong>三个独立服务通过 RabbitMQ Topic Exchange 通信。<br>
+            Order(9001) 发布订单事件 → Exchange 广播 → Inventory(9002) 预占库存 / Loyalty(9003) 累计积分<br>
+            Inventory 预占失败 → 发布补偿事件 → Order 自动取消订单
+        </div>
+
+        <div class="section">
+            <div class="section-title">服务状态</div>
+            <div class="grid">
+                <div class="card"><strong>Order Service</strong>端口 9001<br>队列 demo-order-service.queue</div>
+                <div class="card"><strong>Inventory Service</strong>端口 9002<br><a href="http://localhost:9002/api/inventory/stock" target="_blank">查看库存</a></div>
+                <div class="card"><strong>Loyalty Service</strong>端口 9003<br>积分结果请查看服务日志</div>
+                <div class="card"><strong>RabbitMQ</strong><a href="http://localhost:15672" target="_blank">管理界面</a><br>guest / guest</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">1. 创建订单</div>
+            <div class="form-group">
+                <label>请求体 (JSON) — 下单后约 3 秒 OutboxRelay 会把事件发到 RabbitMQ</label>
+                <textarea id="orderRequest">{
+  "customerId": "CUST-001",
+  "items": [
+    {
+      "productId": "P-1001",
+      "productName": "机械键盘",
+      "unitPrice": 399.00,
+      "quantity": 2
+    }
+  ]
+}</textarea>
+            </div>
+            <button class="btn" onclick="createOrder()">发送订单</button>
+            <button class="btn secondary" onclick="loadOrders()">刷新订单列表</button>
+            <div id="orderResponse" class="response-box" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">2. 订单操作</div>
+            <div class="form-group">
+                <label>订单 ID</label>
+                <input id="orderId" type="text" placeholder="ORD-XXXXXXXX（创建订单后自动填入）">
+            </div>
+            <button class="btn" onclick="confirmOrder()">确认订单</button>
+            <button class="btn" onclick="payOrder()">支付订单</button>
+            <button class="btn secondary" onclick="cancelOrder()">取消订单</button>
+            <button class="btn secondary" onclick="orderEvents()">查看事件流</button>
+            <div id="actionResponse" class="response-box" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">3. 诊断端点（Order Service）</div>
+            <button class="btn secondary" onclick="callApi('http://localhost:9001/api/diagnostics/stats', 'diagResponse')">stats</button>
+            <button class="btn secondary" onclick="callApi('http://localhost:9001/api/diagnostics/events', 'diagResponse')">events</button>
+            <button class="btn secondary" onclick="callApi('http://localhost:9001/api/diagnostics/outbox', 'diagResponse')">outbox</button>
+            <button class="btn secondary" onclick="flushOutbox()">flush outbox</button>
+            <div id="diagResponse" class="response-box" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">4. 观察事件流转</div>
+            <div class="info-box">
+                在三个服务的终端日志中分别搜索：
+                <div style="margin-top: 8px; line-height: 1.9;">
+                    <code>[Outbox→RabbitMQ]</code> 订单服务把事件投递到 RabbitMQ<br>
+                    <code>[库存上下文]</code> 库存服务收到并预占 / 释放库存<br>
+                    <code>[积分上下文]</code> 积分服务收到支付事件并累计积分<br>
+                    <code>[补偿机制]</code> 库存不足时订单服务自动取消订单
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ORDER_BASE = 'http://localhost:9001';
+
+        function show(id, content) {
+            const box = document.getElementById(id);
+            box.style.display = 'block';
+            box.textContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+        }
+
+        async function callApi(url, boxId, options) {
+            try {
+                const resp = await fetch(url, options);
+                const text = await resp.text();
+                let data;
+                try { data = JSON.parse(text); } catch { data = text; }
+                show(boxId, data);
+                return data;
+            } catch (e) {
+                show(boxId, '请求失败: ' + e.message);
+                return null;
+            }
+        }
+
+        async function createOrder() {
+            show('orderResponse', '发送中...');
+            const data = await callApi(ORDER_BASE + '/api/orders', 'orderResponse', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: document.getElementById('orderRequest').value
+            });
+            if (data && data.orderId) {
+                document.getElementById('orderId').value = data.orderId;
+            }
+        }
+
+        async function loadOrders() {
+            await callApi(ORDER_BASE + '/api/orders', 'orderResponse');
+        }
+
+        function currentOrderId() {
+            const id = document.getElementById('orderId').value.trim();
+            if (!id) {
+                show('actionResponse', '请先创建订单或填写订单 ID');
+                return null;
+            }
+            return id;
+        }
+
+        async function confirmOrder() {
+            const id = currentOrderId();
+            if (!id) return;
+            await callApi(ORDER_BASE + '/api/orders/' + id + '/confirm', 'actionResponse', { method: 'POST' });
+        }
+
+        async function payOrder() {
+            const id = currentOrderId();
+            if (!id) return;
+            await callApi(ORDER_BASE + '/api/orders/' + id + '/pay', 'actionResponse', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ paymentId: 'PAY-' + Date.now() })
+            });
+        }
+
+        async function cancelOrder() {
+            const id = currentOrderId();
+            if (!id) return;
+            await callApi(ORDER_BASE + '/api/orders/' + id + '/cancel', 'actionResponse', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason: '页面手动取消' })
+            });
+        }
+
+        async function orderEvents() {
+            const id = currentOrderId();
+            if (!id) return;
+            await callApi(ORDER_BASE + '/api/orders/' + id + '/events', 'actionResponse');
+        }
+
+        async function flushOutbox() {
+            await callApi(ORDER_BASE + '/api/diagnostics/outbox/flush', 'diagResponse', { method: 'POST' });
+        }
+    </script>
+</body>
+</html>
