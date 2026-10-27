@@ -7,11 +7,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
 
+/**
+ * 事务消息监听器，负责执行本地事务和事务状态回查。
+ */
 @RocketMQTransactionListener
 public class TransactionListenerImpl implements RocketMQLocalTransactionListener {
 
     private static final Logger log = LoggerFactory.getLogger(TransactionListenerImpl.class);
 
+    /** 执行本地事务，根据结果返回 COMMIT 或 ROLLBACK。 */
     @Override
     public RocketMQLocalTransactionState executeLocalTransaction(Message msg, Object arg) {
         log.info("[TransactionListener] executing local transaction for: {}", msg.getPayload());
@@ -24,6 +28,7 @@ public class TransactionListenerImpl implements RocketMQLocalTransactionListener
         }
     }
 
+    /** 回查本地事务状态，Broker 未收到确认时调用。 */
     @Override
     public RocketMQLocalTransactionState checkLocalTransaction(Message msg) {
         log.info("[TransactionListener] checking local transaction for: {}", msg.getPayload());

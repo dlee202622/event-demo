@@ -10,6 +10,9 @@ import org.springframework.amqp.core.TopicExchange;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * RabbitMQ 配置类，声明演示所需的所有队列、交换机及绑定关系。
+ */
 @Configuration
 public class RabbitMQConfig {
 

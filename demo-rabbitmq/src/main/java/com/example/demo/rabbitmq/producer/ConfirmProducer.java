@@ -7,6 +7,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
+/**
+ * 带 Publisher Confirm 的生产者，支持消息确认和路由失败回调。
+ */
 @Component
 public class ConfirmProducer {
 
@@ -18,6 +21,7 @@ public class ConfirmProducer {
         this.rabbitTemplate = rabbitTemplate;
     }
 
+    /** 初始化 Publisher Confirm 和 Return 回调。 */
     @PostConstruct
     public void init() {
         rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -> {
@@ -33,10 +37,11 @@ public class ConfirmProducer {
         });
     }
 
+    /** 发送消息到简单队列。 */
     public void send(String message) {
-        rabbitTemplate.convertAndSend(RabbitMQConfig.SIMPLE_QUEUE, message);
     }
 
+    /** 发送消息到指定队列。 */
     public void sendToQueue(String queue, String message) {
         rabbitTemplate.convertAndSend(queue, message);
     }

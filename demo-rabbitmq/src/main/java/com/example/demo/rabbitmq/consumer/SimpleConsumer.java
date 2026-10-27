@@ -6,11 +6,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
+/**
+ * 简单队列消费者，监听 {@code demo.simple.queue}。
+ */
 @Component
 public class SimpleConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(SimpleConsumer.class);
 
+    /** 接收并打印消息。 */
     @RabbitListener(queues = RabbitMQConfig.SIMPLE_QUEUE)
     public void receive(String message) {
         log.info("[SimpleConsumer] received: {}", message);
