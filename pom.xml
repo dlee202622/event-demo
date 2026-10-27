@@ -20,9 +20,11 @@
     </properties>
 
     <modules>
-        <module>demo-core</module>
+        <module>event-driven-spring-boot-starter</module>
+        <module>demo-order-service</module>
+        <module>demo-inventory-service</module>
+        <module>demo-loyalty-service</module>
         <module>demo-rabbitmq</module>
         <module>demo-rocketmq</module>
-        <module>event-driven-spring-boot-starter</module>
     </modules>
 </project>
