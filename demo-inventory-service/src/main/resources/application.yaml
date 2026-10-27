@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: demo-inventory-service
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
+server:
+  port: 9002
+
+eventdriven:
+  rabbitmq:
+    queue: ${spring.application.name}.queue
+
+logging:
+  level:
+    root: INFO
+    com.example.demo: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
