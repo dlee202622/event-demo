@@ -1,6 +1,6 @@
 package com.example.demo.order.domain.model;
 
-import com.example.demo.shared.domain.DomainException;
+import com.example.demo.eventdriven.domain.DomainException;
 
 import java.util.Locale;
 import java.util.Objects;

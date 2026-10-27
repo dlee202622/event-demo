@@ -37,7 +37,7 @@ public class InventoryFailureCompensationHandler {
                     event.reason(), event.productId());
             orderApplicationService.cancelOrder(event.orderId(), cancelReason);
             log.info("[补偿机制] 订单已取消 orderId={} reason={}", event.orderId(), cancelReason);
-        } catch (com.example.demo.shared.domain.DomainException e) {
+        } catch (com.example.demo.eventdriven.domain.DomainException e) {
             // 订单已取消，忽略（幂等处理）
             log.info("[补偿机制] 订单已处于取消状态，跳过 orderId={} reason={}", 
                     event.orderId(), e.getMessage());

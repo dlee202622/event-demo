@@ -1,6 +1,6 @@
 package com.example.demo.order.domain.model;
 
-import com.example.demo.shared.domain.DomainException;
+import com.example.demo.eventdriven.domain.DomainException;
 
 /**
  * 订单行（值对象）。

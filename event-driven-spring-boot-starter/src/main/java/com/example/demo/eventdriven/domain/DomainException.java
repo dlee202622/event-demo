@@ -1,4 +1,4 @@
-package com.example.demo.shared.domain;
+package com.example.demo.eventdriven.domain;
 
 /**
  * 领域异常：表示业务规则被违反（不是技术故障）。

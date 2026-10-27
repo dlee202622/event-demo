@@ -35,7 +35,7 @@ public class EventMessageListener {
         this.eventConsumer = eventConsumer;
     }
     
-    @RabbitListener(queues = EventRabbitMQConfig.QUEUE)
+    @RabbitListener(queues = "${eventdriven.rabbitmq.queue:event-driven.queue}")
     public void onMessage(String message) {
         try {
             log.debug("[RabbitMQ→Spring] 收到消息: {}", message);

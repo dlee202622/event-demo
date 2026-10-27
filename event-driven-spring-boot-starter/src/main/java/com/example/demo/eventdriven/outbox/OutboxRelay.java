@@ -1,6 +1,6 @@
 package com.example.demo.eventdriven.outbox;
 
-import com.example.demo.eventdriven.rabbitmq.EventRabbitMQConfig;
+import com.example.demo.eventdriven.autoconfigure.EventDrivenProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,15 +27,19 @@ public class OutboxRelay {
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
     private final boolean relayEnabled;
+    private final String exchange;
+    private final String routingKeyPrefix;
     
     public OutboxRelay(OutboxStore outboxStore,
                        RabbitTemplate rabbitTemplate,
                        ObjectMapper objectMapper,
-                       boolean relayEnabled) {
+                       EventDrivenProperties properties) {
         this.outboxStore = outboxStore;
         this.rabbitTemplate = rabbitTemplate;
         this.objectMapper = objectMapper;
-        this.relayEnabled = relayEnabled;
+        this.relayEnabled = properties.getOutbox().isRelayEnabled();
+        this.exchange = properties.getRabbitmq().getExchange();
+        this.routingKeyPrefix = properties.getRabbitmq().getRoutingKeyPrefix();
     }
     
     @Scheduled(fixedDelayString = "${eventdriven.outbox.relay-interval-ms:3000}", 
@@ -62,13 +66,13 @@ public class OutboxRelay {
                 String message = buildMessage(event);
                 
                 rabbitTemplate.convertAndSend(
-                        EventRabbitMQConfig.EXCHANGE,
+                        exchange,
                         routingKey,
                         message
                 );
                 
                 log.info("[Outbox→RabbitMQ] 发送成功 exchange={} routingKey={} eventType={} eventId={}",
-                        EventRabbitMQConfig.EXCHANGE, routingKey, event.eventType(), event.eventId());
+                        exchange, routingKey, event.eventType(), event.eventId());
                 event.markDelivered();
                 
             } catch (Exception e) { }
@@ -81,7 +85,7 @@ public class OutboxRelay {
     
     private String buildRoutingKey(OutboxEvent event) {
         return String.format("%s.%s.%s", 
-                EventRabbitMQConfig.ROUTING_KEY_PREFIX,
+                routingKeyPrefix,
                 event.eventType(), 
                 event.aggregateId());
     }

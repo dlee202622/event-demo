@@ -2,7 +2,7 @@ package com.example.demo.order.interfaces.rest;
 
 import com.example.demo.order.application.query.OrderQueryService;
 import com.example.demo.order.domain.repository.OrderNotFoundException;
-import com.example.demo.shared.domain.DomainException;
+import com.example.demo.eventdriven.domain.DomainException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;

@@ -1,6 +1,6 @@
 package com.example.demo.eventdriven.outbox;
 
-import com.example.demo.eventdriven.rabbitmq.EventRabbitMQConfig;
+import com.example.demo.eventdriven.autoconfigure.EventDrivenProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,7 +26,9 @@ class OutboxRelayTest {
         rabbitTemplate = mock(RabbitTemplate.class);
         objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
-        relay = new OutboxRelay(outboxStore, rabbitTemplate, objectMapper, true);
+        
+        EventDrivenProperties properties = new EventDrivenProperties();
+        relay = new OutboxRelay(outboxStore, rabbitTemplate, objectMapper, properties);
     }
     
     @Test
@@ -41,7 +43,7 @@ class OutboxRelayTest {
         
         assertEquals(1, sent);
         verify(rabbitTemplate).convertAndSend(
-                eq(EventRabbitMQConfig.EXCHANGE),
+                eq("event-driven.exchange"),
                 eq("event.TestEvent.agg-1"),
                 contains("\"eventId\":\"event-1\"")
         );
@@ -92,5 +94,27 @@ class OutboxRelayTest {
         
         assertEquals(3, sent);
         verify(rabbitTemplate, times(3)).convertAndSend(anyString(), anyString(), anyString());
+    }
+    
+    @Test
+    void flush_shouldUseCustomExchangeAndRoutingKeyPrefix() {
+        EventDrivenProperties properties = new EventDrivenProperties();
+        properties.getRabbitmq().setExchange("custom.exchange");
+        properties.getRabbitmq().setRoutingKeyPrefix("custom");
+        OutboxRelay customRelay = new OutboxRelay(outboxStore, rabbitTemplate, objectMapper, properties);
+        
+        OutboxEvent event = new OutboxEvent(
+                "id-1", "event-1", "TestEvent", "agg-1",
+                "{\"data\":\"test\"}", Instant.now()
+        );
+        outboxStore.append(event);
+        
+        customRelay.flush();
+        
+        verify(rabbitTemplate).convertAndSend(
+                eq("custom.exchange"),
+                eq("custom.TestEvent.agg-1"),
+                contains("\"eventId\":\"event-1\"")
+        );
     }
 }

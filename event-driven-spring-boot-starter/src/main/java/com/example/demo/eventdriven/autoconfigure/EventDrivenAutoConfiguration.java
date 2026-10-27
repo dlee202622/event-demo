@@ -69,7 +69,7 @@ public class EventDrivenAutoConfiguration {
                 outboxStore, 
                 rabbitTemplate, 
                 objectMapper,
-                properties.getOutbox().isRelayEnabled()
+                properties
         );
     }
     

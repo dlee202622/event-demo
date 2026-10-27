@@ -1,6 +1,4 @@
-package com.example.demo.shared.domain;
-
-import com.example.demo.eventdriven.domain.DomainEvent;
+package com.example.demo.eventdriven.domain;
 
 import java.util.ArrayList;
 import java.util.List;

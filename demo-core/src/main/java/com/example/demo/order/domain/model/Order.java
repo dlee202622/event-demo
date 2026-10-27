@@ -4,8 +4,8 @@ import com.example.demo.order.domain.event.OrderCancelledEvent;
 import com.example.demo.order.domain.event.OrderConfirmedEvent;
 import com.example.demo.order.domain.event.OrderCreatedEvent;
 import com.example.demo.order.domain.event.OrderPaidEvent;
-import com.example.demo.shared.domain.AggregateRoot;
-import com.example.demo.shared.domain.DomainException;
+import com.example.demo.eventdriven.domain.AggregateRoot;
+import com.example.demo.eventdriven.domain.DomainException;
 
 import java.time.Instant;
 import java.util.List;

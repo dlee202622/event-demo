@@ -17,7 +17,7 @@ import com.example.demo.eventdriven.domain.DomainEvent;
 import com.example.demo.eventdriven.idempotency.ProcessedEventRegistry;
 import com.example.demo.eventdriven.outbox.OutboxRelay;
 import com.example.demo.eventdriven.outbox.OutboxStore;
-import com.example.demo.shared.domain.DomainException;
+import com.example.demo.eventdriven.domain.DomainException;
 import com.example.demo.shared.infrastructure.event.DomainEventStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
