@@ -1,6 +1,6 @@
 package com.example.demo.order.domain.event;
 
-import com.example.demo.shared.domain.DomainEvent;
+import com.example.demo.eventdriven.domain.DomainEvent;
 
 import java.time.Instant;
 
@@ -14,5 +14,10 @@ public record OrderConfirmedEvent(
     @Override
     public String aggregateId() {
         return orderId;
+    }
+
+    @Override
+    public String eventType() {
+        return "OrderConfirmedEvent";
     }
 }

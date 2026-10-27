@@ -1,8 +1,8 @@
 package com.example.demo.order.domain.event;
 
+import com.example.demo.eventdriven.domain.DomainEvent;
 import com.example.demo.order.domain.model.Money;
 import com.example.demo.order.domain.model.OrderItem;
-import com.example.demo.shared.domain.DomainEvent;
 
 import java.time.Instant;
 import java.util.List;
@@ -29,5 +29,10 @@ public record OrderCreatedEvent(
     @Override
     public String aggregateId() {
         return orderId;
+    }
+
+    @Override
+    public String eventType() {
+        return "OrderCreatedEvent";
     }
 }

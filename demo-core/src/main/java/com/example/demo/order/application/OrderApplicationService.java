@@ -6,7 +6,7 @@ import com.example.demo.order.domain.model.Order;
 import com.example.demo.order.domain.model.OrderId;
 import com.example.demo.order.domain.model.OrderItem;
 import com.example.demo.order.domain.repository.OrderRepository;
-import com.example.demo.shared.domain.DomainEventPublisher;
+import com.example.demo.eventdriven.domain.DomainEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;

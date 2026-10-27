@@ -7,7 +7,7 @@ import com.example.demo.order.domain.event.OrderConfirmedEvent;
 import com.example.demo.order.domain.event.OrderCreatedEvent;
 import com.example.demo.order.domain.event.OrderPaidEvent;
 import com.example.demo.order.domain.model.OrderStatus;
-import com.example.demo.shared.domain.DomainEvent;
+import com.example.demo.eventdriven.domain.DomainEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;

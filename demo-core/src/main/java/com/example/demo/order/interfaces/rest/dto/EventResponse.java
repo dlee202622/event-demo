@@ -1,6 +1,6 @@
 package com.example.demo.order.interfaces.rest.dto;
 
-import com.example.demo.shared.domain.DomainEvent;
+import com.example.demo.eventdriven.domain.DomainEvent;
 
 import java.time.Instant;
 

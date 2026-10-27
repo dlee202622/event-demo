@@ -2,7 +2,7 @@ package com.example.demo.loyalty.event;
 
 import com.example.demo.loyalty.LoyaltyPointsService;
 import com.example.demo.order.domain.event.OrderPaidEvent;
-import com.example.demo.shared.infrastructure.idempotency.ProcessedEventRegistry;
+import com.example.demo.eventdriven.idempotency.ProcessedEventRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;

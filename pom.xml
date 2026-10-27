@@ -23,5 +23,6 @@
         <module>demo-core</module>
         <module>demo-rabbitmq</module>
         <module>demo-rocketmq</module>
+        <module>event-driven-spring-boot-starter</module>
     </modules>
 </project>
