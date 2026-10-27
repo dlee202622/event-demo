@@ -215,7 +215,7 @@ spring:
 
 ## 示例项目
 
-参考 `demo-core` 模块的完整实现。
+参考 `demo-order-service`（发布方 + 补偿订阅）、`demo-inventory-service`、`demo-loyalty-service`（订阅方）的完整实现。
 
 ## License
 

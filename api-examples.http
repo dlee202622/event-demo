@@ -1,11 +1,14 @@
 ### DDD 事件驱动 Demo —— 手工验证脚本（IntelliJ HTTP Client / VS Code REST Client 可直接执行）
 ### 建议顺序：先执行「下单」，把返回的 orderId 填到下面的变量里
+### 三个服务需分别启动：订单 9001、库存 9002、积分 9003
 
-@host = http://localhost:8080
+@orderHost = http://localhost:9001
+@inventoryHost = http://localhost:9002
+@loyaltyHost = http://localhost:9003
 @orderId = ORD-XXXXXXXX
 
 ### 1. 下单（总价 399 × 2 = 798）
-POST {{host}}/api/orders
+POST {{orderHost}}/api/orders
 Content-Type: application/json
 
 {
@@ -16,40 +19,59 @@ Content-Type: application/json
 }
 
 ### 2. 查询订单（走读模型）
-GET {{host}}/api/orders/{{orderId}}
+GET {{orderHost}}/api/orders/{{orderId}}
 
 ### 3. 订单列表
-GET {{host}}/api/orders
+GET {{orderHost}}/api/orders
 
 ### 4. 确认订单
-POST {{host}}/api/orders/{{orderId}}/confirm
+POST {{orderHost}}/api/orders/{{orderId}}/confirm
 
 ### 5. 支付订单
-POST {{host}}/api/orders/{{orderId}}/pay
+POST {{orderHost}}/api/orders/{{orderId}}/pay
 Content-Type: application/json
 
 { "paymentId": "PAY-20261026-001" }
 
 ### 6. 取消订单（已支付订单会被拒绝，符合不变量）
-POST {{host}}/api/orders/{{orderId}}/cancel
+POST {{orderHost}}/api/orders/{{orderId}}/cancel
 Content-Type: application/json
 
 { "reason": "用户改主意了" }
 
 ### 7. 事件流（审计 / 溯源）
-GET {{host}}/api/orders/{{orderId}}/events
+GET {{orderHost}}/api/orders/{{orderId}}/events
 
 ### 8. 全局事件流
-GET {{host}}/api/diagnostics/events
+GET {{orderHost}}/api/diagnostics/events
 
 ### 9. 发件箱状态
-GET {{host}}/api/diagnostics/outbox
+GET {{orderHost}}/api/diagnostics/outbox
 
 ### 10. 手动触发 Outbox 投递
-POST {{host}}/api/diagnostics/outbox/flush
+POST {{orderHost}}/api/diagnostics/outbox/flush
 
 ### 11. 读模型全量重建（清空后按事件流重放）
-POST {{host}}/api/diagnostics/projections/rebuild
+POST {{orderHost}}/api/diagnostics/projections/rebuild
 
-### 12. 各上下文状态：事件数、发件箱、库存、积分
-GET {{host}}/api/diagnostics/stats
+### 12. 订单服务诊断：事件数、发件箱
+GET {{orderHost}}/api/diagnostics/stats
+
+### 13. 库存服务：余量与预占
+GET {{inventoryHost}}/api/inventory/stock
+GET {{inventoryHost}}/api/inventory/reserved
+
+### 14. 积分服务：单客户积分 / 全部客户
+GET {{loyaltyHost}}/api/loyalty/points/C-1001
+GET {{loyaltyHost}}/api/loyalty/points
+
+### 15. 库存不足补偿：P-1003 要 25（可用 20），订单应自动取消
+POST {{orderHost}}/api/orders
+Content-Type: application/json
+
+{
+  "customerId": "C-1002",
+  "items": [
+    { "productId": "P-1003", "productName": "显示器", "unitPrice": 1299.00, "quantity": 25 }
+  ]
+}
