@@ -13,11 +13,12 @@ services:
 
   rocketmq-broker:
     image: apache/rocketmq:5.3.1
-    command: sh mqbroker -n rocketmq-namesrv:9876 --enable-proxy
+    command: sh mqbroker -c /opt/rocketmq/conf/broker.conf
     depends_on:
       - rocketmq-namesrv
     environment:
       NAMESRV_ADDR: rocketmq-namesrv:9876
+    volumes:
+      - ./broker.conf:/opt/rocketmq/conf/broker.conf
     ports:
       - "10911:10911"
-      - "8091:8081"
