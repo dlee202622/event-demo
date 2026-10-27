@@ -52,14 +52,14 @@ OrderService ─publish─→ Exchange ─┼─→ loyalty-service.queue ──
 ```yaml
 eventdriven:
   rabbitmq:
-    queue-name: ${spring.application.name}.queue  # 默认用服务名
+    queue: ${spring.application.name}.queue  # 默认用服务名
 ```
 
-`EventDrivenProperties` 新增 `rabbitmq.queueName` 属性，`EventRabbitMQConfig` 使用该属性创建队列和绑定。
+`EventDrivenProperties` 新增 `rabbitmq.queue` 属性，`EventRabbitMQConfig` 使用该属性创建队列和绑定。
 
 ### 自动配置调整
 
-- `EventRabbitMQConfig` 使用 `queueName` 属性创建队列
+- `EventRabbitMQConfig` 使用 `queue` 属性创建队列
 - routing key 绑定保持 `event.#`（每个服务接收所有事件，由 EventConsumer 自行过滤）
 
 ## 各服务职责
@@ -154,7 +154,7 @@ server:
 
 eventdriven:
   rabbitmq:
-    queue-name: ${spring.application.name}.queue
+    queue: ${spring.application.name}.queue
 ```
 
 ## 迁移步骤
