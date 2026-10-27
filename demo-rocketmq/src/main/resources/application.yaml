@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: demo-rocketmq
+
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: demo-producer-group
+    send-message-timeout: 3000
+
+server:
+  port: 8082
