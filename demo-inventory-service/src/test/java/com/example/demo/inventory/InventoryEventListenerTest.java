@@ -2,6 +2,8 @@ package com.example.demo.inventory;
 
 import com.example.demo.eventdriven.domain.DomainEvent;
 import com.example.demo.eventdriven.domain.DomainEventPublisher;
+import com.example.demo.inventory.domain.Stock;
+import com.example.demo.inventory.domain.StockRepository;
 import com.example.demo.inventory.domain.event.InventoryReservationFailedEvent;
 import com.example.demo.inventory.domain.event.OrderCancelledEvent;
 import com.example.demo.inventory.domain.event.OrderCreatedEvent;
@@ -14,6 +16,9 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -30,7 +35,7 @@ class InventoryEventListenerTest {
 
     @BeforeEach
     void setUp() {
-        inventoryService = new InventoryService();
+        inventoryService = new InventoryService(new InMemoryStockRepository());
         publisher = new RecordingPublisher();
         listener = new InventoryEventListener(inventoryService, publisher);
     }
@@ -99,6 +104,37 @@ class InventoryEventListenerTest {
 
     private static OrderCancelledEvent orderCancelled(String orderId, OrderItem... items) {
         return new OrderCancelledEvent("evt-cancel-" + orderId, orderId, "取消", List.of(items), Instant.now());
+    }
+
+    private static final class InMemoryStockRepository implements StockRepository {
+
+        private final Map<String, Stock> stocks = new ConcurrentHashMap<>();
+
+        InMemoryStockRepository() {
+            stocks.put("P-1001", new Stock("P-1001", 100, 0));
+            stocks.put("P-1002", new Stock("P-1002", 50, 0));
+            stocks.put("P-1003", new Stock("P-1003", 20, 0));
+        }
+
+        @Override
+        public Optional<Stock> findById(String productId) {
+            return Optional.ofNullable(stocks.get(productId));
+        }
+
+        @Override
+        public Optional<Stock> findByIdForUpdate(String productId) {
+            return findById(productId);
+        }
+
+        @Override
+        public void save(Stock stock) {
+            stocks.put(stock.productId(), stock);
+        }
+
+        @Override
+        public List<Stock> findAll() {
+            return List.copyOf(stocks.values());
+        }
     }
 
     private static final class RecordingPublisher implements DomainEventPublisher {
