@@ -78,6 +78,26 @@ curl -s -X POST http://localhost:9001/api/diagnostics/projections/rebuild   # �
 补偿路径：下单数量超过库存（如 `P-1003` 要 25、可用 20）时，库存服务发布
 `InventoryReservationFailedEvent`，订单服务订阅后自动取消订单。
 
+### MySQL 持久化
+
+三个服务默认连接本机 MySQL（`localhost:3306`，root/`123456`，可用 `MYSQL_PASSWORD` 覆盖）：
+
+| 服务 | 数据库 | 表 |
+| --- | --- | --- |
+| demo-order-service | `demo_order` | `orders` / `order_items` / `order_view` / `domain_event` + starter 的 `outbox_event` / `processed_event` |
+| demo-inventory-service | `demo_inventory` | `inventory_stock` + starter 表 |
+| demo-loyalty-service | `demo_loyalty` | `loyalty_points` + starter 表 |
+
+```bash
+docker compose up -d mysql
+./mvnw clean install
+# 分别启动三个服务；首次启动由 Flyway 建表并写入库存种子数据
+```
+
+- `eventdriven.persistence=jdbc` 时 Outbox / 幂等记录落库，重启不丢；
+- 业务表由 Flyway 管理，`ddl-auto: none`；
+- 集成测试使用 Testcontainers（需要 Docker，本机已有 `mysql:8.4` 镜像）。
+
 ---
 
 ## 3. 消息架构
@@ -134,7 +154,7 @@ curl -s -X POST http://localhost:9001/api/diagnostics/projections/rebuild   # �
 
 1. **消息中间件**：已接入 RabbitMQ；换成 Kafka/RocketMQ 只需替换 starter 里的
    `OutboxRelay` 发送实现与 `EventMessageListener` 的监听注解，业务服务代码不变。
-2. **持久化**：把内存版 `OutboxStore` / `ProcessedEventRegistry` / 各仓储替换为 MySQL/JPA，
-   用 `@Transactional` 包住「业务写入 + outbox 写入」，投递交给中继。
-3. **生产加固**：outbox 表加 `SKIP LOCKED` 抢占、消费端失败重试与死信队列、
-   幂等登记表加 TTL、监控 outbox 积压与消费延迟。
+2. **持久化**：已接入 MySQL —— starter 提供 JDBC 版 `OutboxStore` / `ProcessedEventRegistry`，
+   订单聚合与读模型走 JPA，库存走悲观行锁、积分走原子 upsert，
+   `@Transactional` 包住「业务写入 + outbox 写入」，投递交给中继。
+3. **生产加固**：消费端失败重试与死信队列、幂等登记表加 TTL、监控 outbox 积压与消费延迟。

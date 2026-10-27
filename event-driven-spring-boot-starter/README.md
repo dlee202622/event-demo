@@ -182,17 +182,24 @@ public class MyEventConsumer implements EventConsumer {
 | `eventdriven.rabbitmq.exchange` | `event-driven.exchange` | RabbitMQ 交换机名称 |
 | `eventdriven.rabbitmq.queue` | `event-driven.queue` | RabbitMQ 队列名称 |
 | `eventdriven.rabbitmq.routing-key-prefix` | `event` | 路由 key 前缀 |
+| `eventdriven.persistence` | `memory` | `memory` / `jdbc`；`jdbc` 需容器里有 `DataSource` |
+| `eventdriven.outbox.claim-batch-size` | `100` | 每轮认领的最大事件数 |
 
 ## 生产环境建议
 
-### 1. 替换 OutboxStore 为数据库实现
+### 1. 使用内置的 JDBC 实现
 
-```java
-@Bean
-public OutboxStore outboxStore(JdbcTemplate jdbcTemplate) {
-    return new JdbcOutboxStore(jdbcTemplate);
-}
+```yaml
+eventdriven:
+  persistence: jdbc
 ```
+
+`jdbc` 模式要求：
+- 容器里存在 `DataSource` / `JdbcTemplate`（引入 `spring-boot-starter-jdbc` 或 JPA starter）；
+- 数据库已执行 `db/event-driven/V0__event_driven_infrastructure.sql`
+  （用 Flyway 时把 `classpath:db/event-driven` 加入 locations）。
+
+Outbox 表的认领使用 `SELECT ... FOR UPDATE SKIP LOCKED`，幂等表使用 `INSERT IGNORE`。
 
 ### 2. 替换 ProcessedEventRegistry 为 Redis 实现
 

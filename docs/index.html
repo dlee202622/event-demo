@@ -571,17 +571,15 @@ public void relay() {
 }
 
 public synchronized int flush() {
-    List&lt;OutboxEvent&gt; batch = outboxStore.pending();
+    List&lt;OutboxEvent&gt; batch = outboxStore.claimPending(properties.getOutbox().getClaimBatchSize());
     if (batch.isEmpty()) return 0;
 
     for (OutboxEvent event : batch) {
-        // 生产上替换为 producer.send(new ProducerRecord&lt;&gt;(TOPIC, aggregateId, payload))
-        log.info("[Outbox→MQ] topic={} key={} type={} eventId={}",
-                TOPIC, event.aggregateId(), event.eventType(), event.eventId());
-        event.markDelivered();
+        rabbitTemplate.convertAndSend(exchange, routingKey, message);
+        outboxStore.markDelivered(event.id());
     }
-    log.info("[Outbox→MQ] 本轮投递 {} 条，剩余待投递 {} 条", batch.size(), outboxStore.pendingCount());
-    return batch.size();
+    log.info("[Outbox→RabbitMQ] 本轮认领 {} 条、发送成功 {} 条", batch.size(), sent);
+    return sent;
 }
 </code></pre>
   </div>
