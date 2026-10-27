@@ -12,7 +12,6 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -74,14 +73,12 @@ public class EventDrivenAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean
-        @ConditionalOnBean(JdbcTemplate.class)
         public OutboxStore jdbcOutboxStore(JdbcTemplate jdbcTemplate, DataSource dataSource) {
             return new JdbcOutboxStore(jdbcTemplate, dataSource);
         }
 
         @Bean
         @ConditionalOnMissingBean
-        @ConditionalOnBean(JdbcTemplate.class)
         public ProcessedEventRegistry jdbcProcessedEventRegistry(JdbcTemplate jdbcTemplate) {
             return new JdbcProcessedEventRegistry(jdbcTemplate);
         }
