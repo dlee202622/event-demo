@@ -10,6 +10,7 @@ import com.example.demo.eventdriven.domain.DomainEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -41,6 +42,7 @@ public class OrderApplicationService {
     }
 
     /** 用例：下单。 */
+    @Transactional
     public OrderId placeOrder(PlaceOrderCommand command) {
         List<OrderItem> items = command.lines().stream()
                 .map(line -> new OrderItem(
@@ -60,6 +62,7 @@ public class OrderApplicationService {
     }
 
     /** 用例：确认订单。 */
+    @Transactional
     public void confirmOrder(String orderId) {
         Order order = load(orderId);
         order.confirm();
@@ -68,6 +71,7 @@ public class OrderApplicationService {
     }
 
     /** 用例：支付订单。 */
+    @Transactional
     public void payOrder(String orderId, String paymentId) {
         Order order = load(orderId);
         order.pay(paymentId);
@@ -76,6 +80,7 @@ public class OrderApplicationService {
     }
 
     /** 用例：取消订单。 */
+    @Transactional
     public void cancelOrder(String orderId, String reason) {
         Order order = load(orderId);
         order.cancel(reason);

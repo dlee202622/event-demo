@@ -11,7 +11,6 @@ import com.example.demo.order.application.query.OrderView;
 import com.example.demo.order.application.query.OrderViewStore;
 import com.example.demo.order.domain.model.OrderId;
 import com.example.demo.order.domain.repository.OrderNotFoundException;
-import com.example.demo.order.infrastructure.persistence.InMemoryOrderRepository;
 import com.example.demo.order.infrastructure.projection.OrderProjectionHandler;
 import com.example.demo.eventdriven.domain.DomainException;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +18,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.mysql.MySQLContainer;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -37,7 +42,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "eventdriven.outbox.relay-enabled=false",
         "spring.rabbitmq.listener.simple.auto-startup=false"
 })
+@Testcontainers(disabledWithoutDocker = true)
 class OrderServiceIntegrationTest {
+
+    @Container
+    static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4")
+            .withDatabaseName("demo_order")
+            .withUsername("test")
+            .withPassword("test");
+
+    @DynamicPropertySource
+    static void datasource(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
+        registry.add("spring.datasource.username", MYSQL::getUsername);
+        registry.add("spring.datasource.password", MYSQL::getPassword);
+    }
 
     @Autowired
     private OrderApplicationService orderService;
@@ -52,17 +71,18 @@ class OrderServiceIntegrationTest {
     @Autowired
     private OrderViewStore orderViewStore;
     @Autowired
-    private InMemoryOrderRepository orderRepository;
+    private JdbcTemplate jdbcTemplate;
     @Autowired
     private OrderProjectionHandler projectionHandler;
 
     @BeforeEach
     void resetAll() {
-        orderRepository.clear();
-        orderViewStore.clear();
-        eventStore.clear();
-        outboxStore.clear();
-        processedEventRegistry.clear();
+        jdbcTemplate.update("DELETE FROM order_items");
+        jdbcTemplate.update("DELETE FROM orders");
+        jdbcTemplate.update("DELETE FROM order_view");
+        jdbcTemplate.update("DELETE FROM domain_event");
+        jdbcTemplate.update("DELETE FROM outbox_event");
+        jdbcTemplate.update("DELETE FROM processed_event");
     }
 
     @Test
@@ -141,6 +161,29 @@ class OrderServiceIntegrationTest {
         OrderView rebuilt = queryService.findByOrderId(orderId.value());
         assertEquals("PAID", rebuilt.status());
         assertEquals(0, new BigDecimal("1299.00").compareTo(rebuilt.totalAmount()));
+    }
+
+    @Test
+    @DisplayName("持久化：聚合、明细、读模型、事件流、Outbox 全部落库")
+    void persistsAllStateInMySql() {
+        OrderId orderId = orderService.placeOrder(
+                command("C-7007", line("P-1001", "机械键盘", "399.00", 2)));
+
+        assertEquals("CREATED", jdbcTemplate.queryForObject(
+                "SELECT status FROM orders WHERE id = ?", String.class, orderId.value()));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM order_items WHERE order_id = ?", Integer.class, orderId.value()));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM order_view WHERE order_id = ?", Integer.class, orderId.value()));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM domain_event WHERE aggregate_id = ?", Integer.class, orderId.value()));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outbox_event", Integer.class));
+
+        // 聚合能从库里重建并继续流转
+        orderService.confirmOrder(orderId.value());
+        assertEquals("CONFIRMED", jdbcTemplate.queryForObject(
+                "SELECT status FROM orders WHERE id = ?", String.class, orderId.value()));
     }
 
     @Test
