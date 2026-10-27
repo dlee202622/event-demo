@@ -2,10 +2,13 @@ package com.example.demo.order.infrastructure.persistence.jpa;
 
 import com.example.demo.order.domain.model.Order;
 import com.example.demo.order.domain.model.OrderId;
+import com.example.demo.order.domain.model.OrderStatus;
 import com.example.demo.order.domain.repository.OrderRepository;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,6 +44,16 @@ public class JpaOrderRepository implements OrderRepository {
     @Transactional(readOnly = true)
     public List<Order> findAll() {
         return jpaRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(OrderEntity::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Order> findUnpaidCreatedBefore(Instant cutoff, int limit) {
+        return jpaRepository.findByStatusInAndCreatedAtBeforeOrderByCreatedAtAsc(
+                        List.of(OrderStatus.CREATED, OrderStatus.CONFIRMED), cutoff, Limit.of(limit))
+                .stream()
                 .map(OrderEntity::toDomain)
                 .toList();
     }

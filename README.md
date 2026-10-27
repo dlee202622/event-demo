@@ -76,7 +76,10 @@ curl -s -X POST http://localhost:9001/api/diagnostics/projections/rebuild   # �
 ```
 
 补偿路径：下单数量超过库存（如 `P-1003` 要 25、可用 20）时，库存服务发布
-`InventoryReservationFailedEvent`，订单服务订阅后自动取消订单。
+`InventoryReservationFailedEvent`，订单服务订阅后自动取消订单。下单接口会等待
+`demo.order.placement-wait-ms`（默认 1500ms）观察补偿结果：窗口内订单被取消则返回
+**409**（响应体为状态 `CANCELLED` 的订单读模型），否则返回 201。订单记录仍然保留，
+取消原因可在事件流中查看。
 
 ### MySQL 持久化
 
@@ -97,6 +100,24 @@ docker compose up -d mysql
 - `eventdriven.persistence=jdbc` 时 Outbox / 幂等记录落库，重启不丢；
 - 业务表由 Flyway 管理，`ddl-auto: none`；
 - 集成测试使用 Testcontainers（需要 Docker，本机已有 `mysql:8.4` 镜像）。
+
+### 超时未支付（XXL-JOB）
+
+订单超过 `demo.order.unpaid-timeout`（默认 `30m`）仍未支付时，由调度中心触发
+`unpaidOrderTimeoutJob` 自动取消；取消走与人工取消相同的 `OrderCancelledEvent`，
+库存服务随之释放预占，读模型变为 `CANCELLED`。
+
+```bash
+# 启动调度中心（首次会用 infra/xxl-job/tables_xxl_job.sql 初始化 xxl_job 库）
+docker compose up -d xxl-job-db-init xxl-job-admin
+# 控制台：http://localhost:18080 ，默认 admin / 123456
+```
+
+- 执行器 `demo-order-executor` 由订单服务自动注册（宿主机 9999 端口；调度中心在 Docker 中，回调地址为 `host.docker.internal`）；
+- 执行器组的 AccessToken 填 `demo-token`，与 `xxl.job.access-token` 保持一致（3.5.0 要求非空）；
+- 在调度中心新建任务：JobHandler 填 `unpaidOrderTimeoutJob`，cron 例 `0 */1 * * * ?`，也可手动执行一次；
+- 单次最多处理 `demo.order.expiry-batch-size`（默认 100）笔，逐单独立事务，单笔失败不影响整批；
+- 可用环境变量覆盖：`XXL_JOB_ENABLED` / `XXL_JOB_ADMIN` / `XXL_JOB_EXECUTOR_ADDRESS`。
 
 ---
 

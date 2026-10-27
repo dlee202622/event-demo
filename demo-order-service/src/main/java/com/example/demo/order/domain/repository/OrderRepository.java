@@ -3,6 +3,7 @@ package com.example.demo.order.domain.repository;
 import com.example.demo.order.domain.model.Order;
 import com.example.demo.order.domain.model.OrderId;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,6 +26,9 @@ public interface OrderRepository {
     }
 
     List<Order> findAll();
+
+    /** 查询创建时间早于 cutoff、仍未支付（CREATED / CONFIRMED）的订单，用于超时取消。 */
+    List<Order> findUnpaidCreatedBefore(Instant cutoff, int limit);
 
     /** 分配下一个订单号；具体实现可换成号段/雪花算法。 */
     default OrderId nextId() {

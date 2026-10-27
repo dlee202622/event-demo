@@ -53,5 +53,39 @@ services:
     ports:
       - "19876:8080"
 
+  # 一次性初始化 xxl_job 库（官方调度中心不会自动建表）
+  xxl-job-db-init:
+    image: mysql:8.4
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./infra/xxl-job/tables_xxl_job.sql:/sql/tables_xxl_job.sql:ro
+    command:
+      - sh
+      - -c
+      - |
+        if mysql --default-character-set=utf8mb4 -h mysql -uroot -p123456 -N \
+            -e "SELECT 1 FROM xxl_job.xxl_job_lock LIMIT 1" >/dev/null 2>&1; then
+          echo "[xxl-job] tables already exist, skip init"
+        else
+          mysql --default-character-set=utf8mb4 -h mysql -uroot -p123456 < /sql/tables_xxl_job.sql
+        fi
+    restart: "no"
+
+  xxl-job-admin:
+    image: xuxueli/xxl-job-admin:3.5.0
+    depends_on:
+      xxl-job-db-init:
+        condition: service_completed_successfully
+    environment:
+      PARAMS: >-
+        --spring.datasource.url=jdbc:mysql://mysql:3306/xxl_job?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&serverTimezone=Asia/Shanghai
+        --spring.datasource.username=root
+        --spring.datasource.password=123456
+      TZ: Asia/Shanghai
+    ports:
+      - "18080:8080"
+
 volumes:
   mysql-data:

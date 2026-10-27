@@ -1,12 +1,15 @@
 package com.example.demo.order.interfaces.rest;
 
 import com.example.demo.order.application.OrderApplicationService;
+import com.example.demo.order.application.PlacementResult;
 import com.example.demo.order.application.query.OrderQueryService;
 import com.example.demo.order.application.query.OrderView;
 import com.example.demo.order.domain.model.OrderId;
 import com.example.demo.order.interfaces.rest.dto.EventResponse;
 import com.example.demo.order.interfaces.rest.dto.PlaceOrderRequest;
 import com.example.demo.infrastructure.event.DomainEventStore;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,20 +36,34 @@ public class OrderController {
     private final OrderApplicationService orderApplicationService;
     private final OrderQueryService orderQueryService;
     private final DomainEventStore domainEventStore;
+    private final long placementWaitMs;
 
     public OrderController(OrderApplicationService orderApplicationService,
                            OrderQueryService orderQueryService,
-                           DomainEventStore domainEventStore) {
+                           DomainEventStore domainEventStore,
+                           @Value("${demo.order.placement-wait-ms:1500}") long placementWaitMs) {
         this.orderApplicationService = orderApplicationService;
         this.orderQueryService = orderQueryService;
         this.domainEventStore = domainEventStore;
+        this.placementWaitMs = placementWaitMs;
     }
 
-    /** 下单。 */
+    /**
+     * 下单。
+     *
+     * <p>库存预占是异步补偿的：先创建订单，再等待一个短窗口观察是否因库存不足被取消。
+     * 窗口内被取消返回 409（订单记录仍保留，状态 CANCELLED），否则返回 201。</p>
+     */
     @PostMapping
     public ResponseEntity<OrderView> placeOrder(@RequestBody PlaceOrderRequest request) {
         OrderId orderId = orderApplicationService.placeOrder(request.toCommand());
+        PlacementResult result = orderApplicationService.awaitPlacement(
+                orderId, Duration.ofMillis(placementWaitMs));
         OrderView view = orderQueryService.findByOrderId(orderId.value());
+
+        if (result == PlacementResult.CANCELLED) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(view);
+        }
         return ResponseEntity
                 .created(URI.create("/api/orders/" + orderId.value()))
                 .body(view);

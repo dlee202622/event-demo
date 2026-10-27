@@ -5,6 +5,8 @@ import com.example.demo.eventdriven.idempotency.ProcessedEventRegistry;
 import com.example.demo.eventdriven.outbox.OutboxStore;
 import com.example.demo.infrastructure.event.DomainEventStore;
 import com.example.demo.order.application.OrderApplicationService;
+import com.example.demo.order.application.OrderExpiryService;
+import com.example.demo.order.application.PlacementResult;
 import com.example.demo.order.application.command.PlaceOrderCommand;
 import com.example.demo.order.application.query.OrderQueryService;
 import com.example.demo.order.application.query.OrderView;
@@ -26,6 +28,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -40,7 +43,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @SpringBootTest(properties = {
         "eventdriven.outbox.relay-enabled=false",
-        "spring.rabbitmq.listener.simple.auto-startup=false"
+        "spring.rabbitmq.listener.simple.auto-startup=false",
+        "xxl.job.enabled=false"
 })
 @Testcontainers(disabledWithoutDocker = true)
 class OrderServiceIntegrationTest {
@@ -60,6 +64,8 @@ class OrderServiceIntegrationTest {
 
     @Autowired
     private OrderApplicationService orderService;
+    @Autowired
+    private OrderExpiryService orderExpiryService;
     @Autowired
     private OrderQueryService queryService;
     @Autowired
@@ -187,6 +193,85 @@ class OrderServiceIntegrationTest {
     }
 
     @Test
+    @DisplayName("下单等待：窗口内被库存补偿取消时返回 CANCELLED")
+    void awaitPlacementDetectsCompensationCancellation() throws Exception {
+        OrderId orderId = orderService.placeOrder(
+                command("C-7007", line("P-1003", "显示器支架", "199.00", 25)));
+
+        Thread compensation = new Thread(() -> {
+            try {
+                Thread.sleep(150);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            orderService.cancelOrder(orderId.value(), "库存预占失败：P-1003 可用 20，需要 25");
+        });
+        compensation.start();
+
+        PlacementResult result = orderService.awaitPlacement(orderId, Duration.ofSeconds(3));
+        compensation.join();
+
+        assertEquals(PlacementResult.CANCELLED, result);
+        assertEquals("CANCELLED", queryService.findByOrderId(orderId.value()).status());
+    }
+
+    @Test
+    @DisplayName("下单等待：窗口内未被取消则返回 ACCEPTED")
+    void awaitPlacementAcceptsWhenNoCompensation() {
+        OrderId orderId = orderService.placeOrder(
+                command("C-8008", line("P-1001", "机械键盘", "399.00", 1)));
+
+        PlacementResult result = orderService.awaitPlacement(orderId, Duration.ofMillis(200));
+
+        assertEquals(PlacementResult.ACCEPTED, result);
+        assertEquals("CREATED", queryService.findByOrderId(orderId.value()).status());
+    }
+
+    @Test
+    @DisplayName("超时未支付：只取消超过阈值且未支付的订单，并发布取消事件")
+    void cancelsExpiredUnpaidOrders() {
+        OrderId created = orderService.placeOrder(
+                command("C-9009", line("P-1001", "机械键盘", "399.00", 1)));
+        OrderId confirmed = orderService.placeOrder(
+                command("C-9010", line("P-1001", "机械键盘", "399.00", 1)));
+        orderService.confirmOrder(confirmed.value());
+        OrderId paid = orderService.placeOrder(
+                command("C-9011", line("P-1001", "机械键盘", "399.00", 1)));
+        orderService.payOrder(paid.value(), "PAY-EXPIRY-001");
+        OrderId fresh = orderService.placeOrder(
+                command("C-9012", line("P-1001", "机械键盘", "399.00", 1)));
+
+        ageOrder(created, 2);
+        ageOrder(confirmed, 2);
+        ageOrder(paid, 2);
+
+        int cancelled = orderExpiryService.cancelExpired(Duration.ofMinutes(30), 100);
+
+        assertEquals(2, cancelled);
+        assertEquals("CANCELLED", queryService.findByOrderId(created.value()).status());
+        assertEquals("CANCELLED", queryService.findByOrderId(confirmed.value()).status());
+        assertEquals("PAID", queryService.findByOrderId(paid.value()).status());
+        assertEquals("CREATED", queryService.findByOrderId(fresh.value()).status());
+
+        List<DomainEvent> events = eventStore.eventsOf(created.value());
+        assertEquals("OrderCancelledEvent", events.get(events.size() - 1).eventType());
+    }
+
+    @Test
+    @DisplayName("超时未支付：单次批量上限生效")
+    void expiryRespectsBatchLimit() {
+        for (int index = 0; index < 3; index++) {
+            OrderId orderId = orderService.placeOrder(
+                    command("C-91" + index, line("P-1001", "机械键盘", "399.00", 1)));
+            ageOrder(orderId, 2);
+        }
+
+        assertEquals(2, orderExpiryService.cancelExpired(Duration.ofMinutes(30), 2));
+        assertEquals(1, orderExpiryService.cancelExpired(Duration.ofMinutes(30), 2));
+    }
+
+    @Test
     @DisplayName("下单校验：空商品行、非法订单号、取消不存在的订单")
     void placeOrderValidation() {
         assertThrows(DomainException.class,
@@ -194,6 +279,12 @@ class OrderServiceIntegrationTest {
         assertThrows(DomainException.class, () -> OrderId.of("BAD-ID"));
         assertThrows(OrderNotFoundException.class,
                 () -> orderService.cancelOrder("ORD-NOTEXIST", "不存在"));
+    }
+
+    private void ageOrder(OrderId orderId, int hours) {
+        jdbcTemplate.update(
+                "UPDATE orders SET created_at = DATE_SUB(created_at, INTERVAL ? HOUR) WHERE id = ?",
+                hours, orderId.value());
     }
 
     private static PlaceOrderCommand command(String customerId, PlaceOrderCommand.Line... lines) {

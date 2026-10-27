@@ -29,6 +29,34 @@ eventdriven:
   persistence: jdbc
   rabbitmq:
     queue: ${spring.application.name}.queue
+  outbox:
+    # 下单接口要在一个短窗口内看到库存补偿结果，两个中继都要足够快
+    relay-interval-ms: 300
+    relay-initial-delay-ms: 300
+
+demo:
+  order:
+    # 下单接口等待补偿结果的时长：窗口内被取消 → 409
+    placement-wait-ms: 1500
+    # 超过该时长仍未支付则自动取消（由 XXL-JOB 定时任务触发）
+    unpaid-timeout: 30m
+    # 单次调度最多处理的订单数
+    expiry-batch-size: 100
+
+xxl:
+  job:
+    enabled: ${XXL_JOB_ENABLED:true}
+    admin:
+      addresses: ${XXL_JOB_ADMIN:http://localhost:18080}
+    # 3.5.0 要求执行器 token 非空；需与调度中心执行器组配置的 AccessToken 一致
+    access-token: ${XXL_JOB_TOKEN:demo-token}
+    executor:
+      appname: demo-order-executor
+      # 调度中心跑在 Docker 里，回调宿主机的执行器
+      address: ${XXL_JOB_EXECUTOR_ADDRESS:http://host.docker.internal:9999}
+      port: 9999
+      logpath: ${XXL_JOB_LOG_PATH:./logs/xxl-job}
+      logretentiondays: 30
 
 logging:
   level:

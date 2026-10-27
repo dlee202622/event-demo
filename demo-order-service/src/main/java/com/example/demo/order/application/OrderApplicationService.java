@@ -5,6 +5,7 @@ import com.example.demo.order.domain.model.Money;
 import com.example.demo.order.domain.model.Order;
 import com.example.demo.order.domain.model.OrderId;
 import com.example.demo.order.domain.model.OrderItem;
+import com.example.demo.order.domain.model.OrderStatus;
 import com.example.demo.order.domain.repository.OrderRepository;
 import com.example.demo.eventdriven.domain.DomainEventPublisher;
 import org.slf4j.Logger;
@@ -12,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.List;
 
 /**
@@ -31,6 +33,8 @@ import java.util.List;
 public class OrderApplicationService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderApplicationService.class);
+
+    private static final Duration PLACEMENT_POLL_INTERVAL = Duration.ofMillis(50);
 
     private final OrderRepository orderRepository;
     private final DomainEventPublisher domainEventPublisher;
@@ -59,6 +63,36 @@ public class OrderApplicationService {
 
         log.info("[应用服务] 下单成功 orderId={} 金额={}", order.id().value(), order.totalAmount().display());
         return order.id();
+    }
+
+    /**
+     * 下单后短暂等待补偿结果。
+     *
+     * <p>库存预占失败没有同步返回值：库存服务发布失败事件，订单服务再补偿取消。
+     * 接口层用一个小窗口等待这个补偿，窗口内订单被取消即视为库存不足。</p>
+     *
+     * <p>刻意不开启事务：等待期间要让其他线程的补偿事务提交后才能读到新状态。</p>
+     */
+    public PlacementResult awaitPlacement(OrderId orderId, Duration timeout) {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadline) {
+            OrderStatus status = orderRepository.findById(orderId)
+                    .map(Order::status)
+                    .orElse(null);
+            if (status == OrderStatus.CANCELLED) {
+                return PlacementResult.CANCELLED;
+            }
+            if (status != null && status != OrderStatus.CREATED) {
+                return PlacementResult.ACCEPTED;
+            }
+            try {
+                Thread.sleep(PLACEMENT_POLL_INTERVAL);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return PlacementResult.ACCEPTED;
+            }
+        }
+        return PlacementResult.ACCEPTED;
     }
 
     /** 用例：确认订单。 */

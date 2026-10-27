@@ -29,6 +29,10 @@ eventdriven:
   persistence: jdbc
   rabbitmq:
     queue: ${spring.application.name}.queue
+  outbox:
+    # 预占失败事件要尽快送达订单服务，配合下单接口的等待窗口
+    relay-interval-ms: 300
+    relay-initial-delay-ms: 300
 
 logging:
   level:
