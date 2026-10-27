@@ -12,6 +12,11 @@ public class EventDrivenProperties {
      * 是否启用事件驱动。
      */
     private boolean enabled = true;
+
+    /**
+     * 持久化方式：memory | jdbc。
+     */
+    private String persistence = "memory";
     
     /**
      * Outbox 配置。
@@ -29,6 +34,14 @@ public class EventDrivenProperties {
     
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public String getPersistence() {
+        return persistence;
+    }
+
+    public void setPersistence(String persistence) {
+        this.persistence = persistence;
     }
     
     public Outbox getOutbox() {
@@ -63,6 +76,11 @@ public class EventDrivenProperties {
          * Relay 初始延迟（毫秒）。
          */
         private long relayInitialDelayMs = 2000;
+
+        /**
+         * 每轮认领的最大事件数。
+         */
+        private int claimBatchSize = 100;
         
         public boolean isRelayEnabled() {
             return relayEnabled;
@@ -86,6 +104,14 @@ public class EventDrivenProperties {
         
         public void setRelayInitialDelayMs(long relayInitialDelayMs) {
             this.relayInitialDelayMs = relayInitialDelayMs;
+        }
+
+        public int getClaimBatchSize() {
+            return claimBatchSize;
+        }
+
+        public void setClaimBatchSize(int claimBatchSize) {
+            this.claimBatchSize = claimBatchSize;
         }
     }
     

@@ -52,6 +52,32 @@ class EventDrivenAutoConfigurationTest {
                 });
     }
     
+    @Test
+    void shouldUseJdbcStoresWhenPersistenceIsJdbc() {
+        contextRunner
+                .withUserConfiguration(RabbitTemplateConfig.class, JdbcConfig.class)
+                .withPropertyValues("eventdriven.persistence=jdbc")
+                .run(context -> {
+                    assertThat(context.getBean(OutboxStore.class))
+                            .isInstanceOf(com.example.demo.eventdriven.outbox.JdbcOutboxStore.class);
+                    assertThat(context.getBean(ProcessedEventRegistry.class))
+                            .isInstanceOf(com.example.demo.eventdriven.idempotency.JdbcProcessedEventRegistry.class);
+                });
+    }
+
+    @Configuration
+    static class JdbcConfig {
+        @Bean
+        org.springframework.jdbc.core.JdbcTemplate jdbcTemplate(javax.sql.DataSource dataSource) {
+            return new org.springframework.jdbc.core.JdbcTemplate(dataSource);
+        }
+
+        @Bean
+        javax.sql.DataSource dataSource() {
+            return org.mockito.Mockito.mock(javax.sql.DataSource.class);
+        }
+    }
+
     @Configuration
     static class RabbitTemplateConfig {
         @Bean
@@ -73,9 +99,15 @@ class EventDrivenAutoConfigurationTest {
         public void append(com.example.demo.eventdriven.outbox.OutboxEvent event) {}
         
         @Override
-        public java.util.List<com.example.demo.eventdriven.outbox.OutboxEvent> pending() {
+        public java.util.List<com.example.demo.eventdriven.outbox.OutboxEvent> claimPending(int limit) {
             return java.util.List.of();
         }
+
+        @Override
+        public void markDelivered(String outboxId) {}
+
+        @Override
+        public void markFailed(String outboxId) {}
         
         @Override
         public java.util.List<com.example.demo.eventdriven.outbox.OutboxEvent> findAll() {
