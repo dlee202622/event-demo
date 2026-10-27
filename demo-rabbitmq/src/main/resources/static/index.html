@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中间件 Demo 测试页面</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+        .header { background: #1a1a2e; color: #fff; padding: 16px 24px; font-size: 20px; font-weight: 600; }
+        .container { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+        .tabs { display: flex; gap: 0; margin-bottom: 0; }
+        .tab { padding: 12px 24px; cursor: pointer; border: 1px solid #ddd; border-bottom: none; background: #e8e8e8; font-size: 15px; font-weight: 500; border-radius: 8px 8px 0 0; }
+        .tab.active { background: #fff; border-color: #ccc; font-weight: 600; }
+        .panel { display: none; background: #fff; border: 1px solid #ccc; border-radius: 0 8px 8px 8px; padding: 24px; }
+        .panel.active { display: block; }
+        .endpoint { margin-bottom: 20px; padding: 16px; border: 1px solid #eee; border-radius: 8px; background: #fafafa; }
+        .endpoint-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: #1a1a2e; }
+        .endpoint-path { font-size: 13px; color: #666; margin-bottom: 12px; font-family: monospace; }
+        .endpoint-desc { font-size: 13px; color: #888; margin-bottom: 12px; }
+        .form-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+        .form-row label { font-size: 13px; min-width: 80px; color: #555; }
+        input[type="text"], input[type="number"] { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; flex: 1; min-width: 120px; }
+        button.send { padding: 6px 16px; background: #1a1a2e; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+        button.send:hover { background: #16213e; }
+        .response { margin-top: 8px; padding: 10px; background: #1e1e1e; color: #0f0; border-radius: 4px; font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; min-height: 36px; display: none; }
+        .response.show { display: block; }
+        .response.error { color: #f55; }
+        .status-ok { color: #0f0; }
+        .status-err { color: #f55; }
+    </style>
+</head>
+<body>
+    <div class="header">中间件 Demo 测试页面</div>
+    <div class="container">
+        <div class="tabs">
+            <div class="tab active" data-panel="rabbitmq">RabbitMQ (8081)</div>
+            <div class="tab" data-panel="rocketmq">RocketMQ (8082)</div>
+        </div>
+
+        <!-- RabbitMQ Panel -->
+        <div class="panel active" id="panel-rabbitmq">
+            <div class="endpoint">
+                <div class="endpoint-title">1. 简单队列</div>
+                <div class="endpoint-path">POST /api/rabbitmq/simple</div>
+                <div class="endpoint-desc">最基本的点对点消息发送</div>
+                <div class="form-row">
+                    <label>消息内容</label>
+                    <input type="text" id="rmq-simple-msg" value="hello rabbitmq">
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/simple', {message: val('rmq-simple-msg')}, 'res-rmq-simple')">发送</button>
+                </div>
+                <div class="response" id="res-rmq-simple"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">2. 工作队列</div>
+                <div class="endpoint-path">POST /api/rabbitmq/work</div>
+                <div class="endpoint-desc">多消费者竞争消费，展示负载均衡和手动 ACK</div>
+                <div class="form-row">
+                    <label>消息内容</label>
+                    <input type="text" id="rmq-work-msg" value="work task">
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/work', {message: val('rmq-work-msg')}, 'res-rmq-work')">发送</button>
+                </div>
+                <div class="response" id="res-rmq-work"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">3. 发布/订阅 (Fanout)</div>
+                <div class="endpoint-path">POST /api/rabbitmq/fanout</div>
+                <div class="endpoint-desc">消息广播到所有绑定队列（queue-a 和 queue-b 同时收到）</div>
+                <div class="form-row">
+                    <label>消息内容</label>
+                    <input type="text" id="rmq-fanout-msg" value="broadcast msg">
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/fanout', {message: val('rmq-fanout-msg')}, 'res-rmq-fanout')">发送</button>
+                </div>
+                <div class="response" id="res-rmq-fanout"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">4. 路由模式 (Direct)</div>
+                <div class="endpoint-path">POST /api/rabbitmq/direct</div>
+                <div class="endpoint-desc">按 routing key 精确路由：order.created → order 队列，order.paid → payment 队列</div>
+                <div class="form-row">
+                    <label>Routing Key</label>
+                    <input type="text" id="rmq-direct-key" value="order.created" style="max-width:160px">
+                    <label>消息内容</label>
+                    <input type="text" id="rmq-direct-msg" value="direct msg">
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/direct', {routingKey: val('rmq-direct-key'), message: val('rmq-direct-msg')}, 'res-rmq-direct')">发送</button>
+                </div>
+                <div class="response" id="res-rmq-direct"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">5. 主题模式 (Topic)</div>
+                <div class="endpoint-path">POST /api/rabbitmq/topic</div>
+                <div class="endpoint-desc">通配符路由：* 匹配一个词，# 匹配零或多个词。order.* 匹配所有 order 事件</div>
+                <div class="form-row">
+                    <label>Routing Key</label>
+                    <input type="text" id="rmq-topic-key" value="order.created" style="max-width:160px">
+                    <label>消息内容</label>
+                    <input type="text" id="rmq-topic-msg" value="topic msg">
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/topic', {routingKey: val('rmq-topic-key'), message: val('rmq-topic-msg')}, 'res-rmq-topic')">发送</button>
+                </div>
+                <div class="response" id="res-rmq-topic"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">6. 消息确认 (Publisher Confirm)</div>
+                <div class="endpoint-path">POST /api/rabbitmq/confirm</div>
+                <div class="endpoint-desc">开启 correlated 确认模式，生产者注册 ConfirmCallback 确认消息到达 Broker</div>
+                <div class="form-row">
+                    <label>消息内容</label>
+                    <input type="text" id="rmq-confirm-msg" value="confirm msg">
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/confirm', {message: val('rmq-confirm-msg')}, 'res-rmq-confirm')">发送</button>
+                </div>
+                <div class="response" id="res-rmq-confirm"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">7. 死信队列 (DLQ)</div>
+                <div class="endpoint-path">POST /api/rabbitmq/dlx</div>
+                <div class="endpoint-desc">消息被拒绝后自动转入死信队列（TTL 3s + reject），由 DLQ 消费者处理</div>
+                <div class="form-row">
+                    <label>消息内容</label>
+                    <input type="text" id="rmq-dlx-msg" value="dlx msg">
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/dlx', {message: val('rmq-dlx-msg')}, 'res-rmq-dlx')">发送</button>
+                </div>
+                <div class="response" id="res-rmq-dlx"></div>
+            </div>
+        </div>
+
+        <!-- RocketMQ Panel -->
+        <div class="panel" id="panel-rocketmq">
+            <div class="endpoint">
+                <div class="endpoint-title">1. 基础收发</div>
+                <div class="endpoint-path">POST /api/rocketmq/simple</div>
+                <div class="endpoint-desc">最基本的消息发送与消费</div>
+                <div class="form-row">
+                    <label>消息内容</label>
+                    <input type="text" id="rmq-simple-msg2" value="hello rocketmq">
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/simple', {message: val('rmq-simple-msg2')}, 'res-rmq-simple2')">发送</button>
+                </div>
+                <div class="response" id="res-rmq-simple2"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">2. 顺序消息</div>
+                <div class="endpoint-path">POST /api/rocketmq/orderly</div>
+                <div class="endpoint-desc">同一 orderKey 的消息发送到同一队列，保证 FIFO 消费顺序</div>
+                <div class="form-row">
+                    <label>Order Key</label>
+                    <input type="text" id="rmq-order-key" value="order-001" style="max-width:120px">
+                    <label>消息内容</label>
+                    <input type="text" id="rmq-order-msg" value="orderly msg">
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/orderly', {orderKey: val('rmq-order-key'), message: val('rmq-order-msg')}, 'res-rmq-order')">发送</button>
+                </div>
+                <div class="response" id="res-rmq-order"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">3. 标签过滤</div>
+                <div class="endpoint-path">POST /api/rocketmq/tag</div>
+                <div class="endpoint-desc">按 Tag 过滤消费：消费者只接收 TagA 消息，TagB 消息被过滤</div>
+                <div class="form-row">
+                    <label>Tag</label>
+                    <input type="text" id="rmq-tag" value="TagA" style="max-width:80px">
+                    <label>消息内容</label>
+                    <input type="text" id="rmq-tag-msg" value="tag msg">
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/tag', {tag: val('rmq-tag'), message: val('rmq-tag-msg')}, 'res-rmq-tag')">发送</button>
+                </div>
+                <div class="response" id="res-rmq-tag"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">4. 延迟消息</div>
+                <div class="endpoint-path">POST /api/rocketmq/delay</div>
+                <div class="endpoint-desc">定时投递：delayLevel 1=1s, 2=5s, 3=10s, 4=30s, 5=1m ...</div>
+                <div class="form-row">
+                    <label>Delay Level</label>
+                    <input type="number" id="rmq-delay-level" value="1" min="1" max="18" style="max-width:80px">
+                    <label>消息内容</label>
+                    <input type="text" id="rmq-delay-msg" value="delay msg">
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/delay', {message: val('rmq-delay-msg'), delayLevel: val('rmq-delay-level')}, 'res-rmq-delay')">发送</button>
+                </div>
+                <div class="response" id="res-rmq-delay"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">5. 事务消息</div>
+                <div class="endpoint-path">POST /api/rocketmq/transaction</div>
+                <div class="endpoint-desc">半消息 + 本地事务 + 回查，实现分布式事务最终一致性</div>
+                <div class="form-row">
+                    <label>消息内容</label>
+                    <input type="text" id="rmq-tx-msg" value="tx msg">
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/transaction', {message: val('rmq-tx-msg')}, 'res-rmq-tx')">发送</button>
+                </div>
+                <div class="response" id="res-rmq-tx"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">6. 广播消费</div>
+                <div class="endpoint-path">POST /api/rocketmq/broadcast</div>
+                <div class="endpoint-desc">同一消费者组的所有实例都收到每条消息，适用于通知类场景</div>
+                <div class="form-row">
+                    <label>消息内容</label>
+                    <input type="text" id="rmq-bc-msg" value="broadcast msg">
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/broadcast', {message: val('rmq-bc-msg')}, 'res-rmq-bc')">发送</button>
+                </div>
+                <div class="response" id="res-rmq-bc"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab 切换
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+            });
+        });
+
+        function val(id) { return document.getElementById(id).value; }
+
+        async function post(url, body, resId) {
+            const el = document.getElementById(resId);
+            el.classList.add('show');
+            el.classList.remove('error');
+            el.textContent = '发送中...';
+            try {
+                const params = new URLSearchParams();
+                Object.entries(body).forEach(([k, v]) => params.append(k, v));
+                const resp = await fetch(url, { method: 'POST', body: params });
+                const data = await resp.json();
+                el.textContent = 'HTTP ' + resp.status + '\n' + JSON.stringify(data, null, 2);
+                if (!resp.ok) el.classList.add('error');
+            } catch (e) {
+                el.classList.add('error');
+                el.textContent = '请求失败: ' + e.message + '\n请确保对应的 demo 应用已启动';
+            }
+        }
+    </script>
+</body>
+</html>
