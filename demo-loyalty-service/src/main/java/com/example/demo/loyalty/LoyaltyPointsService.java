@@ -1,10 +1,9 @@
 package com.example.demo.loyalty;
 
+import com.example.demo.loyalty.domain.PointsRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
-import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 积分服务（独立限界上下文）。
@@ -15,23 +14,22 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class LoyaltyPointsService {
 
-    private final Map<String, Integer> points = new ConcurrentHashMap<>();
+    private final PointsRepository pointsRepository;
 
-    /** 发放积分。 */
+    public LoyaltyPointsService(PointsRepository pointsRepository) {
+        this.pointsRepository = pointsRepository;
+    }
+
+    /** 发放积分，返回最新累计值。 */
     public int earn(String customerId, int pointsToEarn) {
-        return points.merge(customerId, pointsToEarn, Integer::sum);
+        return pointsRepository.add(customerId, pointsToEarn);
     }
 
     public int pointsOf(String customerId) {
-        return points.getOrDefault(customerId, 0);
+        return pointsRepository.pointsOf(customerId);
     }
 
     public Map<String, Integer> snapshot() {
-        return new TreeMap<>(points);
-    }
-
-    /** 仅测试/演示用。 */
-    public void reset() {
-        points.clear();
+        return pointsRepository.findAll();
     }
 }

@@ -1,5 +1,6 @@
 package com.example.demo.loyalty;
 
+import com.example.demo.loyalty.domain.PointsRepository;
 import com.example.demo.loyalty.domain.event.Money;
 import com.example.demo.loyalty.domain.event.OrderPaidEvent;
 import com.example.demo.loyalty.event.LoyaltyEventListener;
@@ -9,6 +10,9 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -22,7 +26,7 @@ class LoyaltyEventListenerTest {
 
     @BeforeEach
     void setUp() {
-        loyaltyPointsService = new LoyaltyPointsService();
+        loyaltyPointsService = new LoyaltyPointsService(new InMemoryPointsRepository());
         listener = new LoyaltyEventListener(loyaltyPointsService);
     }
 
@@ -51,6 +55,26 @@ class LoyaltyEventListenerTest {
 
         assertEquals(5, loyaltyPointsService.pointsOf("C-3"));
         assertEquals(2, loyaltyPointsService.pointsOf("C-4"));
+    }
+
+    private static final class InMemoryPointsRepository implements PointsRepository {
+
+        private final Map<String, Integer> points = new ConcurrentHashMap<>();
+
+        @Override
+        public int add(String customerId, int pointsToAdd) {
+            return points.merge(customerId, pointsToAdd, Integer::sum);
+        }
+
+        @Override
+        public int pointsOf(String customerId) {
+            return points.getOrDefault(customerId, 0);
+        }
+
+        @Override
+        public Map<String, Integer> findAll() {
+            return new TreeMap<>(points);
+        }
     }
 
     private static OrderPaidEvent paid(String orderId, String customerId, String amount) {
