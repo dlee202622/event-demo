@@ -22,6 +22,7 @@ services:
       - ./broker.conf:/opt/rocketmq/conf/broker.conf
     ports:
       - "10911:10911"
+      - "10909:10909"
 
   rocketmq-dashboard:
     image: styletang/rocketmq-console-ng:latest
