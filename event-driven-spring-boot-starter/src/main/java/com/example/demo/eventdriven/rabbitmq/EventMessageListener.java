@@ -47,8 +47,8 @@ public class EventMessageListener {
             String occurredOnStr = root.get("occurredOn").asText();
             JsonNode payloadNode = root.get("payload");
             
-            // 幂等检查
-            if (!processedEventRegistry.markIfAbsent(eventId)) {
+            // 幂等检查：仅在处理成功后标记，失败重投仍可重试
+            if (processedEventRegistry.isProcessed(eventId)) {
                 log.info("[RabbitMQ→Spring] 事件已处理，跳过 eventId={} eventType={}", eventId, eventType);
                 return;
             }
@@ -65,6 +65,7 @@ public class EventMessageListener {
             } else {
                 log.warn("[RabbitMQ→Spring] 未知事件类型 eventType={}", eventType);
             }
+            processedEventRegistry.markIfAbsent(eventId);
             
         } catch (Exception e) {
             log.error("[RabbitMQ→Spring] 消息处理失败: {}", e.getMessage(), e);

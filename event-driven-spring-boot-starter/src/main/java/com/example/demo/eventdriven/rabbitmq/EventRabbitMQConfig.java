@@ -16,9 +16,6 @@ import org.springframework.context.annotation.Configuration;
 @EnableRabbit
 public class EventRabbitMQConfig {
     
-    public static final String EXCHANGE = "event-driven.exchange";
-    public static final String ROUTING_KEY_PREFIX = "event";
-    public static final String DLX_EXCHANGE = "event-driven.dlx";
     public static final String DLQ_QUEUE = "event-driven.dlq";
     
     private final EventDrivenProperties properties;

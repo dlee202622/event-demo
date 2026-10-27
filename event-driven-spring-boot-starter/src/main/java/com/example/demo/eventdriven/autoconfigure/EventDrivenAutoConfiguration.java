@@ -7,6 +7,7 @@ import com.example.demo.eventdriven.infrastructure.SpringDomainEventPublisher;
 import com.example.demo.eventdriven.outbox.*;
 import com.example.demo.eventdriven.rabbitmq.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -32,6 +33,9 @@ public class EventDrivenAutoConfiguration {
     public ObjectMapper eventDrivenObjectMapper() {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
+        // Instant 必须序列化为 ISO-8601 字符串：默认的时间戳格式在 Jackson 2.17+ 会写成科学计数法，
+        // 消费端 Instant.parse 无法解析。
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         return mapper;
     }
     

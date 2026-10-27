@@ -75,7 +75,10 @@ public class OutboxRelay {
                         exchange, routingKey, event.eventType(), event.eventId());
                 event.markDelivered();
                 
-            } catch (Exception e) { }
+            } catch (Exception e) {
+                log.warn("[Outbox→RabbitMQ] 发送失败，下轮重试 eventId={} eventType={} error={}",
+                        event.eventId(), event.eventType(), e.getMessage());
+            }
         }
         
         log.info("[Outbox→RabbitMQ] 本轮投递 {} 条，剩余待投递 {} 条", 

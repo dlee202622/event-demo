@@ -42,11 +42,17 @@ public class InventoryService {
         return true;
     }
 
-    /** 释放库存（订单取消时补偿）。 */
+    /** 释放库存（订单取消时补偿）。只释放实际预占过的数量，避免未预占成功的明细虚增库存。 */
     public synchronized void release(String productId, int quantity) {
-        stock.merge(productId, quantity, Integer::sum);
-        reserved.computeIfPresent(productId, (key, value) -> Math.max(0, value - quantity));
-        log.info("[库存] 已释放 productId={} 数量={} 当前可用={}", productId, quantity, stock.get(productId));
+        int reservedQty = reserved.getOrDefault(productId, 0);
+        int actual = Math.min(quantity, reservedQty);
+        if (actual <= 0) {
+            log.warn("[库存] 忽略释放：该商品无预占记录 productId={} 请求释放={}", productId, quantity);
+            return;
+        }
+        stock.merge(productId, actual, Integer::sum);
+        reserved.computeIfPresent(productId, (key, value) -> Math.max(0, value - actual));
+        log.info("[库存] 已释放 productId={} 数量={} 当前可用={}", productId, actual, stock.get(productId));
     }
 
     public int available(String productId) {

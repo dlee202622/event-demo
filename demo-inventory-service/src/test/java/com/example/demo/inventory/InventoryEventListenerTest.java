@@ -70,6 +70,29 @@ class InventoryEventListenerTest {
         assertEquals(100, inventoryService.available("P-1001"));
     }
 
+    @Test
+    @DisplayName("取消事件：预占失败的明细不释放，库存不虚增")
+    void doesNotInflateStockWhenReleasingUnreservedItems() {
+        listener.on(orderCreated("ORD-4", new OrderItem("P-1003", 25)));
+        assertEquals(20, inventoryService.available("P-1003"));
+
+        listener.on(orderCancelled("ORD-4", new OrderItem("P-1003", 25)));
+        assertEquals(20, inventoryService.available("P-1003"));
+        assertEquals(0, inventoryService.reservedSnapshot().getOrDefault("P-1003", 0));
+    }
+
+    @Test
+    @DisplayName("取消事件：部分明细预占成功时只释放已预占部分")
+    void releasesOnlyReservedPartOnCancel() {
+        listener.on(orderCreated("ORD-5", new OrderItem("P-1001", 2), new OrderItem("P-1003", 25)));
+        assertEquals(98, inventoryService.available("P-1001"));
+        assertEquals(20, inventoryService.available("P-1003"));
+
+        listener.on(orderCancelled("ORD-5", new OrderItem("P-1001", 2), new OrderItem("P-1003", 25)));
+        assertEquals(100, inventoryService.available("P-1001"));
+        assertEquals(20, inventoryService.available("P-1003"));
+    }
+
     private static OrderCreatedEvent orderCreated(String orderId, OrderItem... items) {
         return new OrderCreatedEvent("evt-" + orderId, orderId, "C-1", List.of(items), Instant.now());
     }
