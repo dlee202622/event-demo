@@ -1,0 +1,10 @@
+2026-10-27 15:27:00 [com.xxl.job.core.thread.JobThread#run]-[127]-[xxl-job, JobThread-5-1793085721500] <br>----------- xxl-job job execute start -----------<br>----------- Param:
+2026-10-27 15:27:00 [com.example.demo.order.infrastructure.scheduler.UnpaidOrderTimeoutJob#cancelExpiredOrders]-[37]-[xxl-job, JobThread-5-1793085721500] 超时未支付取消 0 笔（阈值 PT30M）
+2026-10-27 15:27:00 [com.xxl.job.core.thread.JobThread#run]-[174]-[xxl-job, JobThread-5-1793085721500] <br>----------- xxl-job job execute end(finish) -----------<br>----------- Result: handleCode=200, handleMsg = null
+2026-10-27 15:27:00 [com.xxl.job.core.thread.TriggerCallbackThreadHelper#appendCallbackResult]-[196]-[pool-3-thread-1] <br>----------- xxl-job job callback finish.
+2026-10-27 15:27:41 [com.xxl.job.core.thread.JobThread#run]-[189]-[xxl-job, JobThread-5-1793085721500] <br>----------- JobThread toStop, stopReason:web container destroy and kill the job.
+2026-10-27 15:27:41 [com.xxl.job.core.thread.JobThread#run]-[199]-[xxl-job, JobThread-5-1793085721500] <br>----------- JobThread Exception:java.lang.InterruptedException
+	at java.base/java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject.awaitNanos(AbstractQueuedSynchronizer.java:1805)
+	at java.base/java.util.concurrent.LinkedBlockingQueue.poll(LinkedBlockingQueue.java:460)
+	at com.xxl.job.core.thread.JobThread.run(JobThread.java:106)
+<br>----------- xxl-job job execute end(error) -----------

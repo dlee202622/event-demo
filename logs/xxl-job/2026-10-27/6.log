@@ -1,0 +1,4 @@
+2026-10-27 15:22:01 [com.xxl.job.core.thread.JobThread#run]-[127]-[xxl-job, JobThread-5-1793085721500] <br>----------- xxl-job job execute start -----------<br>----------- Param:
+2026-10-27 15:22:04 [com.example.demo.order.infrastructure.scheduler.UnpaidOrderTimeoutJob#cancelExpiredOrders]-[37]-[xxl-job, JobThread-5-1793085721500] 超时未支付取消 0 笔（阈值 PT30M）
+2026-10-27 15:22:04 [com.xxl.job.core.thread.JobThread#run]-[174]-[xxl-job, JobThread-5-1793085721500] <br>----------- xxl-job job execute end(finish) -----------<br>----------- Result: handleCode=200, handleMsg = null
+2026-10-27 15:22:04 [com.xxl.job.core.thread.TriggerCallbackThreadHelper#appendCallbackResult]-[196]-[pool-3-thread-1] <br>----------- xxl-job job callback finish.
