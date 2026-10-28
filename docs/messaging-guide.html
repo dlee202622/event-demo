@@ -1,0 +1,3247 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>消息中间件实战指南 · RabbitMQ × RocketMQ</title>
+<script>
+  try {
+    var savedTheme = localStorage.getItem('msg-guide-theme');
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = savedTheme || (prefersDark ? 'dark' : 'light');
+  } catch (e) { /* 隐私模式下 localStorage 可能不可用，退回默认主题 */ }
+</script>
+<style>
+  :root {
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sidebar: 276px;
+    --maxw: 980px;
+
+    --bg: #f5f7fb;
+    --surface: #ffffff;
+    --surface-2: #eef2f8;
+    --text: #1b2433;
+    --muted: #5c6a7e;
+    --border: #dde4ef;
+    --accent: #4f46e5;
+    --accent-2: #0f766e;
+    --accent-weak: #eef0ff;
+    --ok: #047857;
+    --ok-bg: #ecfdf5;
+    --warn: #b45309;
+    --warn-bg: #fff7ed;
+    --danger: #b91c1c;
+    --danger-bg: #fef2f2;
+    --code-bg: #0c1424;
+    --code-head: #131f35;
+    --code-border: #22304c;
+    --code-text: #dbe4f5;
+    --shadow: 0 10px 30px -18px rgba(23, 37, 84, .35);
+  }
+  html[data-theme="dark"] {
+    --bg: #080d18;
+    --surface: #101829;
+    --surface-2: #0c1322;
+    --text: #e6ebf5;
+    --muted: #97a5bb;
+    --border: #22304a;
+    --accent: #8f9cff;
+    --accent-2: #2dd4bf;
+    --accent-weak: #1a2344;
+    --ok: #34d399;
+    --ok-bg: #08251d;
+    --warn: #fbbf24;
+    --warn-bg: #2a1e08;
+    --danger: #f87171;
+    --danger-bg: #2a1013;
+    --code-bg: #070c17;
+    --code-head: #0d1626;
+    --code-border: #1c2942;
+    --code-text: #dbe4f5;
+    --shadow: 0 12px 34px -18px rgba(0, 0, 0, .7);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.78;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  img, svg { max-width: 100%; }
+  ::selection { background: var(--accent); color: #fff; }
+
+  .progress {
+    position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 60;
+    background: transparent; pointer-events: none;
+  }
+  .progress span {
+    display: block; height: 100%; width: 0;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width .12s linear;
+  }
+  .theme-toggle {
+    position: fixed; top: 16px; right: 18px; z-index: 61;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font: 600 12px/1 var(--sans);
+    padding: 9px 13px; border-radius: 999px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+  }
+  .theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+  .shell {
+    display: grid;
+    grid-template-columns: var(--sidebar) minmax(0, 1fr);
+    max-width: 1520px;
+    margin: 0 auto;
+  }
+
+  /* ---------- 侧边目录 ---------- */
+  .sidebar {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    padding: 30px 18px 48px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    scrollbar-width: thin;
+  }
+  .brand { padding: 0 10px 18px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .brand .mark {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700; letter-spacing: .16em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  .brand .mark::before {
+    content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 4px var(--accent-weak);
+  }
+  .brand h1 { margin: 10px 0 2px; font-size: 18px; letter-spacing: -.01em; }
+  .brand p { margin: 0; font-size: 12px; color: var(--muted); }
+
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a {
+    display: block; padding: 6px 10px;
+    color: var(--muted); font-size: 13.5px; line-height: 1.5;
+    border-left: 2px solid transparent; border-radius: 0 8px 8px 0;
+  }
+  .toc a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }
+  .toc a.active {
+    color: var(--accent); background: var(--accent-weak);
+    border-left-color: var(--accent); font-weight: 600;
+  }
+  .toc .sub a { padding-left: 26px; font-size: 12.8px; }
+  .toc .group {
+    padding: 14px 10px 4px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .12em;
+    color: var(--muted); text-transform: uppercase;
+  }
+  .side-note {
+    margin-top: 22px; padding: 12px;
+    border-radius: 10px; background: var(--surface-2);
+    color: var(--muted); font-size: 11.5px; line-height: 1.65;
+  }
+
+  /* ---------- 主体 ---------- */
+  main { padding: 34px clamp(18px, 4vw, 58px) 96px; min-width: 0; }
+  .content { max-width: var(--maxw); margin: 0 auto; }
+
+  .hero {
+    position: relative; overflow: hidden;
+    border-radius: 22px;
+    padding: clamp(26px, 5vw, 48px);
+    color: #fff;
+    background:
+      radial-gradient(800px 320px at 88% -10%, rgba(45, 212, 191, .38), transparent 62%),
+      radial-gradient(620px 300px at 0% 110%, rgba(167, 139, 250, .35), transparent 60%),
+      linear-gradient(135deg, #1e1b4b 0%, #3730a3 52%, #115e59 100%);
+    box-shadow: 0 26px 60px -32px rgba(30, 27, 75, .75);
+  }
+  .hero::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(rgba(255,255,255,.16) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: linear-gradient(120deg, transparent 40%, #000 100%);
+  }
+  .hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase;
+    color: #c7d2fe;
+  }
+  .hero .eyebrow::before { content: ""; width: 26px; height: 1px; background: currentColor; }
+  .hero h2 { margin: 14px 0 12px; font-size: clamp(30px, 4.4vw, 46px); line-height: 1.18; letter-spacing: -.02em; }
+  .hero .sub { max-width: 720px; margin: 0; color: #dbe3ff; font-size: 15.5px; }
+  .hero .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  .hero .badges span {
+    font-size: 11.5px; padding: 5px 10px; border-radius: 999px;
+    background: rgba(255,255,255,.11); border: 1px solid rgba(255,255,255,.22);
+    color: #eef2ff;
+  }
+  .hero .stats {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px; margin-top: 28px;
+    border-radius: 14px; overflow: hidden;
+    background: rgba(255,255,255,.18);
+  }
+  .hero .stat { padding: 14px 16px; background: rgba(15, 23, 42, .28); }
+  .hero .stat b { display: block; font-size: 22px; line-height: 1.2; }
+  .hero .stat small { color: #cbd5ff; font-size: 11.5px; letter-spacing: .03em; }
+  .hero .jump { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+  .hero .jump a {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 10px 16px; border-radius: 10px;
+    font-size: 13px; font-weight: 600;
+    background: #fff; color: #312e81;
+  }
+  .hero .jump a.ghost {
+    background: transparent; color: #e0e7ff; border: 1px solid rgba(255,255,255,.35);
+  }
+  .hero .jump a:hover { text-decoration: none; transform: translateY(-1px); }
+
+  section { margin-top: 78px; scroll-margin-top: 24px; }
+  h2 {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    margin: 0 0 10px; font-size: clamp(24px, 2.7vw, 30px);
+    letter-spacing: -.02em; line-height: 1.3;
+  }
+  h2 .no {
+    font: 700 12px/1 var(--mono); color: var(--accent);
+    background: var(--accent-weak); border: 1px solid var(--border);
+    padding: 5px 9px; border-radius: 7px;
+  }
+  h3 { margin: 44px 0 10px; font-size: 21px; letter-spacing: -.01em; scroll-margin-top: 24px; }
+  h4 { margin: 26px 0 8px; font-size: 16px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  strong { font-weight: 650; }
+  .lead { color: var(--muted); font-size: 15.5px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .02em;
+    padding: 3px 9px; border-radius: 999px;
+    color: var(--accent); background: var(--accent-weak);
+    border: 1px solid var(--border); white-space: nowrap;
+  }
+  .pill.ok { color: var(--ok); background: var(--ok-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .pill.bad { color: var(--danger); background: var(--danger-bg); }
+  .pill.gray { color: var(--muted); background: var(--surface-2); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px 22px; margin: 18px 0;
+    box-shadow: var(--shadow);
+  }
+  .card > :first-child { margin-top: 0; }
+  .card > :last-child { margin-bottom: 0; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+
+  .callout {
+    display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px;
+    margin: 18px 0; padding: 14px 16px;
+    border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface-2); font-size: 14.5px;
+  }
+  .callout .ico {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: grid; place-items: center;
+    font: 700 12px/1 var(--sans);
+    background: var(--accent-weak); color: var(--accent);
+  }
+  .callout p { margin: 0; }
+  .callout p + p { margin-top: 6px; }
+  .callout .title { font-weight: 700; display: block; margin-bottom: 2px; }
+  .callout.tip { background: var(--ok-bg); border-color: var(--border); }
+  .callout.tip .ico { background: var(--ok); color: #fff; }
+  .callout.warn { background: var(--warn-bg); border-color: var(--border); }
+  .callout.warn .ico { background: var(--warn); color: #fff; }
+  .callout.danger { background: var(--danger-bg); border-color: var(--border); }
+  .callout.danger .ico { background: var(--danger); color: #fff; }
+
+  .compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 18px 0; }
+  .box { border: 1px solid var(--border); border-radius: 12px; padding: 15px 18px; background: var(--surface); }
+  .box.bad { border-left: 4px solid var(--danger); }
+  .box.good { border-left: 4px solid var(--ok); }
+  .box h4 { margin: 0 0 8px; font-size: 14px; letter-spacing: .03em; }
+  .box.bad h4 { color: var(--danger); }
+  .box.good h4 { color: var(--ok); }
+  .box ul { margin: 0; padding-left: 18px; font-size: 14px; }
+  .box li { margin: 5px 0; }
+
+  .code {
+    margin: 18px 0; border-radius: 12px; overflow: hidden;
+    background: var(--code-bg); border: 1px solid var(--code-border);
+    box-shadow: var(--shadow);
+  }
+  .code-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 8px 12px 8px 15px;
+    background: var(--code-head); border-bottom: 1px solid var(--code-border);
+    color: #93a4c3; font: 12px/1.4 var(--mono);
+  }
+  .code-head .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .copy {
+    flex: 0 0 auto; border: 1px solid var(--code-border); border-radius: 6px;
+    background: transparent; color: #a9b8d4; cursor: pointer;
+    font: 11px/1 var(--sans); padding: 5px 9px;
+  }
+  .copy:hover { color: #fff; border-color: #4c5f85; }
+  .code pre { margin: 0; padding: 15px 17px; overflow-x: auto; }
+  .code code { font: 12.6px/1.72 var(--mono); color: var(--code-text); white-space: pre; }
+  :not(pre) > code {
+    font: .9em/1.5 var(--mono); color: var(--accent);
+    background: var(--surface-2); border: 1px solid var(--border);
+    padding: 1px 5px; border-radius: 5px;
+  }
+
+  .table-wrap {
+    margin: 18px 0; overflow-x: auto;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13.8px; min-width: 560px; }
+  th, td { padding: 10px 14px; text-align: left; vertical-align: top; }
+  th {
+    background: var(--surface-2); color: var(--muted);
+    font-size: 11.5px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td { border-top: 1px solid var(--border); }
+  tbody tr:first-child td { border-top: 0; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td code { white-space: nowrap; }
+
+  .diagram {
+    margin: 22px 0; padding: 18px 18px 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow);
+  }
+  .diagram-scroll { overflow-x: auto; }
+  .diagram svg { display: block; width: 100%; height: auto; min-width: 640px; }
+  .diagram figcaption {
+    margin-top: 10px; color: var(--muted); font-size: 12.5px; text-align: center;
+  }
+  .svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .dg text { font-family: var(--sans); }
+  .dg-box { fill: var(--surface); stroke: var(--border); stroke-width: 1.4; }
+  .dg-box-accent { fill: var(--accent-weak); stroke: var(--accent); stroke-width: 1.5; }
+  .dg-box-ok { fill: var(--ok-bg); stroke: var(--ok); stroke-width: 1.5; }
+  .dg-box-danger { fill: var(--danger-bg); stroke: var(--danger); stroke-width: 1.5; }
+  .dg-box-warn { fill: var(--warn-bg); stroke: var(--warn); stroke-width: 1.5; }
+  .dg-lane { fill: var(--surface-2); stroke: var(--border); stroke-width: 1; }
+  .dg-text { fill: var(--text); font-size: 13.5px; font-weight: 600; }
+  .dg-text-sm { fill: var(--text); font-size: 11.5px; }
+  .dg-muted { fill: var(--muted); font-size: 10.8px; }
+  .dg-accent-text { fill: var(--accent); font-size: 11.5px; font-weight: 700; }
+  .dg-ok-text { fill: var(--ok); font-size: 11.5px; font-weight: 700; }
+  .dg-danger-text { fill: var(--danger); font-size: 11.5px; font-weight: 700; }
+  .dg-line { stroke: var(--muted); stroke-width: 1.5; fill: none; marker-end: url(#ar); }
+  .dg-line-accent { stroke: var(--accent); stroke-width: 1.6; fill: none; marker-end: url(#ar-accent); }
+  .dg-line-ok { stroke: var(--ok); stroke-width: 1.6; fill: none; marker-end: url(#ar-ok); }
+  .dg-line-danger { stroke: var(--danger); stroke-width: 1.6; fill: none; marker-end: url(#ar-danger); }
+  .dg-line-dashed { stroke-dasharray: 5 5; }
+  .dg-life { stroke: var(--border); stroke-width: 1.2; stroke-dasharray: 3 5; }
+  .mk-muted { fill: var(--muted); }
+  .mk-accent { fill: var(--accent); }
+  .mk-ok { fill: var(--ok); }
+  .mk-danger { fill: var(--danger); }
+  .dg-flow { stroke-dasharray: 6 7; animation: flow 1.4s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -13; } }
+
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps > li {
+    position: relative; padding-left: 40px; margin: 12px 0;
+  }
+  .steps > li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 0; top: 2px;
+    width: 25px; height: 25px; border-radius: 50%;
+    display: grid; place-items: center;
+    font: 700 11.5px/1 var(--mono);
+    color: var(--accent); background: var(--accent-weak);
+    border: 1px solid var(--border);
+  }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li {
+    position: relative; padding-left: 30px; margin: 9px 0;
+  }
+  .checklist li::before {
+    content: ""; position: absolute; left: 4px; top: 7px;
+    width: 13px; height: 13px; border-radius: 4px;
+    border: 1.5px solid var(--accent);
+  }
+
+  .kbd {
+    font: 12px/1.6 var(--mono);
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px;
+    white-space: nowrap;
+  }
+
+  footer {
+    margin-top: 90px; padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 12.5px;
+  }
+  footer p { margin: 4px 0; }
+
+  @media (max-width: 1100px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar {
+      position: static; height: auto; overflow: visible;
+      border-right: 0; border-bottom: 1px solid var(--border);
+      padding: 22px 18px;
+    }
+    .toc { max-height: 250px; overflow-y: auto; }
+    .toc .sub { display: none; }
+    main { padding-top: 26px; }
+    /* 窄屏下固定按钮会压住内容，改为跟随页面流排布 */
+    .theme-toggle {
+      position: static; display: block; width: fit-content;
+      margin: 14px 14px 0 auto; box-shadow: none;
+    }
+  }
+  @media (max-width: 760px) {
+    .grid2, .grid3, .compare { grid-template-columns: 1fr; }
+    .hero .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .theme-toggle { margin: 10px 12px 0 auto; }
+    body { line-height: 1.72; }
+    table { font-size: 13px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+
+  @media print {
+    .sidebar, .theme-toggle, .progress, .copy, .hero .jump { display: none !important; }
+    .shell { display: block; }
+    main { padding: 0; }
+    body { background: #fff; color: #111; font-size: 11pt; }
+    .content { max-width: none; }
+    .hero { box-shadow: none; border-radius: 0; padding: 18pt; background: #eef2ff !important; color: #111 !important; }
+    .hero .sub, .hero .badges span, .hero .stat small, .hero .eyebrow { color: #333 !important; }
+    .hero .badges span { border-color: #bbb; background: #fff; }
+    .hero .stat { background: #fff; }
+    .card, .diagram, .code, .table-wrap, .compare, .callout { box-shadow: none; break-inside: avoid; }
+    section { margin-top: 28pt; break-inside: auto; }
+    h2, h3 { break-after: avoid; }
+    .diagram svg { min-width: 0; }
+    .code { background: #fff; border-color: #ccc; }
+    .code-head { background: #f1f5f9; color: #333; border-color: #ccc; }
+    .code code { color: #111; white-space: pre-wrap; word-break: break-word; }
+    .diagram { page-break-inside: avoid; }
+    a { color: #111; text-decoration: underline; }
+    @page { margin: 14mm; }
+  }
+</style>
+</head>
+<body>
+
+<svg class="svg-defs" aria-hidden="true" focusable="false">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-muted" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-accent" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-ok" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-danger" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-danger" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+  </defs>
+</svg>
+
+<div class="progress" aria-hidden="true"><span></span></div>
+<button class="theme-toggle" id="themeToggle" type="button" aria-label="切换深浅色主题">深色</button>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">Messaging Field Guide</div>
+      <h1>消息中间件实战</h1>
+      <p>RabbitMQ × RocketMQ · 配套可运行 Demo</p>
+    </div>
+    <nav class="toc" aria-label="目录">
+      <a href="#intro">开始之前</a>
+      <a href="#model">1 · 心智模型</a>
+      <div class="sub">
+        <a href="#rmq-model">RabbitMQ：交换机决定去向</a>
+        <a href="#mq-model">RocketMQ：队列决定顺序</a>
+        <a href="#compare">一张表看清差异</a>
+        <a href="#roles">角色关系与基数</a>
+      </div>
+
+      <a href="#rmq">2 · RabbitMQ 深入</a>
+      <div class="sub">
+        <a href="#rmq-route">交换机与路由</a>
+        <a href="#rmq-confirm">Confirm / Return / ACK</a>
+        <a href="#rmq-dlx">死信队列</a>
+        <a href="#rmq-semantics">消费语义</a>
+      </div>
+
+      <a href="#rocketmq">3 · RocketMQ 深入</a>
+      <div class="sub">
+        <a href="#mq-arch">整体架构</a>
+        <a href="#mq-modes">六种消息形态</a>
+        <a href="#mq-order">顺序消息</a>
+        <a href="#mq-tx">事务消息</a>
+        <a href="#mq-extra">延迟 / 标签 / 广播</a>
+      </div>
+
+      <a href="#reliability">4 · 五个绕不开的问题</a>
+      <div class="sub">
+        <a href="#idem">4.1 幂等</a>
+        <a href="#order">4.2 顺序</a>
+        <a href="#backlog">4.3 积压</a>
+        <a href="#persistence">4.4 持久化</a>
+        <a href="#priority">4.5 优先级</a>
+      </div>
+
+      <a href="#selection">5 · 选型与生产清单</a>
+      <a href="#cheatsheet">6 · 命令与日志速查</a>
+      <a href="#codemap">7 · 代码地图</a>
+    </nav>
+    <div class="side-note">
+      文中代码均取自本仓库当前实现，路径标在代码块上方。所有实验都可以在本地 Docker + IDEA 中复现。
+    </div>
+  </aside>
+
+  <main>
+    <div class="content">
+
+      <header class="hero">
+        <div class="eyebrow">Messaging Field Guide</div>
+        <h2>从一条消息的旅程，<br>理解 RabbitMQ 与 RocketMQ</h2>
+        <p class="sub">
+          不只讲 API 怎么调，而是回答五个真正会出问题的地方：重复消费、顺序错乱、消息积压、
+          重启丢消息、高优先级被拖住。每一节都对应仓库里可运行的代码和可复现的日志。
+        </p>
+        <div class="badges">
+          <span>Java 21</span>
+          <span>Spring Boot 4.1</span>
+          <span>Spring AMQP</span>
+          <span>RocketMQ 5.3.1</span>
+          <span>全部示例可运行</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><b>2</b><small>独立 Demo 模块</small></div>
+          <div class="stat"><b>12</b><small>RabbitMQ 场景</small></div>
+          <div class="stat"><b>11</b><small>RocketMQ 场景</small></div>
+          <div class="stat"><b>5</b><small>可靠性核心问题</small></div>
+        </div>
+        <div class="jump">
+          <a href="#model">先建立模型</a>
+          <a href="#reliability" class="ghost">直接看五个问题</a>
+          <a href="#cheatsheet" class="ghost">命令速查</a>
+        </div>
+      </header>
+
+      <!-- ============================================================ -->
+      <section id="intro">
+        <h2><span class="no">00</span>开始之前</h2>
+        <p class="lead">
+          这份文档假设你已经把两个 Demo 跑起来过，或者正准备跑。它不追求把两个中间件的 API 全部列一遍，
+          而是围绕一条主线：<strong>一条消息从产生到被处理，可能在哪些环节出问题，每个环节该怎么兜底。</strong>
+        </p>
+        <p>
+          读法建议：每节按「模型 → 现象 → 代码 → 验证 → 生产」组织。先理解消息为什么这样流动，
+          再看 Demo 如何故意制造问题，最后用接口和日志确认现象。代码路径都标在代码块上方，
+          可以直接打开源码对照。
+        </p>
+
+        <h3>两个模块的定位</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>模块</th><th>应用端口</th><th>管理台</th><th>依赖</th><th>定位</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>demo-rabbitmq</code></td>
+                <td>8081</td>
+                <td><a href="http://localhost:15672">localhost:15672</a>（guest / guest）</td>
+                <td>RabbitMQ 5672</td>
+                <td>交换机路由、确认、死信、可靠性五题</td>
+              </tr>
+              <tr>
+                <td><code>demo-rocketmq</code></td>
+                <td>8082</td>
+                <td><a href="http://localhost:19876">localhost:19876</a>（Dashboard）</td>
+                <td>NameServer 9876 + Broker 10911</td>
+                <td>顺序、延迟、事务、广播、可靠性五题</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <p><span class="title">测试页只有一个</span>
+              可视化测试页由 <code>demo-rabbitmq</code> 提供：<a href="http://localhost:8081">http://localhost:8081</a>。
+              RocketMQ 模块自己没有页面，8081 的页面会通过 CORS 调用 8082 的接口。直接访问 8082 根路径会 404，这是正常的。
+            </p>
+          </div>
+        </div>
+
+        <h3>启动命令</h3>
+        <p>两个 Demo 互不依赖，也不依赖仓库里的三个 DDD 业务服务，可以单独启动。</p>
+        <div class="code">
+          <div class="code-head"><span class="path">终端 · 启动基础设施与两个应用</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># 1) RabbitMQ
+docker compose up -d rabbitmq
+./mvnw -pl demo-rabbitmq spring-boot:run
+
+# 2) RocketMQ（NameServer + Broker + Dashboard）
+docker compose up -d rocketmq-namesrv rocketmq-broker rocketmq-dashboard
+./mvnw -pl demo-rocketmq spring-boot:run
+
+# 管理台
+# RabbitMQ  http://localhost:15672   guest / guest
+# RocketMQ  http://localhost:19876</code></pre>
+        </div>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">本仓库的 Broker 都没有挂数据卷</span>
+              所以持久化实验只能用 <code>docker compose restart &lt;service&gt;</code>，
+              不能用 <code>down</code> / <code>up</code>：后者会重建容器，连 CommitLog 和队列数据一起删掉。
+              生产环境必须挂持久化卷，并考虑副本。
+            </p>
+          </div>
+        </div>
+
+        <p class="small muted">
+          约定：下文 curl 只负责发请求，不保证执行先后。涉及顺序、优先级的实验必须严格按步骤来，
+          否则现象会被上一次残留的消息干扰。
+        </p>
+      </section>
+
+      <!-- ============================================================ -->
+      <section id="model">
+        <h2><span class="no">01</span>心智模型：先想清楚消息怎么走</h2>
+        <p class="lead">
+          两个中间件最容易被混淆的地方，是把「交换机」「队列」「Topic」「分区」当成同一层概念。
+          先把每个名词对应的职责分开，后面所有问题都会变得直观。
+        </p>
+
+        <h3 id="rmq-model">RabbitMQ：交换机决定去向，队列负责存储</h3>
+        <p>
+          可以把 RabbitMQ 想成一个快递分拣中心：生产者把包裹交给 <strong>Exchange（分拣中心）</strong>，
+          分拣中心根据 <strong>Binding（路由规则）</strong> 把包裹放进不同的 <strong>Queue（快递柜）</strong>，
+          消费者从快递柜取件。<strong>Exchange 本身不存消息</strong>，消息真正待的地方是队列。
+        </p>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 250" role="img" aria-label="RabbitMQ 消息流：生产者发送到交换机，交换机按绑定规则路由到一个或多个队列，消费者从队列取消息">
+              <rect class="dg-box-accent" x="36" y="88" width="122" height="62" rx="10"></rect>
+              <text class="dg-text" x="97" y="114" text-anchor="middle">Producer</text>
+              <text class="dg-muted" x="97" y="133" text-anchor="middle">发送消息</text>
+
+              <rect class="dg-box" x="212" y="82" width="140" height="74" rx="10"></rect>
+              <text class="dg-text" x="282" y="110" text-anchor="middle">Exchange</text>
+              <text class="dg-muted" x="282" y="129" text-anchor="middle">只做路由，不存消息</text>
+
+              <rect class="dg-box" x="420" y="36" width="132" height="52" rx="9"></rect>
+              <text class="dg-text-sm" x="486" y="58" text-anchor="middle">Queue A</text>
+              <text class="dg-muted" x="486" y="75" text-anchor="middle">存消息 / 竞争消费</text>
+
+              <rect class="dg-box" x="420" y="150" width="132" height="52" rx="9"></rect>
+              <text class="dg-text-sm" x="486" y="172" text-anchor="middle">Queue B</text>
+              <text class="dg-muted" x="486" y="189" text-anchor="middle">独立的一份拷贝</text>
+
+              <rect class="dg-box" x="640" y="36" width="132" height="52" rx="9"></rect>
+              <text class="dg-text-sm" x="706" y="58" text-anchor="middle">Consumer 1</text>
+              <text class="dg-muted" x="706" y="75" text-anchor="middle">ACK 后消息删除</text>
+
+              <rect class="dg-box" x="640" y="150" width="132" height="52" rx="9"></rect>
+              <text class="dg-text-sm" x="706" y="172" text-anchor="middle">Consumer 2</text>
+              <text class="dg-muted" x="706" y="189" text-anchor="middle">同一队列则轮流取</text>
+
+              <line class="dg-line dg-flow" x1="158" y1="119" x2="206" y2="119"></line>
+              <text class="dg-muted" x="182" y="108" text-anchor="middle">publish</text>
+
+              <path class="dg-line dg-flow" d="M352 108 C386 108 390 62 414 62"></path>
+              <path class="dg-line dg-flow" d="M352 132 C386 132 390 176 414 176"></path>
+              <text class="dg-muted" x="388" y="96" text-anchor="middle">binding</text>
+
+              <line class="dg-line" x1="552" y1="62" x2="634" y2="62"></line>
+              <line class="dg-line" x1="552" y1="176" x2="634" y2="176"></line>
+
+              <text class="dg-muted" x="36" y="234">Exchange 不猜目的地：匹配不到 binding 的消息会被丢弃（除非开启 mandatory / 备用交换机）。</text>
+            </svg>
+          </div>
+          <figcaption>RabbitMQ：交换机按 binding 路由，队列才是存储与消费的单位</figcaption>
+        </figure>
+
+        <ul>
+          <li><strong>Exchange 类型</strong>决定匹配方式：<code>fanout</code> 全部投递、<code>direct</code> 精确匹配 routing key、<code>topic</code> 通配符匹配。</li>
+          <li><strong>默认交换机</strong> <code>""</code> 是一个特殊的 direct exchange，routing key 直接写队列名，Demo 里大量使用。</li>
+          <li><strong>一条消息可以被复制到多个队列</strong>（fanout / topic 多绑定），每个队列各存一份。</li>
+          <li>同一个队列挂多个消费者就是 competing consumers：消息被轮流取走，<strong>不保证谁先处理完</strong>。</li>
+        </ul>
+
+        <h3 id="mq-model">RocketMQ：队列决定顺序，位点决定进度</h3>
+        <p>
+          RocketMQ 更像一条有多条车道的高速公路：<strong>Topic</strong> 是这条路的名字，
+          <strong>MessageQueue</strong> 是具体车道，消息按队列追加写进 Broker 的 <strong>CommitLog</strong>。
+          消费者组记录自己每条车道走到哪里（<strong>offset</strong>），消费后消息<strong>不会立刻删除</strong>，
+          只是位点前移，所以可以重置位点重放。
+        </p>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 300" role="img" aria-label="RocketMQ 架构：生产者从 NameServer 获取路由后发往 Broker 的 Topic 队列，消费者组按 offset 拉取">
+              <rect class="dg-box" x="300" y="12" width="170" height="46" rx="9"></rect>
+              <text class="dg-text-sm" x="385" y="33" text-anchor="middle">NameServer</text>
+              <text class="dg-muted" x="385" y="49" text-anchor="middle">路由注册 / 发现（无状态）</text>
+
+              <rect class="dg-box-accent" x="34" y="120" width="120" height="60" rx="10"></rect>
+              <text class="dg-text" x="94" y="145" text-anchor="middle">Producer</text>
+              <text class="dg-muted" x="94" y="164" text-anchor="middle">按 Topic 发送</text>
+
+              <rect class="dg-box" x="236" y="92" width="332" height="188" rx="12"></rect>
+              <text class="dg-text" x="256" y="118">Broker</text>
+              <text class="dg-muted" x="320" y="118">消息统一追加写 CommitLog</text>
+
+              <rect class="dg-box-accent" x="260" y="136" width="82" height="46" rx="7"></rect>
+              <text class="dg-text-sm" x="301" y="156" text-anchor="middle">Queue 0</text>
+              <text class="dg-muted" x="301" y="172" text-anchor="middle">分片 / 顺序单位</text>
+
+              <rect class="dg-box-accent" x="358" y="136" width="82" height="46" rx="7"></rect>
+              <text class="dg-text-sm" x="399" y="156" text-anchor="middle">Queue 1</text>
+              <text class="dg-muted" x="399" y="172" text-anchor="middle">可并行消费</text>
+
+              <rect class="dg-box-accent" x="456" y="136" width="82" height="46" rx="7"></rect>
+              <text class="dg-text-sm" x="497" y="156" text-anchor="middle">Queue 2</text>
+              <text class="dg-muted" x="497" y="172" text-anchor="middle">同 key 落同队列</text>
+
+              <rect class="dg-box" x="260" y="216" width="278" height="40" rx="7"></rect>
+              <text class="dg-text-sm" x="399" y="235" text-anchor="middle">CommitLog</text>
+              <text class="dg-muted" x="399" y="249" text-anchor="middle">顺序追加，按保留期清理</text>
+
+              <rect class="dg-box-ok" x="662" y="120" width="170" height="60" rx="10"></rect>
+              <text class="dg-text" x="747" y="144" text-anchor="middle">Consumer Group</text>
+              <text class="dg-muted" x="747" y="163" text-anchor="middle">每个队列维护一个 offset</text>
+
+              <line class="dg-line dg-flow" x1="154" y1="150" x2="230" y2="150"></line>
+              <text class="dg-muted" x="192" y="139" text-anchor="middle">send</text>
+
+              <path class="dg-line dg-line-dashed" d="M104 120 C110 66 210 40 294 42"></path>
+              <text class="dg-muted" x="186" y="62" text-anchor="middle">拉取路由（并缓存）</text>
+
+              <path class="dg-line dg-line-dashed" d="M470 92 C470 72 430 60 400 58"></path>
+              <text class="dg-muted" x="515" y="76" text-anchor="middle">心跳注册</text>
+
+              <line class="dg-line dg-flow" x1="568" y1="150" x2="656" y2="150"></line>
+              <text class="dg-muted" x="611" y="139" text-anchor="middle">pull</text>
+
+              <text class="dg-muted" x="34" y="290">Topic 是逻辑分类，MessageQueue 是物理分片。消费并行度上限 = 队列数；顺序范围 = 单个队列。</text>
+            </svg>
+          </div>
+          <figcaption>RocketMQ：NameServer 管路由，Broker 存 CommitLog，消费者组用 offset 记录进度</figcaption>
+        </figure>
+
+        <ul>
+          <li><strong>NameServer</strong> 无状态、彼此不通信，Producer / Consumer 从它那里拿 Topic 路由并缓存。</li>
+          <li><strong>Broker</strong> 把消息顺序追加到 CommitLog；Topic 只是逻辑视图，消息按队列分片存储。</li>
+          <li><strong>PushConsumer 本质是拉取</strong>：客户端长轮询拉消息，再交给监听器，所以积压时位点会停住。</li>
+          <li><strong>消费不删除消息</strong>，位点前移即可；保留期内可以重置 offset 重放，这是和 RabbitMQ 最大的差异之一。</li>
+        </ul>
+
+        <h3 id="compare">一张表看清差异</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>维度</th><th>RabbitMQ</th><th>RocketMQ</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>路由单位</td><td>Exchange + Binding + routing key</td><td>Topic + MessageQueue（sharding key 选队列）</td></tr>
+              <tr><td>消息存储</td><td>队列内；消费者 ACK 后删除</td><td>CommitLog 追加写；按 offset 消费，保留期内可重放</td></tr>
+              <tr><td>顺序范围</td><td>单队列 + 单消费者</td><td>单 MessageQueue（同 sharding key）</td></tr>
+              <tr><td>消费模型</td><td>Broker 推送（push）</td><td>客户端拉取（push 是长轮询封装）</td></tr>
+              <tr><td>进度记录</td><td>无显式位点，靠未 ACK 消息</td><td>ConsumerGroup 为每个队列维护 offset</td></tr>
+              <tr><td>延迟消息</td><td>TTL + DLX，或延迟插件</td><td>固定 delayLevel；5.x 支持定时消息</td></tr>
+              <tr><td>事务消息</td><td>无原生事务消息</td><td>半消息 + 本地事务 + 回查</td></tr>
+              <tr><td>优先级</td><td>原生 <code>x-max-priority</code></td><td>无消息级优先级，靠 Topic 隔离</td></tr>
+              <tr><td>典型强项</td><td>灵活路由、低延迟、协议生态</td><td>高吞吐、顺序、事务、回溯、堆积能力</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="roles">角色关系：一个队列能挂几个消费者？</h3>
+        <p>
+          很多困惑不是 API 不会用，而是没把角色之间的<strong>数量关系</strong>想清楚：谁和谁是一对多、
+          一条消息会被复制几份、消费者加到什么时候就不再加了。先把关系画出来，扩容和顺序才有判断依据。
+        </p>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 510" role="img" aria-label="角色关系图：RabbitMQ 一个队列可挂多个竞争消费者，每条消息只给其中一个；RocketMQ 消费者组内按队列分配实例，实例数超过队列数时多出的实例空转">
+              <rect class="dg-lane" x="18" y="14" width="864" height="212" rx="12"></rect>
+              <text class="dg-text" x="34" y="40">RabbitMQ：一个队列可以挂 N 个消费者</text>
+
+              <rect class="dg-box-accent" x="36" y="70" width="104" height="52" rx="9"></rect>
+              <text class="dg-text-sm" x="88" y="93" text-anchor="middle">Producer</text>
+              <text class="dg-muted" x="88" y="111" text-anchor="middle">只认 exchange</text>
+
+              <rect class="dg-box" x="174" y="70" width="126" height="52" rx="9"></rect>
+              <text class="dg-text-sm" x="237" y="93" text-anchor="middle">Exchange</text>
+              <text class="dg-muted" x="237" y="111" text-anchor="middle">只做路由，不存消息</text>
+
+              <rect class="dg-box" x="344" y="48" width="130" height="52" rx="9"></rect>
+              <text class="dg-text-sm" x="409" y="70" text-anchor="middle">Queue A</text>
+              <text class="dg-muted" x="409" y="88" text-anchor="middle">3 个消费者</text>
+
+              <rect class="dg-box" x="344" y="132" width="130" height="52" rx="9"></rect>
+              <text class="dg-text-sm" x="409" y="154" text-anchor="middle">Queue B</text>
+              <text class="dg-muted" x="409" y="172" text-anchor="middle">1 个消费者</text>
+
+              <rect class="dg-box-ok" x="716" y="36" width="140" height="28" rx="6"></rect>
+              <text class="dg-text-sm" x="786" y="54" text-anchor="middle">Consumer 1</text>
+              <rect class="dg-box-ok" x="716" y="74" width="140" height="28" rx="6"></rect>
+              <text class="dg-text-sm" x="786" y="92" text-anchor="middle">Consumer 2</text>
+              <rect class="dg-box-ok" x="716" y="112" width="140" height="28" rx="6"></rect>
+              <text class="dg-text-sm" x="786" y="130" text-anchor="middle">Consumer 3</text>
+              <rect class="dg-box-ok" x="716" y="150" width="140" height="28" rx="6"></rect>
+              <text class="dg-text-sm" x="786" y="168" text-anchor="middle">Consumer 4</text>
+
+              <text class="dg-muted" x="786" y="26" text-anchor="middle">同一队列内竞争</text>
+
+              <line class="dg-line dg-flow" x1="140" y1="96" x2="168" y2="96"></line>
+              <path class="dg-line dg-flow" d="M300 88 C320 88 322 74 338 74"></path>
+              <path class="dg-line dg-flow" d="M300 104 C320 104 322 158 338 158"></path>
+
+              <path class="dg-line" d="M474 64 C560 64 620 50 710 50"></path>
+              <path class="dg-line" d="M474 74 C560 74 620 88 710 88"></path>
+              <path class="dg-line" d="M474 84 C560 84 620 126 710 126"></path>
+              <path class="dg-line" d="M474 158 C560 158 620 164 710 164"></path>
+
+              <text class="dg-muted" x="344" y="204">每条消息只交给其中一个消费者；0 个消费者时消息在队列里堆积。</text>
+
+              <rect class="dg-lane" x="18" y="246" width="864" height="246" rx="12"></rect>
+              <text class="dg-text" x="34" y="272">RocketMQ：组内按队列分配，实例数受队列数限制</text>
+
+              <rect class="dg-box-accent" x="36" y="322" width="112" height="58" rx="9"></rect>
+              <text class="dg-text-sm" x="92" y="345" text-anchor="middle">Topic</text>
+              <text class="dg-muted" x="92" y="363" text-anchor="middle">逻辑分类</text>
+
+              <rect class="dg-box" x="184" y="306" width="240" height="28" rx="6"></rect>
+              <text class="dg-text-sm" x="200" y="324">Queue 0</text>
+              <rect class="dg-box" x="184" y="342" width="240" height="28" rx="6"></rect>
+              <text class="dg-text-sm" x="200" y="360">Queue 1</text>
+              <rect class="dg-box" x="184" y="378" width="240" height="28" rx="6"></rect>
+              <text class="dg-text-sm" x="200" y="396">Queue 2</text>
+              <rect class="dg-box" x="184" y="414" width="240" height="28" rx="6"></rect>
+              <text class="dg-text-sm" x="200" y="432">Queue 3</text>
+
+              <path class="dg-line dg-flow" d="M148 338 C162 338 164 320 178 320"></path>
+              <path class="dg-line dg-flow" d="M148 346 C162 346 164 356 178 356"></path>
+              <path class="dg-line dg-flow" d="M148 356 C162 356 164 392 178 392"></path>
+              <path class="dg-line dg-flow" d="M148 364 C162 364 164 428 178 428"></path>
+
+              <rect class="dg-box-ok" x="608" y="300" width="238" height="136" rx="9"></rect>
+              <text class="dg-text-sm" x="622" y="320">ConsumerGroup G</text>
+              <rect class="dg-box" x="620" y="330" width="214" height="26" rx="6"></rect>
+              <text class="dg-text-sm" x="727" y="347" text-anchor="middle">实例 1</text>
+              <rect class="dg-box" x="620" y="364" width="214" height="26" rx="6"></rect>
+              <text class="dg-text-sm" x="727" y="381" text-anchor="middle">实例 2</text>
+              <rect class="dg-box" x="620" y="398" width="214" height="26" rx="6" stroke-dasharray="4 4"></rect>
+              <text class="dg-muted" x="727" y="415" text-anchor="middle">实例 3 · 分不到队列，空转</text>
+
+              <text class="dg-muted" x="513" y="296" text-anchor="middle">按队列分配</text>
+              <line class="dg-line" x1="424" y1="320" x2="602" y2="320"></line>
+              <line class="dg-line" x1="424" y1="356" x2="602" y2="356"></line>
+              <line class="dg-line" x1="424" y1="392" x2="602" y2="392"></line>
+              <line class="dg-line" x1="424" y1="428" x2="602" y2="428"></line>
+
+              <text class="dg-muted" x="34" y="472">同一队列同一时刻只归一个实例；实例数 &gt; 队列数时多出的实例空转。BROADCASTING 例外：每个实例都收全量。</text>
+            </svg>
+          </div>
+          <figcaption>同一句「加消费者」：RabbitMQ 是同一队列内加竞争者，RocketMQ 是组内按队列分摊实例</figcaption>
+        </figure>
+
+        <h4>RabbitMQ：生产者只认交换机，消费者只认队列</h4>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>关系</th><th>基数</th><th>含义与边界</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Producer → Exchange</td>
+                <td>N : N</td>
+                <td>生产者只声明「发到哪个 exchange + routing key」，不需要知道队列存在。一个生产者可以发多个 exchange，多个生产者也可以发同一个。</td>
+              </tr>
+              <tr>
+                <td>Exchange → Queue</td>
+                <td>M : N（靠 binding）</td>
+                <td>一个 exchange 可以绑多个队列，一个队列也能被多个 exchange 绑定。一条消息匹配到几个队列就复制几份，<strong>每个队列各一份</strong>。</td>
+              </tr>
+              <tr>
+                <td>Broker ↔ Exchange / Queue</td>
+                <td>1 : N</td>
+                <td>Exchange 和 Queue 都声明在 Broker 上，按 vhost 隔离；连接和信道只是客户端到 Broker 的传输通道，不改变路由关系。</td>
+              </tr>
+              <tr>
+                <td>Queue → Consumer</td>
+                <td>1 : N（竞争）</td>
+                <td>同一个队列可以挂任意多个消费者，消息轮流投给其中一个，<strong>一条消息只被一个消费者处理</strong>。消费者可以在同一个进程，也可以是多个应用实例。</td>
+              </tr>
+              <tr>
+                <td>Queue → Consumer</td>
+                <td>1 : 0</td>
+                <td>没有消费者时消息留在队列里，表现为积压；这也是「先生产、后消费」能工作的原因。</td>
+              </tr>
+              <tr>
+                <td>Consumer → Queue</td>
+                <td>1 : N</td>
+                <td>一个监听容器可以同时监听多个队列（如 <code>@RabbitListener(queues = {a, b})</code>），但每条消息仍然只属于一个队列，不会跨队列重复。</td>
+              </tr>
+              <tr>
+                <td>Consumer ↔ Consumer</td>
+                <td>无组概念</td>
+                <td>RabbitMQ 没有 ConsumerGroup：挂在同一个队列上的所有消费者天然竞争；不同队列之间互不影响，各消费各的。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="small muted">
+          本仓库里可以直接对照：<code>WorkConsumer</code> 用 <code>concurrency = "2"</code> 在一个应用内开两个消费者抢
+          <code>demo.work.queue</code>，<code>UnorderedConsumer</code> 开到 4；而 <code>OrderedConsumer</code> 固定为 1，
+          因为同一队列一旦有多个消费者，处理顺序就不再可控。
+        </p>
+
+        <h4>RocketMQ：消费者组是分配单位，队列是并行单位</h4>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>关系</th><th>基数</th><th>含义与边界</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>ProducerGroup → Topic</td>
+                <td>N : N</td>
+                <td>生产者组只是发送方身份，用于事务消息回查和运维标识，不参与负载均衡；一个组可以发多个 Topic。</td>
+              </tr>
+              <tr>
+                <td>Topic → MessageQueue</td>
+                <td>1 : N</td>
+                <td>Demo 自动创建的 Topic 默认 4 个队列，创建后队列数固定。队列既是并行单位，也是顺序单位，还是扩容的上限。</td>
+              </tr>
+              <tr>
+                <td>Broker ↔ Topic</td>
+                <td>M : N</td>
+                <td>一个 Broker 承载多个 Topic，一个 Topic 的队列可以分散在多个 Broker 上；NameServer 与 Broker 同样是多对多注册关系。</td>
+              </tr>
+              <tr>
+                <td>Producer / Consumer ↔ Broker</td>
+                <td>N : N</td>
+                <td>消息不经过 NameServer：客户端先从 NameServer 拿路由，再直接和 Broker 收发；NameServer 只负责注册与发现。</td>
+              </tr>
+              <tr>
+                <td>Topic ↔ ConsumerGroup</td>
+                <td>M : N</td>
+                <td>一个组可以订阅多个 Topic（组内实例的订阅关系应保持一致）；一个 Topic 也可以被多个组各自消费，互不影响。</td>
+              </tr>
+              <tr>
+                <td>ConsumerGroup → 实例</td>
+                <td>1 : N</td>
+                <td>集群消费下组内实例分摊队列：<strong>同一队列同一时刻只属于一个实例</strong>。实例数超过队列数时，多出的实例分不到队列，只能空转。</td>
+              </tr>
+              <tr>
+                <td>MessageQueue → 消费线程</td>
+                <td>同一时刻 1 个（顺序）</td>
+                <td>顺序消费会给队列加锁，同一队列在同一时刻只由一个线程处理；并发消费下同一队列可被多线程处理，但顺序不再保证。</td>
+              </tr>
+              <tr>
+                <td>ConsumerGroup ↔ Offset</td>
+                <td>每组每队列 1 个</td>
+                <td>位点记在「组 + 队列」上，不记在实例上；实例上下线、队列重新分配后，消费进度仍然连续。</td>
+              </tr>
+              <tr>
+                <td>广播模式</td>
+                <td>1 : N（每实例全量）</td>
+                <td><code>BROADCASTING</code> 下每个实例都消费全部队列，同一条消息在每个实例各处理一次，不能用来分摊压力。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">同名就是同一个，不是「各消费一份」</span>
+              RabbitMQ 里两个服务监听同名队列，它们会互相抢消息；RocketMQ 里两个服务用同一个
+              <code>consumerGroup</code> 订阅同一 Topic，也会被当成同一组的实例来分摊队列。
+              想让每个服务都拿到全量，RabbitMQ 要用<strong>不同队列</strong>绑定同一个 exchange，
+              RocketMQ 要么用<strong>不同消费者组</strong>，要么显式使用广播模式。
+            </p>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>同一个问题</th><th>RabbitMQ</th><th>RocketMQ</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>一条消息会被几个消费者处理？</td>
+                <td>同一队列内 1 个；若消息被路由到多个队列，则每个队列的副本各由 1 个消费者处理</td>
+                <td>集群消费：组内 1 个实例；广播消费：每个实例各处理 1 次</td>
+              </tr>
+              <tr>
+                <td>加消费者能一直提升并行度吗？</td>
+                <td>能加，理论上不设上限；但受 prefetch、数据库和下游能力限制，且同队列不再保证顺序</td>
+                <td>不能超过队列数；多出的实例分不到队列，只会空转</td>
+              </tr>
+              <tr>
+                <td>消费者之间怎么分工？</td>
+                <td>同一队列竞争抢消息，Broker 轮流投递（prefetch 影响是否均匀）</td>
+                <td>组内按队列分配，队列内部再按消费线程并发；顺序消费时串行</td>
+              </tr>
+              <tr>
+                <td>消费进度记在哪？</td>
+                <td>没有显式位点，以未 ACK 消息和队列状态体现</td>
+                <td>每个「消费者组 + 队列」一个 offset，实例重分配后接着消费</td>
+              </tr>
+              <tr>
+                <td>消费者全部下线会怎样？</td>
+                <td>消息留在队列里积压，重新上线后继续消费</td>
+                <td>位点停住，消息留在 CommitLog，实例恢复后从 offset 继续</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <p><span class="title">记住两个上限</span>
+              RabbitMQ 的并行度看<strong>消费者数量 × prefetch</strong>，可以超过队列数；
+              RocketMQ 的并行度看<strong>队列数 × 消费线程</strong>，消费者实例再多也超不过队列数。
+              需要顺序时，两边都要把并行度收回到 1：RabbitMQ 单队列单消费者，RocketMQ 单队列顺序消费。
+            </p>
+          </div>
+        </div>
+
+        <div class="callout tip">
+          <span class="ico">✓</span>
+          <div>
+            <p><span class="title">记住一句话就够了</span>
+              RabbitMQ 的核心问题是「这条消息该去哪个队列」，RocketMQ 的核心问题是
+              「这条消息属于哪个队列、这个队列消费到哪了」。后面五个可靠性问题，都是从这两句话延伸出来的。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <section id="rmq">
+        <h2><span class="no">02</span>RabbitMQ 深入：把「可靠」拆成三段</h2>
+        <p class="lead">
+          RabbitMQ 的可靠性不是一个开关，而是三段时间：发布时 Broker 有没有收下、路由时有没有落到队列、
+          消费时业务有没有处理完。三段分别对应 Confirm、Return、ACK，任何一段缺失都只能算「可能送达」。
+        </p>
+
+        <h3 id="rmq-route">交换机与路由：消息该去哪</h3>
+        <p>
+          Demo 的 <code>RabbitMQConfig</code> 把队列、交换机、绑定全部声明成 Bean，应用启动时由
+          <code>AmqpAdmin</code> 自动创建。三种常用交换机的匹配规则如下：
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>类型</th><th>匹配规则</th><th>Demo 中的用法</th><th>典型场景</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>fanout</code></td>
+                <td>忽略 routing key，投给所有绑定队列</td>
+                <td><code>demo.fanout.exchange</code> → 队列 A / B</td>
+                <td>广播通知、缓存刷新</td>
+              </tr>
+              <tr>
+                <td><code>direct</code></td>
+                <td>routing key 完全相等</td>
+                <td><code>order.created</code> / <code>order.paid</code></td>
+                <td>按事件类型精确分发</td>
+              </tr>
+              <tr>
+                <td><code>topic</code></td>
+                <td><code>*</code> 匹配一个词，<code>#</code> 匹配零到多个词</td>
+                <td><code>order.*</code>、<code>#.created</code></td>
+                <td>按业务域订阅、粗粒度聚合</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 300" role="img" aria-label="三种交换机对比：fanout 投递所有队列，direct 精确匹配 routing key，topic 用通配符匹配">
+              <!-- fanout -->
+              <text class="dg-text" x="20" y="30">fanout</text>
+              <rect class="dg-box-accent" x="20" y="92" width="84" height="54" rx="8"></rect>
+              <text class="dg-text-sm" x="62" y="123" text-anchor="middle">Exchange</text>
+              <rect class="dg-box" x="168" y="52" width="112" height="46" rx="7"></rect>
+              <text class="dg-text-sm" x="224" y="80" text-anchor="middle">Queue A</text>
+              <rect class="dg-box" x="168" y="172" width="112" height="46" rx="7"></rect>
+              <text class="dg-text-sm" x="224" y="200" text-anchor="middle">Queue B</text>
+              <line class="dg-line dg-flow" x1="104" y1="112" x2="162" y2="80"></line>
+              <line class="dg-line dg-flow" x1="104" y1="128" x2="162" y2="190"></line>
+              <text class="dg-muted" x="20" y="258">所有绑定队列都收到一份</text>
+
+              <!-- direct -->
+              <text class="dg-text" x="320" y="30">direct</text>
+              <rect class="dg-box-accent" x="320" y="92" width="84" height="54" rx="8"></rect>
+              <text class="dg-text-sm" x="362" y="123" text-anchor="middle">Exchange</text>
+              <rect class="dg-box-ok" x="468" y="52" width="120" height="46" rx="7"></rect>
+              <text class="dg-text-sm" x="528" y="80" text-anchor="middle">order.created</text>
+              <rect class="dg-box" x="468" y="172" width="120" height="46" rx="7"></rect>
+              <text class="dg-text-sm" x="528" y="200" text-anchor="middle">order.paid</text>
+              <line class="dg-line-ok dg-flow" x1="404" y1="112" x2="462" y2="80"></line>
+              <path class="dg-line dg-line-dashed" style="marker-end:none" d="M404 128 C430 150 440 186 458 194"></path>
+              <text class="dg-ok-text" x="410" y="100">routingKey 相等</text>
+              <text class="dg-muted" x="320" y="258">只投给 key 完全匹配的队列</text>
+
+              <!-- topic -->
+              <text class="dg-text" x="620" y="30">topic</text>
+              <rect class="dg-box-accent" x="620" y="92" width="84" height="54" rx="8"></rect>
+              <text class="dg-text-sm" x="662" y="123" text-anchor="middle">Exchange</text>
+              <rect class="dg-box-ok" x="768" y="52" width="112" height="46" rx="7"></rect>
+              <text class="dg-text-sm" x="824" y="80" text-anchor="middle">order.*</text>
+              <rect class="dg-box-ok" x="768" y="172" width="112" height="46" rx="7"></rect>
+              <text class="dg-text-sm" x="824" y="200" text-anchor="middle">#.created</text>
+              <line class="dg-line-ok dg-flow" x1="704" y1="112" x2="762" y2="80"></line>
+              <line class="dg-line-ok dg-flow" x1="704" y1="128" x2="762" y2="190"></line>
+              <text class="dg-muted" x="620" y="258">* 一个词，# 任意多个词</text>
+
+              <text class="dg-muted" x="20" y="288">默认交换机 "" 本质是 direct：routing key 直接写队列名，Demo 的可靠性场景都走它。</text>
+            </svg>
+          </div>
+          <figcaption>三种交换机的匹配方式；通配符只改变路由结果，不改变队列的存储语义</figcaption>
+        </figure>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rabbitmq/.../config/RabbitMQConfig.java · Topic 绑定</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>@Bean
+public TopicExchange topicExchange() {
+    return new TopicExchange(TOPIC_EXCHANGE);
+}
+
+@Bean
+public Queue topicQueueCreated() {
+    return new Queue(TOPIC_QUEUE_CREATED);
+}
+
+@Bean
+public Binding topicBindingCreated() {
+    return BindingBuilder.bind(topicQueueCreated())
+            .to(topicExchange())
+            .with("#.created");
+}</code></pre>
+        </div>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <p><span class="title">交换机和队列都是「声明式」的</span>
+              队列参数一旦创建就不能随便改。比如给已有队列新增 <code>x-max-priority</code>，
+              或把普通队列改成 Quorum Queue，都会触发 <code>PRECONDITION_FAILED</code>。
+              本地实验遇到这种情况，删掉队列重建即可；生产要靠版本化的声明和灰度迁移。
+            </p>
+          </div>
+        </div>
+
+        <h3 id="rmq-confirm">Confirm / Return / ACK：三段确认各管什么</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>机制</th><th>回答的问题</th><th>失败时</th><th>方向</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Publisher Confirm</td>
+                <td>Broker <strong>收下</strong>这条消息了吗？</td>
+                <td><code>ack=false</code>，生产者可重发</td>
+                <td>Broker → Producer</td>
+              </tr>
+              <tr>
+                <td>Publisher Return</td>
+                <td>收下后<strong>路由到队列</strong>了吗？</td>
+                <td><code>replyCode=312 NO_ROUTE</code>，消息被丢弃</td>
+                <td>Broker → Producer</td>
+              </tr>
+              <tr>
+                <td>Consumer ACK</td>
+                <td>消费者<strong>处理完</strong>了吗？</td>
+                <td>重新入队 / 进入死信队列</td>
+                <td>Consumer → Broker</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 420" role="img" aria-label="RabbitMQ 确认时序：生产者发布后收到 confirm，不可路由时收到 return，消费者处理完后 ACK">
+              <rect class="dg-box-accent" x="40" y="26" width="140" height="46" rx="9"></rect>
+              <text class="dg-text" x="110" y="54" text-anchor="middle">Producer</text>
+              <rect class="dg-box" x="370" y="26" width="160" height="46" rx="9"></rect>
+              <text class="dg-text" x="450" y="54" text-anchor="middle">Broker / Exchange</text>
+              <rect class="dg-box-ok" x="700" y="26" width="160" height="46" rx="9"></rect>
+              <text class="dg-text" x="780" y="54" text-anchor="middle">Consumer</text>
+
+              <line class="dg-life" x1="110" y1="72" x2="110" y2="386"></line>
+              <line class="dg-life" x1="450" y1="72" x2="450" y2="386"></line>
+              <line class="dg-life" x1="780" y1="72" x2="780" y2="386"></line>
+
+              <line class="dg-line-accent dg-flow" x1="110" y1="112" x2="442" y2="112"></line>
+              <text class="dg-accent-text" x="276" y="103" text-anchor="middle">① publish（带 CorrelationData）</text>
+
+              <line class="dg-line-ok" x1="450" y1="162" x2="118" y2="162"></line>
+              <text class="dg-ok-text" x="284" y="153" text-anchor="middle">② basic.ack（Broker 已收下）</text>
+
+              <line class="dg-line-danger dg-line-dashed" x1="450" y1="212" x2="118" y2="212"></line>
+              <text class="dg-danger-text" x="284" y="203" text-anchor="middle">③ basic.return（不可路由，需 mandatory）</text>
+
+              <line class="dg-line" x1="450" y1="266" x2="772" y2="266"></line>
+              <text class="dg-muted" x="611" y="257" text-anchor="middle">④ deliver</text>
+
+              <line class="dg-line-accent" x1="780" y1="318" x2="458" y2="318"></line>
+              <text class="dg-accent-text" x="619" y="309" text-anchor="middle">⑤ basic.ack / nack</text>
+
+              <text class="dg-muted" x="40" y="404">Confirm 只证明「Broker 收下」，ACK 才证明「消费者处理完」。可靠投递 = 三段都成立 + 业务幂等。</text>
+            </svg>
+          </div>
+          <figcaption>三段确认的方向与含义；Return 是发布侧的「路由失败」通知，不是消费确认</figcaption>
+        </figure>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rabbitmq/.../producer/ConfirmProducer.java</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>@PostConstruct
+public void init() {
+    rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -> {
+        String id = correlationData == null ? "n/a" : correlationData.getId();
+        if (ack) {
+            log.info("[ConfirmProducer] message confirmed by broker, id={}", id);
+        } else {
+            log.warn("[ConfirmProducer] message NOT confirmed, id={}, cause: {}", id, cause);
+        }
+    });
+    rabbitTemplate.setReturnsCallback(returned ->
+            log.warn("[ConfirmProducer] message returned: exchange={}, routingKey={}, replyCode={}",
+                    returned.getExchange(), returned.getRoutingKey(), returned.getReplyCode()));
+}
+
+public void send(String message) {
+    CorrelationData correlationData = new CorrelationData("confirm-" + SEQUENCE.incrementAndGet());
+    // 空字符串是默认交换机，routing key 直接写队列名
+    rabbitTemplate.convertAndSend("", RabbitMQConfig.SIMPLE_QUEUE, message, correlationData);
+}</code></pre>
+        </div>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rabbitmq/src/main/resources/application.yaml</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>spring:
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    publisher-confirm-type: correlated   # 让 confirm 回调带回 CorrelationData
+    publisher-returns: true              # 路由失败时触发 ReturnsCallback（同时打开 mandatory）</code></pre>
+        </div>
+
+        <p>
+          调用 <code>POST /api/rabbitmq/confirm?message=confirm-msg</code> 后，日志里应该同时出现
+          <code>message confirmed by broker</code> 和 <code>[SimpleConsumer] received</code>。
+        </p>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">为什么日志里会出现 id=n/a</span>
+              Confirm 回调是<strong>全局</strong>的：所有通过这个 <code>RabbitTemplate</code> 发出的消息都会触发它。
+              如果发送时没有带 <code>CorrelationData</code>，回调里拿不到关联 ID，只能打 <code>n/a</code>。
+              这不是错误，只说明那条消息没有做「确认与业务请求」的关联。
+            </p>
+          </div>
+        </div>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <p><span class="title">Confirm 发生在哪一步</span>
+              对于持久化消息 + durable 队列，Broker 通常在消息落盘后才发 <code>basic.ack</code>；
+              非持久化消息则可能在写入内存后就确认。所以「收到 confirm」也不等于「重启一定还在」，
+              还要看消息的 deliveryMode。
+            </p>
+          </div>
+        </div>
+
+        <h3 id="rmq-dlx">死信队列：处理不了的消息去哪</h3>
+        <p>
+          死信队列（DLX / DLQ）不是独立功能，而是普通队列的一组参数：当消息被拒绝且不重入队、
+          TTL 过期、或队列满时，Broker 把它转发到指定的 exchange。Demo 的主队列同时配置了
+          <code>x-dead-letter-exchange</code>、<code>x-dead-letter-routing-key</code> 和 3 秒 TTL。
+        </p>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 310" role="img" aria-label="死信流程：主队列拒收或 TTL 过期后转到死信交换机，再按 dlq 路由键进入死信队列">
+              <rect class="dg-box-warn" x="48" y="88" width="224" height="104" rx="10"></rect>
+              <text class="dg-text-sm" x="160" y="112" text-anchor="middle">demo.dlq.main.queue</text>
+              <text class="dg-muted" x="160" y="133" text-anchor="middle">x-message-ttl = 3000</text>
+              <text class="dg-muted" x="160" y="151" text-anchor="middle">x-dead-letter-exchange</text>
+              <text class="dg-muted" x="160" y="169" text-anchor="middle">x-dead-letter-routing-key = dlq</text>
+
+              <rect class="dg-box-accent" x="382" y="106" width="146" height="68" rx="9"></rect>
+              <text class="dg-text-sm" x="455" y="134" text-anchor="middle">demo.dlx.exchange</text>
+              <text class="dg-muted" x="455" y="154" text-anchor="middle">DirectExchange</text>
+
+              <rect class="dg-box-ok" x="640" y="88" width="200" height="92" rx="10"></rect>
+              <text class="dg-text-sm" x="740" y="114" text-anchor="middle">demo.dlx.queue</text>
+              <text class="dg-muted" x="740" y="135" text-anchor="middle">绑定键：dlq</text>
+              <text class="dg-muted" x="740" y="155" text-anchor="middle">死信最终停留在这里</text>
+
+              <rect class="dg-box" x="640" y="226" width="200" height="50" rx="9"></rect>
+              <text class="dg-text-sm" x="740" y="256" text-anchor="middle">DeadLetterConsumer-DLQ</text>
+
+              <line class="dg-line-danger dg-flow" x1="272" y1="136" x2="376" y2="136"></line>
+              <text class="dg-danger-text" x="324" y="126" text-anchor="middle">reject / TTL 过期</text>
+
+              <line class="dg-line-ok dg-flow" x1="528" y1="138" x2="634" y2="138"></line>
+              <text class="dg-ok-text" x="581" y="128" text-anchor="middle">routing key = dlq</text>
+
+              <line class="dg-line" x1="740" y1="180" x2="740" y2="220"></line>
+
+              <text class="dg-danger-text" x="48" y="236">常见坑：漏配 x-dead-letter-routing-key</text>
+              <text class="dg-muted" x="48" y="256">死信会沿用原 routing key（这里是队列名 demo.dlq.main.queue），</text>
+              <text class="dg-muted" x="48" y="274">与 DLX 的绑定键 dlq 不匹配 → 消息被静默丢弃，管理台里看不到。</text>
+            </svg>
+          </div>
+          <figcaption>死信流转：拒绝 / TTL / 队列满都会触发；routing key 配错时消息会消失得无声无息</figcaption>
+        </figure>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rabbitmq/.../config/RabbitMQConfig.java · DLX 参数</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>@Bean
+public Queue dlxMainQueue() {
+    return QueueBuilder.durable(DLQ_MAIN_QUEUE)
+            .withArgument("x-dead-letter-exchange", DLX_EXCHANGE)
+            // 不指定时死信沿用原 routing key（这里是队列名），与 DLX 绑定键 "dlq" 不匹配会被丢弃
+            .withArgument("x-dead-letter-routing-key", "dlq")
+            .withArgument("x-message-ttl", 3000)
+            .build();
+}
+
+@Bean
+public Binding dlxBinding() {
+    return BindingBuilder.bind(dlxQueue()).to(dlxExchange()).with("dlq");
+}</code></pre>
+        </div>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rabbitmq/.../consumer/DeadLetterConsumer.java</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>@RabbitListener(queues = RabbitMQConfig.DLQ_MAIN_QUEUE)
+public void receiveMain(String message) {
+    log.info("[DeadLetterConsumer-main] received: {}, will reject to DLQ", message);
+    // 抛这个异常表示「拒绝且不要重新入队」，否则默认会 requeue 造成无限重投
+    throw new AmqpRejectAndDontRequeueException("reject to DLQ demo");
+}
+
+@RabbitListener(queues = RabbitMQConfig.DLX_QUEUE)
+public void receiveDlx(String message) {
+    log.info("[DeadLetterConsumer-DLQ] received dead letter: {}", message);
+}</code></pre>
+        </div>
+
+        <p>
+          调用 <code>POST /api/rabbitmq/dlx?message=dlx-msg</code>，预期先看到主消费者拒收，再看到 DLQ 消费者收到：
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">控制台 · 预期日志</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>[DeadLetterConsumer-main] received: dlx-msg, will reject to DLQ
+WARN ... AmqpRejectAndDontRequeueException: reject to DLQ demo
+[DeadLetterConsumer-DLQ] received dead letter: dlx-msg</code></pre>
+        </div>
+
+        <h3 id="rmq-semantics">消费语义：ACK 不是「收到」，是「处理完」</h3>
+        <ul>
+          <li><strong>Spring AMQP 默认 AUTO</strong>：监听方法正常返回后由容器 ACK；抛异常则 nack。</li>
+          <li><strong>nack 默认重新入队</strong>（<code>defaultRequeueRejected=true</code>），处理逻辑一直失败就会无限重投。
+            对不可恢复的错误，用 <code>AmqpRejectAndDontRequeueException</code> 或 <code>default-requeue-rejected: false</code> 切断循环，再交给 DLQ。</li>
+          <li><strong>prefetch</strong> 控制一个消费者最多预取多少条未 ACK 消息。预取越大吞吐越高，但单实例囤积越多、故障重投越多，优先级效果也越差。</li>
+          <li><strong>幂等不能省</strong>：ACK 丢失、消费者崩溃、网络抖动都会导致重投，Broker 只保证 at-least-once。</li>
+        </ul>
+
+        <div class="callout tip">
+          <span class="ico">✓</span>
+          <div>
+            <p><span class="title">RabbitMQ 侧的小结</span>
+              路由靠 Exchange + Binding；发布可靠靠 Confirm + Return；消费可靠靠手动 ACK + 幂等；
+              失败兜底靠 DLQ。四件事各管一段，不能互相替代。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <section id="rocketmq">
+        <h2><span class="no">03</span>RocketMQ 深入：队列、位点与事务</h2>
+        <p class="lead">
+          RocketMQ 把「顺序」和「回溯」做进了存储模型：消息按队列追加写，消费只移动位点。
+          理解这一点，顺序消息、积压、持久化、重放这些行为就都能推导出来。
+        </p>
+
+        <h3 id="mq-arch">整体架构：四个角色，一条 CommitLog</h3>
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 340" role="img" aria-label="RocketMQ 架构：生产者、NameServer、Broker、消费者组与 Dashboard 的关系">
+              <rect class="dg-box" x="300" y="14" width="190" height="50" rx="9"></rect>
+              <text class="dg-text" x="395" y="36" text-anchor="middle">NameServer 集群</text>
+              <text class="dg-muted" x="395" y="53" text-anchor="middle">无状态 · 保存 Topic 路由</text>
+
+              <rect class="dg-box-accent" x="30" y="138" width="124" height="62" rx="10"></rect>
+              <text class="dg-text" x="92" y="164" text-anchor="middle">Producer</text>
+              <text class="dg-muted" x="92" y="183" text-anchor="middle">syncSend / asyncSend</text>
+
+              <rect class="dg-box" x="234" y="112" width="360" height="196" rx="12"></rect>
+              <text class="dg-text" x="254" y="138">Broker</text>
+              <text class="dg-muted" x="318" y="138">消息存储与投递的核心</text>
+
+              <rect class="dg-box-accent" x="256" y="158" width="92" height="48" rx="7"></rect>
+              <text class="dg-text-sm" x="302" y="179" text-anchor="middle">Queue 0</text>
+              <text class="dg-muted" x="302" y="194" text-anchor="middle">顺序单位</text>
+              <rect class="dg-box-accent" x="360" y="158" width="92" height="48" rx="7"></rect>
+              <text class="dg-text-sm" x="406" y="179" text-anchor="middle">Queue 1</text>
+              <text class="dg-muted" x="406" y="194" text-anchor="middle">并行单位</text>
+              <rect class="dg-box-accent" x="464" y="158" width="92" height="48" rx="7"></rect>
+              <text class="dg-text-sm" x="510" y="179" text-anchor="middle">Queue 2</text>
+              <text class="dg-muted" x="510" y="194" text-anchor="middle">默认 4 个</text>
+
+              <rect class="dg-box" x="256" y="228" width="300" height="58" rx="7"></rect>
+              <text class="dg-text-sm" x="406" y="250" text-anchor="middle">CommitLog · 顺序追加</text>
+              <text class="dg-muted" x="406" y="269" text-anchor="middle">ConsumeQueue 只是它的索引；消息不会因消费立即删除</text>
+
+              <rect class="dg-box-ok" x="664" y="138" width="188" height="62" rx="10"></rect>
+              <text class="dg-text" x="758" y="163" text-anchor="middle">Consumer Group</text>
+              <text class="dg-muted" x="758" y="182" text-anchor="middle">每个队列一个 offset</text>
+
+              <rect class="dg-box" x="664" y="242" width="188" height="46" rx="8"></rect>
+              <text class="dg-text-sm" x="758" y="270" text-anchor="middle">Dashboard 19876</text>
+
+              <line class="dg-line dg-flow" x1="154" y1="169" x2="228" y2="169"></line>
+              <text class="dg-muted" x="191" y="158" text-anchor="middle">send</text>
+
+              <path class="dg-line dg-line-dashed" d="M92 138 C100 92 210 62 294 56"></path>
+              <text class="dg-muted" x="168" y="80" text-anchor="middle">拉路由（缓存）</text>
+
+              <path class="dg-line dg-line-dashed" d="M470 112 C470 92 430 72 404 66"></path>
+              <text class="dg-muted" x="512" y="96" text-anchor="middle">心跳注册</text>
+
+              <line class="dg-line dg-flow" x1="594" y1="169" x2="658" y2="169"></line>
+              <text class="dg-muted" x="626" y="158" text-anchor="middle">pull</text>
+
+              <line class="dg-line dg-line-dashed" x1="758" y1="242" x2="758" y2="206"></line>
+              <text class="dg-muted" x="768" y="228" text-anchor="start">查询位点 / 堆积</text>
+
+              <text class="dg-muted" x="30" y="332">同一个 ConsumerGroup 内的实例分摊队列；不同 Group 各自收到一份完整消息。</text>
+            </svg>
+          </div>
+          <figcaption>RocketMQ 的四个角色；Dashboard 只是查询工具，不在消息链路上</figcaption>
+        </figure>
+
+        <ul>
+          <li><strong>NameServer</strong>：路由注册中心，无状态、节点之间不通信。Producer 发送前拉取 Topic 路由并缓存，Broker 定时上报心跳。</li>
+          <li><strong>Broker</strong>：存储与投递。消息顺序写 CommitLog，再异步构建 ConsumeQueue 索引；Topic 的队列数决定消费并行度。</li>
+          <li><strong>Consumer Group</strong>：同一组内分摊队列（CLUSTERING）；不同组之间互不影响，各自消费全量。</li>
+          <li><strong>offset</strong>：每个队列的消费进度。暂停、重启、扩容都围绕位点变化；重置位点就能重放历史消息。</li>
+        </ul>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <p><span class="title">自动创建 Topic 的队列数</span>
+              本 Demo 没有预建 Topic，第一条消息发送时自动创建，默认 4 个队列。
+              这意味着顺序消费最多有 4 个并行度，积压时加机器也无法超过队列数。
+              生产通常预建 Topic，并按吞吐规划队列数。
+            </p>
+          </div>
+        </div>
+
+        <h3 id="mq-modes">六种消息形态：先知道该用哪个</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>形态</th><th>入口</th><th>关键实现</th><th>解决什么问题</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>普通消息</td>
+                <td><code>POST /api/rocketmq/simple</code></td>
+                <td><code>syncSend</code></td>
+                <td>最基础的异步解耦、削峰</td>
+              </tr>
+              <tr>
+                <td>顺序消息</td>
+                <td><code>POST /api/rocketmq/orderly</code></td>
+                <td><code>syncSendOrderly</code> + <code>ConsumeMode.ORDERLY</code></td>
+                <td>同一订单 / 用户的事件严格按序</td>
+              </tr>
+              <tr>
+                <td>标签过滤</td>
+                <td><code>POST /api/rocketmq/tag</code></td>
+                <td><code>topic:tag</code> + <code>selectorExpression</code></td>
+                <td>一个 Topic 内按业务标签分流</td>
+              </tr>
+              <tr>
+                <td>延迟消息</td>
+                <td><code>POST /api/rocketmq/delay</code></td>
+                <td><code>syncSend(..., delayLevel)</code></td>
+                <td>超时关单、定时提醒</td>
+              </tr>
+              <tr>
+                <td>事务消息</td>
+                <td><code>POST /api/rocketmq/transaction</code></td>
+                <td>半消息 + 本地事务 + 回查</td>
+                <td>本地事务与发消息的最终一致</td>
+              </tr>
+              <tr>
+                <td>广播消费</td>
+                <td><code>POST /api/rocketmq/broadcast</code></td>
+                <td><code>MessageModel.BROADCASTING</code></td>
+                <td>每个实例都要收到全量（缓存刷新等）</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout tip">
+          <span class="ico">✓</span>
+          <div>
+            <p><span class="title">发送方式的取舍</span>
+              <code>syncSend</code> 等 Broker 返回 <code>SendResult</code>，最可靠但吞吐最低；
+              <code>asyncSend</code> 通过回调拿结果，适合高吞吐；
+              <code>sendOneWay</code> 不关心结果，最快但可能丢。Demo 的可靠场景都用 <code>syncSend</code>。
+            </p>
+          </div>
+        </div>
+
+        <h3 id="mq-order">顺序消息：把「同 key」锁进同一个队列</h3>
+        <p>
+          RocketMQ 的顺序范围是<strong>单个 MessageQueue</strong>。生产端用
+          <code>syncSendOrderly(topic, message, shardingKey)</code> 按 key 哈希选队列，
+          消费端声明 <code>ConsumeMode.ORDERLY</code> 对该队列加锁、逐条消费。
+          不同 key 会分散到不同队列，所以整体仍然并行。
+        </p>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 340" role="img" aria-label="RocketMQ 顺序消息：相同 sharding key 哈希到同一个队列，ORDERLY 消费者按队列加锁串行处理">
+              <rect class="dg-box-accent" x="28" y="132" width="122" height="62" rx="10"></rect>
+              <text class="dg-text" x="89" y="158" text-anchor="middle">Producer</text>
+              <text class="dg-muted" x="89" y="177" text-anchor="middle">syncSendOrderly</text>
+
+              <rect class="dg-box" x="196" y="132" width="176" height="62" rx="10"></rect>
+              <text class="dg-text-sm" x="284" y="156" text-anchor="middle">hash(orderKey) % N</text>
+              <text class="dg-muted" x="284" y="176" text-anchor="middle">ORDER-1 → Queue 1</text>
+
+              <rect class="dg-box" x="430" y="38" width="152" height="50" rx="8"></rect>
+              <text class="dg-text-sm" x="506" y="58" text-anchor="middle">Queue 0</text>
+              <text class="dg-muted" x="506" y="76" text-anchor="middle">另一个订单 key</text>
+              <rect class="dg-box-ok" x="430" y="134" width="152" height="50" rx="8"></rect>
+              <text class="dg-text-sm" x="506" y="154" text-anchor="middle">Queue 1 · 加锁</text>
+              <text class="dg-muted" x="506" y="172" text-anchor="middle">ORDER-1 的全部消息</text>
+              <rect class="dg-box" x="430" y="230" width="152" height="50" rx="8"></rect>
+              <text class="dg-text-sm" x="506" y="250" text-anchor="middle">Queue 2</text>
+              <text class="dg-muted" x="506" y="268" text-anchor="middle">第三个订单 key</text>
+
+              <rect class="dg-box" x="672" y="38" width="170" height="50" rx="8"></rect>
+              <text class="dg-text-sm" x="757" y="68" text-anchor="middle">消费线程 A</text>
+              <rect class="dg-box-ok" x="672" y="134" width="170" height="50" rx="8"></rect>
+              <text class="dg-text-sm" x="757" y="164" text-anchor="middle">消费线程 B（串行）</text>
+              <rect class="dg-box" x="672" y="230" width="170" height="50" rx="8"></rect>
+              <text class="dg-text-sm" x="757" y="260" text-anchor="middle">消费线程 C</text>
+
+              <line class="dg-line dg-flow" x1="150" y1="163" x2="190" y2="163"></line>
+              <path class="dg-line" d="M372 152 C400 130 402 78 424 66"></path>
+              <path class="dg-line-ok dg-flow" d="M372 163 L424 159"></path>
+              <path class="dg-line" d="M372 174 C400 196 402 240 424 252"></path>
+              <text class="dg-ok-text" x="284" y="214" text-anchor="middle">同一 key 必进同一队列</text>
+              <text class="dg-muted" x="284" y="232" text-anchor="middle">队列内严格 FIFO</text>
+
+              <line class="dg-line" x1="582" y1="63" x2="666" y2="63"></line>
+              <line class="dg-line-ok" x1="582" y1="159" x2="666" y2="159"></line>
+              <line class="dg-line" x1="582" y1="255" x2="666" y2="255"></line>
+
+              <text class="dg-muted" x="28" y="326">队列 1 内 step-1 → step-2 → ... 严格串行；队列 0/2 与它并行。线程号变化不代表乱序。</text>
+            </svg>
+          </div>
+          <figcaption>顺序由「同 key 同队列 + ORDERLY 队列锁」共同保证，范围是队列而不是整个 Topic</figcaption>
+        </figure>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rocketmq/.../producer/OrderlyProducer.java · 消费端 OrderlyConsumer.java</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>public void send(String orderKey, String message) {
+    // 同一个 orderKey 哈希到同一个队列
+    rocketTemplate.syncSendOrderly("demo-orderly-topic", message, orderKey);
+}
+
+@RocketMQMessageListener(
+        topic = "demo-orderly-topic",
+        consumerGroup = "demo-orderly-consumer-group",
+        consumeMode = ConsumeMode.ORDERLY   // 对队列加锁，逐条消费
+)
+public class OrderlyConsumer implements RocketMQListener&lt;String&gt; {
+    @Override
+    public void onMessage(String message) {
+        log.info("[OrderlyConsumer] thread={} received: {}", Thread.currentThread().getName(), message);
+    }
+}</code></pre>
+        </div>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">不要用线程名判断顺序</span>
+              ORDERLY 模式保证「当前消息处理完才取下一条」，但线程池每次可能换线程。
+              判断依据是消息序号，不是日志里的 <code>thread=</code>。
+            </p>
+            <p>另外，ORDERLY 消费失败默认会阻塞当前队列重试。一条毒消息就能拖住整个队列，必须配告警和人工处理。</p>
+          </div>
+        </div>
+
+        <ul>
+          <li><strong>全局有序</strong>只能把队列数设为 1，吞吐会断崖式下降，一般只在特殊场景使用。</li>
+          <li><strong>扩容会重新哈希</strong>：增加队列数后，部分 key 会落到新队列，迁移期间顺序可能短暂受影响，尽量低峰操作。</li>
+          <li><strong>防止热点</strong>：按订单号分片通常均匀；如果按商家 ID 分片，大商家会把单个队列打满。</li>
+        </ul>
+
+        <h3 id="mq-tx">事务消息：本地事务和发消息，怎么最终一致</h3>
+        <p>
+          业务里常见的问题是：先写数据库再发消息，发消息失败就丢事件；先发消息再写库，写库失败就产生幽灵事件。
+          RocketMQ 用「半消息 + 本地事务 + 回查」把两件事拆成可恢复的两阶段。
+        </p>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 440" role="img" aria-label="RocketMQ 事务消息时序：半消息写入、执行本地事务、提交或回滚、状态未知时回查">
+              <rect class="dg-box-accent" x="38" y="24" width="152" height="46" rx="9"></rect>
+              <text class="dg-text" x="114" y="52" text-anchor="middle">Producer / 应用</text>
+              <rect class="dg-box" x="372" y="24" width="176" height="46" rx="9"></rect>
+              <text class="dg-text" x="460" y="52" text-anchor="middle">Broker</text>
+              <rect class="dg-box" x="700" y="24" width="152" height="46" rx="9"></rect>
+              <text class="dg-text" x="776" y="52" text-anchor="middle">本地数据库</text>
+
+              <line class="dg-life" x1="114" y1="70" x2="114" y2="408"></line>
+              <line class="dg-life" x1="460" y1="70" x2="460" y2="408"></line>
+              <line class="dg-life" x1="776" y1="70" x2="776" y2="408"></line>
+
+              <line class="dg-line-accent dg-flow" x1="114" y1="106" x2="452" y2="106"></line>
+              <text class="dg-accent-text" x="283" y="97" text-anchor="middle">① 发送半消息（消费者不可见）</text>
+
+              <line class="dg-line" x1="460" y1="150" x2="122" y2="150"></line>
+              <text class="dg-muted" x="291" y="141" text-anchor="middle">② 半消息写入成功</text>
+
+              <line class="dg-line-ok dg-flow" x1="114" y1="198" x2="768" y2="198"></line>
+              <text class="dg-ok-text" x="300" y="189" text-anchor="middle">③ 执行本地事务（不经过 Broker）</text>
+
+              <line class="dg-line" x1="776" y1="240" x2="122" y2="240"></line>
+              <text class="dg-muted" x="449" y="231" text-anchor="middle">本地事务结果</text>
+
+              <line class="dg-line-accent dg-flow" x1="114" y1="288" x2="452" y2="288"></line>
+              <text class="dg-accent-text" x="283" y="279" text-anchor="middle">④ COMMIT / ROLLBACK</text>
+
+              <line class="dg-line-danger dg-line-dashed" x1="460" y1="338" x2="122" y2="338"></line>
+              <text class="dg-danger-text" x="291" y="329" text-anchor="middle">⑤ 状态未知：Broker 回查 checkLocalTransaction</text>
+
+              <line class="dg-line-ok" x1="114" y1="382" x2="452" y2="382"></line>
+              <text class="dg-ok-text" x="283" y="373" text-anchor="middle">⑥ 返回最终状态</text>
+
+              <text class="dg-muted" x="38" y="430">只有 COMMIT 的半消息才会进入真实 Topic；ROLLBACK 会被删除。回查必须能根据业务数据判断，不能永远返回 COMMIT。</text>
+            </svg>
+          </div>
+          <figcaption>事务消息的三步：半消息 → 本地事务 → 提交/回滚；异常断开时由 Broker 回查</figcaption>
+        </figure>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rocketmq/.../producer/TransactionProducer.java · listener/TransactionListenerImpl.java</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>public void send(String message) {
+    rocketTemplate.sendMessageInTransaction("demo-tx-topic",
+            MessageBuilder.withPayload(message).build(), null);
+}
+
+@RocketMQTransactionListener
+public class TransactionListenerImpl implements RocketMQLocalTransactionListener {
+
+    @Override
+    public RocketMQLocalTransactionState executeLocalTransaction(Message msg, Object arg) {
+        log.info("[TransactionListener] executing local transaction for: {}", msg.getPayload());
+        // 真实业务：在这里写订单、扣库存；成功 COMMIT，失败 ROLLBACK，不确定 UNKNOWN
+        return RocketMQLocalTransactionState.COMMIT;
+    }
+
+    @Override
+    public RocketMQLocalTransactionState checkLocalTransaction(Message msg) {
+        log.info("[TransactionListener] checking local transaction for: {}", msg.getPayload());
+        return RocketMQLocalTransactionState.COMMIT;
+    }
+}</code></pre>
+        </div>
+
+        <div class="callout danger">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">Demo 里的回查永远 COMMIT，不能照搬到生产</span>
+              回查的职责是：Broker 没收到最终状态时，根据本地事务记录判断到底提交还是回滚。
+              生产实现必须查订单 / 流水 / 事务日志，查不到就返回 <code>UNKNOWN</code> 让 Broker 稍后再问，
+              <strong>不能无脑 COMMIT</strong>，否则会产生没有本地数据支撑的幽灵消息。
+            </p>
+          </div>
+        </div>
+
+        <h3 id="mq-extra">延迟、标签、广播：三个高频小功能</h3>
+
+        <h4>延迟消息</h4>
+        <p>
+          Demo 使用固定延迟级别。默认 18 级，级别与时间在 Broker 端配置，消息发出后不能改。
+          <code>delayLevel=3</code> 对应 10 秒。
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>level</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>9</th><th>14</th><th>17</th><th>18</th></tr></thead>
+            <tbody><tr><td>时间</td><td>1s</td><td>5s</td><td>10s</td><td>30s</td><td>1m</td><td>2m</td><td>10m</td><td>20m</td><td>1h</td><td>2h</td></tr></tbody>
+          </table>
+        </div>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rocketmq/.../producer/DelayProducer.java</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>public void send(String message, int delayLevel) {
+    rocketTemplate.syncSend("demo-delay-topic",
+            MessageBuilder.withPayload(message).build(),
+            3000,          // 发送超时 3s
+            delayLevel);   // 例如 3 = 10s
+}</code></pre>
+        </div>
+        <p class="small muted">
+          生产提示：固定级别够用就用级别；需要任意时刻投递时，RocketMQ 5.x 的定时消息（Timer Message）更合适。
+          不要用「延迟消息 + 轮询数据库」硬凑定时任务。
+        </p>
+
+        <h4>标签过滤</h4>
+        <p>
+          Spring 集成里用 <code>topic:tag</code> 发送，消费端用 <code>selectorExpression</code> 只订阅指定 tag。
+          Broker 在服务端过滤，不匹配的消息不会投递给这个消费者组。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rocketmq/.../producer/TagProducer.java · consumer/TagFilterConsumer.java</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>public void send(String tag, String message) {
+    rocketTemplate.send("demo-tag-topic:" + tag, MessageBuilder.withPayload(message).build());
+}
+
+@RocketMQMessageListener(
+        topic = "demo-tag-topic",
+        consumerGroup = "demo-tag-consumer-group",
+        selectorExpression = "TagA"   // 只收 TagA
+)
+public class TagFilterConsumer implements RocketMQListener&lt;String&gt; { ... }</code></pre>
+        </div>
+
+        <h4>广播消费</h4>
+        <p>
+          <code>MessageModel.BROADCASTING</code> 下，同一个消费者组里的<strong>每个实例</strong>都收到全量消息，
+          位点保存在实例本地。适合配置刷新、本地缓存失效这类「每个节点都要知道」的场景。
+          默认的 <code>CLUSTERING</code> 则是组内分摊队列，一条消息只被一个实例消费。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rocketmq/.../consumer/BroadcastConsumer.java</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>@RocketMQMessageListener(
+        topic = "demo-broadcast-topic",
+        consumerGroup = "demo-broadcast-consumer-group",
+        messageModel = MessageModel.BROADCASTING
+)
+public class BroadcastConsumer implements RocketMQListener&lt;String&gt; {
+    @Override
+    public void onMessage(String message) {
+        log.info("[BroadcastConsumer] received: {}", message);
+    }
+}</code></pre>
+        </div>
+
+        <div class="callout tip">
+          <span class="ico">✓</span>
+          <div>
+            <p><span class="title">RocketMQ 侧的小结</span>
+              存储模型决定了三件事：<strong>顺序按队列</strong>、<strong>进度靠 offset</strong>、
+              <strong>消息可重放</strong>。事务消息解决「本地事务 + 发消息」的原子性，
+              延迟 / 标签 / 广播都是在这个模型上加的投递策略。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <section id="reliability">
+        <h2><span class="no">04</span>五个绕不开的可靠性问题</h2>
+        <p class="lead">
+          幂等、顺序、积压、持久化、优先级——这五个问题不是「高级用法」，而是消息系统上线后一定会遇到的日常。
+          它们之间还会互相影响：加消费者解决积压会破坏顺序，持久化不等于不重复，优先级又会和积压叠加。
+        </p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>问题</th><th>本质</th><th>RabbitMQ 抓手</th><th>RocketMQ 抓手</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>幂等</td><td>重复投递无法避免，只能让业务只执行一次</td><td>业务 ID + 去重表</td><td>业务 ID + 去重表</td></tr>
+              <tr><td>顺序</td><td>生产、存储、消费任一环都可能乱</td><td>单队列 + 单消费者 + 同 channel 发布</td><td>同 key 同队列 + ORDERLY 消费</td></tr>
+              <tr><td>积压</td><td>生产速率持续大于消费速率</td><td>Ready / Unacked、暂停容器</td><td>Dashboard Diff、suspend 消费者</td></tr>
+              <tr><td>持久化</td><td>消息从内存落到可靠存储</td><td>durable + persistent + confirm</td><td>CommitLog + syncSend + 刷盘/副本</td></tr>
+              <tr><td>优先级</td><td>资源有限时先处理谁</td><td>原生 <code>x-max-priority</code></td><td>Topic / 队列隔离，无原生优先级</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ============================================================ -->
+        <h3 id="idem">4.1 幂等：重复投递一定会发生</h3>
+        <p>
+          先接受一个事实：<strong>端到端的 exactly-once 很难靠中间件单独保证</strong>。
+          生产者超时重发、Broker 重投、消费者 ACK 丢失、实例重启、RocketMQ rebalance，
+          任何一个环节都可能让同一条业务消息被处理两次。工程上的标准答案是
+          <strong>at-least-once 投递 + 消费端幂等</strong>。
+        </p>
+
+        <div class="compare">
+          <div class="box bad">
+            <h4>错误做法</h4>
+            <ul>
+              <li>用 Broker 生成的 messageId 去重：生产者重发会生成新 ID，跨系统也不通用。</li>
+              <li>先查「处理过没有」，再写业务：并发下两个线程同时查到「没处理」，各写一次。</li>
+              <li>先执行业务、后登记去重：登记前崩溃，重投时又执行一遍。</li>
+              <li>登记后业务失败却不撤销：消息被永久当成重复，业务再也没机会重试。</li>
+            </ul>
+          </div>
+          <div class="box good">
+            <h4>正确做法</h4>
+            <ul>
+              <li>消息体里带<strong>稳定的业务唯一键</strong>（订单号、事件 ID），重投保持不变。</li>
+              <li>用原子操作抢占：内存 <code>compute</code>、Redis <code>SET NX EX</code>、数据库唯一索引。</li>
+              <li><strong>先抢占、再处理</strong>，成功后保留记录；失败则删除记录并抛出异常，让重投能重新处理。</li>
+              <li>去重记录设置 TTL，覆盖最大重试窗口；生产环境多实例共享存储。</li>
+            </ul>
+          </div>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 360" role="img" aria-label="幂等流程：两条相同业务 ID 的消息经过原子去重门，第一条被处理，第二条被忽略">
+              <rect class="dg-box-accent" x="36" y="58" width="180" height="58" rx="9"></rect>
+              <text class="dg-text-sm" x="126" y="82" text-anchor="middle">ID-1 · 第 1 次投递</text>
+              <text class="dg-muted" x="126" y="101" text-anchor="middle">业务唯一 ID 不变</text>
+
+              <rect class="dg-box-accent" x="36" y="232" width="180" height="58" rx="9"></rect>
+              <text class="dg-text-sm" x="126" y="256" text-anchor="middle">ID-1 · 重投</text>
+              <text class="dg-muted" x="126" y="275" text-anchor="middle">ACK 丢失 / 实例重启</text>
+
+              <rect class="dg-box" x="300" y="128" width="172" height="92" rx="10"></rect>
+              <text class="dg-text-sm" x="386" y="156" text-anchor="middle">tryAcquire(scene, id)</text>
+              <text class="dg-muted" x="386" y="177" text-anchor="middle">ConcurrentHashMap.compute</text>
+              <text class="dg-muted" x="386" y="196" text-anchor="middle">同一 key 原子执行</text>
+
+              <rect class="dg-box" x="540" y="26" width="172" height="70" rx="9"></rect>
+              <text class="dg-text-sm" x="626" y="51" text-anchor="middle">去重表</text>
+              <text class="dg-muted" x="626" y="71" text-anchor="middle">key = 场景 + 业务 ID</text>
+              <text class="dg-muted" x="626" y="88" text-anchor="middle">TTL 10 分钟</text>
+
+              <rect class="dg-box-ok" x="738" y="102" width="132" height="56" rx="9"></rect>
+              <text class="dg-ok-text" x="804" y="128" text-anchor="middle">processed</text>
+              <text class="dg-muted" x="804" y="147" text-anchor="middle">first = true</text>
+
+              <rect class="dg-box" x="738" y="230" width="132" height="56" rx="9"></rect>
+              <text class="dg-muted" x="804" y="256" text-anchor="middle">duplicate ignored</text>
+              <text class="dg-muted" x="804" y="275" text-anchor="middle">first = false</text>
+
+              <path class="dg-line dg-flow" d="M216 87 C260 87 266 140 294 150"></path>
+              <path class="dg-line dg-flow" d="M216 261 C260 261 266 208 294 198"></path>
+
+              <line class="dg-line" x1="472" y1="150" x2="534" y2="88"></line>
+              <text class="dg-muted" x="496" y="112" text-anchor="middle">登记 / 读取</text>
+
+              <line class="dg-line-ok" x1="472" y1="158" x2="732" y2="130"></line>
+              <line class="dg-line" x1="472" y1="192" x2="732" y2="246"></line>
+
+              <text class="dg-muted" x="36" y="336">先抢占再处理；业务失败必须 release，否则 Broker 重投时会被误判为重复而永远跳过。</text>
+            </svg>
+          </div>
+          <figcaption>幂等门：同一个业务 ID 只有第一次能通过，后续投递直接跳过</figcaption>
+        </figure>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rabbitmq/.../support/InMemoryIdempotentStore.java（RocketMQ 模块同名实现）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>public boolean tryAcquire(String scene, String messageId) {
+    String key = scene + ":" + messageId;
+    long now = System.currentTimeMillis();
+    boolean[] first = {false};
+    // compute 对同一个 key 是原子的：并发拿到同一条消息时只有一个线程能看到 null
+    expireAtByKey.compute(key, (ignored, expireAt) -&gt; {
+        if (expireAt == null || expireAt &lt;= now) {
+            first[0] = true;
+            return now + TTL_MILLIS;
+        }
+        return expireAt;
+    });
+    cleanupIfNeeded(now);
+    return first[0];
+}
+
+public void release(String scene, String messageId) {
+    // 业务失败时撤销登记，让重投有机会重新处理
+    expireAtByKey.remove(scene + ":" + messageId);
+}</code></pre>
+        </div>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rabbitmq/.../consumer/IdempotentConsumer.java</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>@RabbitListener(queues = RabbitMQConfig.IDEMPOTENT_QUEUE)
+public void receive(String messageId) {
+    if (!idempotentStore.tryAcquire("rabbitmq", messageId)) {
+        log.info("[IdempotentConsumer] duplicate ignored: {}", messageId);
+        return;
+    }
+    try {
+        log.info("[IdempotentConsumer] processed: {}", messageId);
+        // 真实业务：扣库存、记流水、发积分……
+    } catch (RuntimeException e) {
+        idempotentStore.release("rabbitmq", messageId);
+        throw e;   // 抛出去让 Broker 重投，而不是被当成重复消息吞掉
+    }
+}</code></pre>
+        </div>
+
+        <p>验证：两个模块的接口都支持一次发两条相同 ID，观察日志只处理一次。</p>
+        <div class="code">
+          <div class="code-head"><span class="path">终端 · 幂等验证</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>curl -s -X POST 'http://localhost:8081/api/rabbitmq/idempotent?messageId=REL-1&amp;duplicate=true'
+curl -s -X POST 'http://localhost:8082/api/rocketmq/idempotent?messageId=REL-1&amp;duplicate=true'
+
+# 预期日志（每个模块各一份）
+[IdempotentConsumer] processed: REL-1
+[IdempotentConsumer] duplicate ignored: REL-1</code></pre>
+        </div>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">这个内存实现只适合单实例 Demo</span>
+              应用重启记录就丢，多实例之间也不共享。生产按场景换：
+              <strong>Redis</strong> <code>SET demo:consumed:{id} 1 NX EX 600</code>，
+              或<strong>数据库去重表</strong>对业务唯一键建唯一索引，或直接依赖业务表本身的唯一约束。
+              多实例下「查一次再写」一定会出并发漏洞，必须用原子操作。
+            </p>
+          </div>
+        </div>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <p><span class="title">TTL 怎么定</span>
+              去重窗口至少要覆盖「消息可能被重投的最长时间」：包括消费重试、人工重放、故障恢复。
+              窗口太短，过期后重复消息会再次执行；窗口太长，存储成本上升。
+              业务上更稳妥的做法是让操作本身幂等，例如「把状态置为 PAID」而不是「余额加 100」。
+            </p>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <h3 id="order">4.2 顺序：生产、存储、消费，一环都不能乱</h3>
+        <p>
+          「消息乱序」通常不是 Broker 的默认行为，而是三个环节里有一个没约束住：
+          <strong>生产端并发发送</strong>、<strong>消息被分散到多个队列</strong>、
+          <strong>消费端多线程处理</strong>。要让顺序成立，必须三件事同时成立。
+        </p>
+
+        <div class="compare">
+          <div class="box bad">
+            <h4>错误做法</h4>
+            <ul>
+              <li>同一个队列挂多个消费者，却期望消息按序处理（competing consumers 必然打乱）。</li>
+              <li>生产端循环 <code>convertAndSend</code>，以为「代码里是顺序的」就等于「入队是顺序的」。</li>
+              <li>消费失败就吞掉异常继续处理下一条，失败消息被跳过，后续状态直接错乱。</li>
+              <li>RocketMQ 用普通发送 + 默认并发消费，却期望同一订单严格有序。</li>
+            </ul>
+          </div>
+          <div class="box good">
+            <h4>正确做法</h4>
+            <ul>
+              <li>按业务 key 分区：同一订单 / 用户固定进同一个队列，队列内只用一个消费者。</li>
+              <li>RabbitMQ 开启 confirm 时，把整批发送放进 <code>rabbitTemplate.invoke</code>，绑定同一个 channel。</li>
+              <li>RocketMQ 用 <code>syncSendOrderly</code> + <code>ConsumeMode.ORDERLY</code>。</li>
+              <li>失败不要跳过：重试、阻塞当前分区，超过次数再转 DLQ 并告警。</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="callout danger">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">RabbitMQ 最容易踩的坑：confirm 让发布顺序失效</span>
+              开启 publisher confirm 后，一个 channel 在确认返回前不会归还连接池。
+              循环里的 <code>convertAndSend</code> 可能落到多个 channel 上，而 Broker
+              <strong>只保证同一个 channel 内的发布顺序</strong>。
+              实测只把消费者改成 <code>concurrency = 1</code> 时，日志仍会出现 step-4 / 5 / 6 交错。
+              发送端必须用 <code>invoke</code> 把整批消息钉在同一个 channel 上，并等待确认。
+            </p>
+          </div>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 400" role="img" aria-label="顺序对比：单消费者按序处理，多消费者处理耗时不同导致日志乱序">
+              <rect class="dg-box-ok" x="36" y="28" width="250" height="38" rx="8"></rect>
+              <text class="dg-ok-text" x="161" y="52" text-anchor="middle">concurrency = 1 · 有序</text>
+
+              <rect class="dg-box" x="52" y="92" width="150" height="76" rx="9"></rect>
+              <text class="dg-text-sm" x="127" y="118" text-anchor="middle">demo.ordered.queue</text>
+              <text class="dg-muted" x="127" y="138" text-anchor="middle">step-1 … step-5</text>
+              <text class="dg-muted" x="127" y="155" text-anchor="middle">单个队列</text>
+
+              <rect class="dg-box-ok" x="280" y="92" width="160" height="76" rx="9"></rect>
+              <text class="dg-text-sm" x="360" y="118" text-anchor="middle">OrderedConsumer</text>
+              <text class="dg-muted" x="360" y="138" text-anchor="middle">处理完一条再取下一条</text>
+              <text class="dg-muted" x="360" y="155" text-anchor="middle">固定 20ms</text>
+
+              <rect class="dg-box" x="520" y="92" width="340" height="76" rx="9"></rect>
+              <text class="dg-muted" x="544" y="120">step-1 → step-2 → step-3 → step-4 → step-5</text>
+              <text class="dg-muted" x="544" y="145">日志严格递增</text>
+
+              <line class="dg-line-ok dg-flow" x1="202" y1="130" x2="274" y2="130"></line>
+              <line class="dg-line-ok" x1="440" y1="130" x2="514" y2="130"></line>
+
+              <rect class="dg-box-danger" x="36" y="214" width="250" height="38" rx="8"></rect>
+              <text class="dg-danger-text" x="161" y="238" text-anchor="middle">concurrency = 4 · 乱序</text>
+
+              <rect class="dg-box" x="52" y="276" width="150" height="82" rx="9"></rect>
+              <text class="dg-text-sm" x="127" y="302" text-anchor="middle">demo.unordered.queue</text>
+              <text class="dg-muted" x="127" y="322" text-anchor="middle">step-1 … step-5</text>
+              <text class="dg-muted" x="127" y="339" text-anchor="middle">仍是单队列</text>
+
+              <rect class="dg-box" x="288" y="240" width="122" height="28" rx="6"></rect>
+              <text class="dg-muted" x="349" y="259" text-anchor="middle">线程 1 · 10ms</text>
+              <rect class="dg-box" x="288" y="274" width="122" height="28" rx="6"></rect>
+              <text class="dg-muted" x="349" y="293" text-anchor="middle">线程 2 · 60ms</text>
+              <rect class="dg-box" x="288" y="308" width="122" height="28" rx="6"></rect>
+              <text class="dg-muted" x="349" y="327" text-anchor="middle">线程 3 · 30ms</text>
+              <rect class="dg-box" x="288" y="342" width="122" height="28" rx="6"></rect>
+              <text class="dg-muted" x="349" y="361" text-anchor="middle">线程 4 · 80ms</text>
+
+              <rect class="dg-box" x="540" y="266" width="320" height="80" rx="9"></rect>
+              <text class="dg-danger-text" x="564" y="294">step-2, step-1, step-4, step-3 …</text>
+              <text class="dg-muted" x="564" y="320">先取到的不一定先处理完</text>
+
+              <line class="dg-line" x1="202" y1="317" x2="258" y2="317"></line>
+              <line class="dg-line" x1="258" y1="254" x2="258" y2="356" style="marker-end:none"></line>
+              <line class="dg-line" x1="258" y1="254" x2="282" y2="254"></line>
+              <line class="dg-line" x1="258" y1="288" x2="282" y2="288"></line>
+              <line class="dg-line" x1="258" y1="322" x2="282" y2="322"></line>
+              <line class="dg-line" x1="258" y1="356" x2="282" y2="356"></line>
+              <line class="dg-line" x1="410" y1="317" x2="534" y2="306"></line>
+            </svg>
+          </div>
+          <figcaption>同样的消息，消费者并发度不同，结果完全不同；乱序发生在消费阶段，而不是队列里</figcaption>
+        </figure>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rabbitmq/.../controller/ReliabilityController.java · 顺序发送</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>rabbitTemplate.invoke(operations -&gt; {
+    for (int i = 1; i &lt;= total; i++) {
+        operations.convertAndSend("", RabbitMQConfig.ORDERED_QUEUE, "step-" + i);
+    }
+    return null;   // invoke 退出前会等待这一批的 confirm
+});</code></pre>
+        </div>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rabbitmq/.../consumer/OrderedConsumer.java</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>@RabbitListener(id = "orderedConsumer", queues = RabbitMQConfig.ORDERED_QUEUE, concurrency = "1")
+public void receive(String message) {
+    Delays.sleep(20);
+    log.info("[OrderedConsumer] received: {}", message);
+}</code></pre>
+        </div>
+
+        <p>
+          RocketMQ 的实现见 3.3：<code>syncSendOrderly</code> 负责把同 key 的消息放进同一队列，
+          <code>ConsumeMode.ORDERLY</code> 负责在消费端给队列加锁。两段代码都不长，
+          难的是业务 key 的选择和失败处理。
+        </p>
+
+        <div class="code">
+          <div class="code-head"><span class="path">终端 · 顺序验证</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># RabbitMQ：单消费者严格递增
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/ordered?count=10'
+# 反例：4 个并发消费者，顺序被打乱
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/unordered?count=8'
+
+# RocketMQ：同一个 orderKey 严格递增
+curl -s -X POST 'http://localhost:8082/api/rocketmq/ordered-batch?orderKey=ORDER-1&amp;count=10'</code></pre>
+        </div>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">RocketMQ 新 Topic 的「冷启动」</span>
+              新建 Topic 后第一次消费，路由刷新可能有延迟，最长约 30 秒。日志迟迟不出现时，
+              先等一会儿或去 Dashboard 确认队列和消费组，不要急着怀疑代码。
+            </p>
+          </div>
+        </div>
+
+        <ul>
+          <li><strong>顺序 + 重试 = 队头阻塞</strong>：一条消息失败会挡住后面所有消息。必须区分可重试错误（网络、锁冲突）和不可恢复错误（参数非法），后者直接转 DLQ。</li>
+          <li><strong>扩容方式</strong>：RabbitMQ 按 key 拆多个队列各自单消费者；RocketMQ 增加队列数，并接受重新哈希带来的短暂影响。</li>
+          <li><strong>高可用与顺序</strong>：RabbitMQ 可用 <code>x-single-active-consumer</code> 让同组只有一个消费者活跃；RocketMQ 由队列锁和主从机制配合，不要在同一队列上并行。</li>
+          <li><strong>顺序和幂等一起用</strong>：重投会让同一条消息再次出现，去重不能省。</li>
+        </ul>
+
+        <!-- ============================================================ -->
+        <h3 id="backlog">4.3 积压：先量深度，再谈扩容</h3>
+        <p>
+          积压是「生产速率 &gt; 消费速率」的结果，可能是一次性峰值，也可能是消费者变慢、下游故障、
+          毒消息卡住队列。处理积压的第一步不是加机器，而是<strong>确认堆积量、增速和消费速率</strong>。
+        </p>
+
+        <div class="compare">
+          <div class="box bad">
+            <h4>错误做法</h4>
+            <ul>
+              <li>只看应用日志，不看队列深度和消费位点。</li>
+              <li>RocketMQ 队列只有 4 个，却指望加 10 个实例提升并行度（消费者数超过队列数没有意义）。</li>
+              <li>prefetch 调得很大，单实例囤一堆消息；实例一挂，全部重投，雪崩。</li>
+              <li>毒消息无限重试，把整个队列堵死。</li>
+              <li>为了削峰把消息无限堆在应用内存里，进程一重启全丢。</li>
+            </ul>
+          </div>
+          <div class="box good">
+            <h4>正确做法</h4>
+            <ul>
+              <li>RabbitMQ 看 Ready / Unacked；RocketMQ 看 Dashboard 的 Diff（最大位点 - 消费位点）。</li>
+              <li>先确认是「消费慢」还是「生产突增」，再决定扩容、限流还是降级。</li>
+              <li>扩容前确认下游容量；数据库往往先成为瓶颈。</li>
+              <li>配置重试上限 + DLQ，毒消息及时隔离并告警。</li>
+              <li>用暂停 / 恢复演练验证消费能力和恢复时间。</li>
+            </ul>
+          </div>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 340" role="img" aria-label="积压曲线：暂停消费者后发送 200 条，深度升到 200 并保持，恢复消费后逐步下降到 0">
+              <line class="dg-line" style="marker-end:none" x1="70" y1="285" x2="856" y2="285"></line>
+              <line class="dg-line" style="marker-end:none" x1="70" y1="285" x2="70" y2="52"></line>
+              <text class="dg-muted" x="70" y="38" text-anchor="middle">队列深度</text>
+              <text class="dg-muted" x="840" y="308" text-anchor="end">时间</text>
+
+              <line class="dg-life" x1="312" y1="60" x2="312" y2="285"></line>
+              <line class="dg-life" x1="566" y1="60" x2="566" y2="285"></line>
+              <text class="dg-muted" x="312" y="54" text-anchor="middle">暂停消费者</text>
+              <text class="dg-muted" x="568" y="54" text-anchor="middle">恢复消费</text>
+
+              <path d="M80 280 L300 280 L308 92 L558 92 L690 160 L840 278 Z"
+                    fill="url(#areaGrad)" opacity=".28"></path>
+              <path class="dg-line-accent" d="M80 280 L300 280 L308 92 L558 92 L690 160 L840 278"
+                    style="marker-end:none"></path>
+
+              <text class="dg-accent-text" x="320" y="84">200 条积压</text>
+              <text class="dg-muted" x="82" y="304" text-anchor="middle">0</text>
+              <text class="dg-muted" x="308" y="255" text-anchor="middle">发送 200 条</text>
+              <text class="dg-muted" x="700" y="185" text-anchor="middle">消费能力恢复</text>
+              <text class="dg-muted" x="70" y="326">暂停期间深度只增不减；恢复后以消费速率下降。RocketMQ 的 Diff 口径相同，只是数据来自 Broker 位点。</text>
+
+              <defs>
+                <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" style="stop-color:var(--accent);stop-opacity:.65"></stop>
+                  <stop offset="100%" style="stop-color:var(--accent);stop-opacity:0"></stop>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+          <figcaption>积压演练：暂停消费者制造堆积，恢复后观察下降速度；下降慢说明消费能力或下游有问题</figcaption>
+        </figure>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rabbitmq/.../controller/ReliabilityController.java · 暂停 / 恢复 / 查询</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>private Map&lt;String, String&gt; setContainerRunning(String containerId, boolean running) {
+    MessageListenerContainer container = listenerRegistry.getListenerContainer(containerId);
+    if (running) {
+        container.start();   // 重新拉取
+    } else {
+        container.stop();    // 停止拉取，未 ACK 的消息重新入队
+    }
+    return Map.of("container", containerId, "running", String.valueOf(container.isRunning()));
+}
+
+private Map&lt;String, String&gt; queueStatus(String queue, String containerId) {
+    QueueInformation info = amqpAdmin.getQueueInfo(queue);
+    // messageCount 是 Ready（尚未投递）的数量；已投递未 ACK 的要看 Unacked
+    String messageCount = info == null ? "unknown" : String.valueOf(info.getMessageCount());
+    // ...
+}</code></pre>
+        </div>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rocketmq/.../support/RocketMQConsumerControl.java · 暂停 / 恢复</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>public void suspend(String consumerGroup) {
+    findContainer(consumerGroup).getConsumer().suspend();   // 停止拉取，位点不推进
+    suspendedGroups.add(consumerGroup);
+}
+
+public void resume(String consumerGroup) {
+    findContainer(consumerGroup).getConsumer().resume();    // 从原消费位点继续
+    suspendedGroups.remove(consumerGroup);
+}</code></pre>
+        </div>
+
+        <p>验证：先暂停，再发 200 条，确认堆积，最后恢复。</p>
+        <div class="code">
+          <div class="code-head"><span class="path">终端 · 积压验证</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># RabbitMQ
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/backlog/pause'
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/backlog/send?count=200'
+curl -s 'http://localhost:8081/api/rabbitmq/backlog/status'
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/backlog/resume'
+
+# RocketMQ：堆积量去 Dashboard 消费者页看 Diff
+curl -s -X POST 'http://localhost:8082/api/rocketmq/backlog/pause'
+curl -s -X POST 'http://localhost:8082/api/rocketmq/backlog/send?count=200'
+curl -s -X POST 'http://localhost:8082/api/rocketmq/backlog/resume'</code></pre>
+        </div>
+
+        <div class="code">
+          <div class="code-head"><span class="path">控制台 · RabbitMQ 实测</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>暂停后        {"queue":"demo.backlog.queue","messageCount":"200","consumerRunning":"false"}
+恢复后约 1 秒  {"queue":"demo.backlog.queue","messageCount":"0","consumerRunning":"true"}</code></pre>
+        </div>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <p><span class="title">暂停不是「立刻停」</span>
+              RabbitMQ 的 <code>stop()</code> 会等待在途消息处理完，未 ACK 的重新入队；
+              RocketMQ 的 <code>suspend()</code> 只停止继续拉取，<strong>已经拉到客户端 processQueue 的消息仍会被消费</strong>。
+              实测暂停后还会再消费 4 条左右，这是正常的，不是暂停失效。
+            </p>
+          </div>
+        </div>
+
+        <ul>
+          <li><strong>RabbitMQ 扩容</strong>：给同一队列加消费者即可提升吞吐，但会破坏顺序；需要顺序时按 key 拆队列。</li>
+          <li><strong>RocketMQ 扩容</strong>：并行度上限 = 队列数；队列不够时加实例只会让部分实例空闲。</li>
+          <li><strong>批量消费</strong>：RocketMQ 可调大 <code>consumeMessageBatchMaxSize</code> 配合批量写库；RabbitMQ 可调大 prefetch，但要给下游留余量。</li>
+          <li><strong>容量规划</strong>：按峰值生产速率和单条处理耗时估算需要的并行度，并保留 30% 以上余量。</li>
+        </ul>
+
+        <!-- ============================================================ -->
+        <h3 id="persistence">4.4 持久化：别把「写进内存」当成「不会丢」</h3>
+        <p>
+          持久化要回答两个问题：Broker 重启后消息还在吗？机器断电后消息还在吗？
+          两个中间件的默认值和保证强度不同，但共同点是：<strong>持久化只保证「不丢」，不保证「只消费一次」</strong>。
+        </p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>维度</th><th>RabbitMQ</th><th>RocketMQ</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>队列本身</td><td><code>durable=true</code>，否则重启后队列定义消失</td><td>Topic / 队列元数据由 Broker 管理</td></tr>
+              <tr><td>消息本身</td><td>必须显式 <code>PERSISTENT</code>；<code>convertAndSend</code> 默认就是持久化</td><td>统一追加写 CommitLog，无需单独设置</td></tr>
+              <tr><td>落盘时机</td><td>持久化消息在确认前写入磁盘</td><td>默认 <code>ASYNC_FLUSH</code>；强可靠改 <code>SYNC_FLUSH</code></td></tr>
+              <tr><td>高可用</td><td>Quorum Queue / 镜像队列</td><td>主从同步 / DLedger（Raft）</td></tr>
+              <tr><td>消费进度</td><td>未 ACK 消息会重新投递</td><td>offset 提交；重启后从已提交位点继续</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="compare">
+          <div class="box bad">
+            <h4>错误做法</h4>
+            <ul>
+              <li>队列 durable，但消息设成 <code>NON_PERSISTENT</code>，以为队列持久化就万事大吉。</li>
+              <li>生产者 fire-and-forget，不看 confirm，Broker 拒绝或路由失败都不知道。</li>
+              <li>消费者开启自动 ACK，消息一到就确认，处理到一半崩溃就彻底丢了。</li>
+              <li>本地验证用 <code>docker compose down</code>，容器和数据卷一起删掉，误判成「持久化失效」。</li>
+              <li>单 Broker 无副本，却把它当成金融级可靠存储。</li>
+            </ul>
+          </div>
+          <div class="box good">
+            <h4>正确做法</h4>
+            <ul>
+              <li>RabbitMQ 三个条件同时满足：durable queue + persistent message + durable exchange。</li>
+              <li>生产端开启 confirm，失败可重发；必要时开启 mandatory + return。</li>
+              <li>消费端处理成功后再 ACK；失败重试，最终进 DLQ。</li>
+              <li>RocketMQ 用 <code>syncSend</code>，强可靠场景开同步刷盘 + 副本。</li>
+              <li>生产环境挂持久化卷、做备份、监控磁盘和副本状态。</li>
+            </ul>
+          </div>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 340" role="img" aria-label="持久化对比：持久化消息重启后仍在，非持久化消息重启后丢失">
+              <text class="dg-ok-text" x="30" y="48">PERSISTENT</text>
+              <rect class="dg-box-accent" x="30" y="62" width="118" height="50" rx="8"></rect>
+              <text class="dg-text-sm" x="89" y="92" text-anchor="middle">Producer</text>
+              <rect class="dg-box" x="208" y="62" width="150" height="50" rx="8"></rect>
+              <text class="dg-text-sm" x="283" y="92" text-anchor="middle">Broker 内存</text>
+              <rect class="dg-box-ok" x="418" y="62" width="160" height="50" rx="8"></rect>
+              <text class="dg-text-sm" x="498" y="92" text-anchor="middle">磁盘 / CommitLog</text>
+              <rect class="dg-box-ok" x="742" y="62" width="128" height="50" rx="8"></rect>
+              <text class="dg-ok-text" x="806" y="92" text-anchor="middle">仍可消费</text>
+
+              <line class="dg-line-accent dg-flow" x1="148" y1="87" x2="202" y2="87"></line>
+              <line class="dg-line-ok dg-flow" x1="358" y1="87" x2="412" y2="87"></line>
+              <line class="dg-line-ok" x1="578" y1="87" x2="736" y2="87"></line>
+
+              <text class="dg-danger-text" x="30" y="186">NON_PERSISTENT</text>
+              <rect class="dg-box-accent" x="30" y="200" width="118" height="50" rx="8"></rect>
+              <text class="dg-text-sm" x="89" y="230" text-anchor="middle">Producer</text>
+              <rect class="dg-box" x="208" y="200" width="150" height="50" rx="8"></rect>
+              <text class="dg-text-sm" x="283" y="230" text-anchor="middle">Broker 内存</text>
+              <rect class="dg-box" x="418" y="200" width="160" height="50" rx="8" style="stroke-dasharray:4 4"></rect>
+              <text class="dg-muted" x="498" y="230" text-anchor="middle">不保证落盘</text>
+              <rect class="dg-box-danger" x="742" y="200" width="128" height="50" rx="8"></rect>
+              <text class="dg-danger-text" x="806" y="230" text-anchor="middle">重启后丢失</text>
+
+              <line class="dg-line-accent dg-flow" x1="148" y1="225" x2="202" y2="225"></line>
+              <line class="dg-line-danger dg-line-dashed" x1="358" y1="225" x2="412" y2="225"></line>
+              <line class="dg-line-danger dg-line-dashed" x1="578" y1="225" x2="736" y2="225"></line>
+
+              <line class="dg-life" x1="650" y1="30" x2="650" y2="292"></line>
+              <text class="dg-muted" x="650" y="24" text-anchor="middle">Broker 重启</text>
+
+              <text class="dg-muted" x="30" y="322">队列 durable 只保住「队列定义」；消息是否还在，取决于 deliveryMode 与刷盘/副本策略。</text>
+            </svg>
+          </div>
+          <figcaption>持久化与非持久化的差别在重启那一刻才显现；非持久化消息偶尔残留不代表可靠</figcaption>
+        </figure>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rabbitmq/.../controller/ReliabilityController.java · 发送持久化消息</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>MessageDeliveryMode deliveryMode = persistent
+        ? MessageDeliveryMode.PERSISTENT      // 写磁盘
+        : MessageDeliveryMode.NON_PERSISTENT; // 只存在内存
+
+MessageProperties properties = new MessageProperties();
+properties.setDeliveryMode(deliveryMode);
+properties.setContentType(MessageProperties.CONTENT_TYPE_TEXT_PLAIN);
+properties.setMessageId("persist-" + i + "-" + System.currentTimeMillis());
+
+Message message = new Message(("persist-" + i).getBytes(StandardCharsets.UTF_8), properties);
+rabbitTemplate.send("", RabbitMQConfig.PERSISTENCE_QUEUE, message);</code></pre>
+        </div>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rocketmq/.../controller/ReliabilityController.java · 同步发送</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>for (int i = 1; i &lt;= total; i++) {
+    // syncSend 返回 SendResult 才代表 Broker 已接收并写入存储
+    rocketTemplate.syncSend(ReliabilityTopics.PERSISTENCE_TOPIC, "persist-" + i);
+}</code></pre>
+        </div>
+
+        <p>验证步骤：暂停消费者 → 发送 → 只重启 Broker → 查状态 → 恢复消费。</p>
+        <div class="code">
+          <div class="code-head"><span class="path">终端 · 持久化演练</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># RabbitMQ：3 条持久化 + 3 条非持久化
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/persistence/pause'
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/persistence/send?count=3&amp;persistent=true'
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/persistence/send?count=3&amp;persistent=false'
+curl -s 'http://localhost:8081/api/rabbitmq/persistence/status'
+docker compose restart rabbitmq
+curl -s 'http://localhost:8081/api/rabbitmq/persistence/status'
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/persistence/resume'
+
+# RocketMQ
+curl -s -X POST 'http://localhost:8082/api/rocketmq/persistence/pause'
+curl -s -X POST 'http://localhost:8082/api/rocketmq/persistence/send?count=3'
+docker compose restart rocketmq-broker
+curl -s -X POST 'http://localhost:8082/api/rocketmq/persistence/resume'</code></pre>
+        </div>
+
+        <div class="code">
+          <div class="code-head"><span class="path">控制台 · 实测结果</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>RabbitMQ 重启前  {"messageCount":"6"}   # 3 持久化 + 3 非持久化
+RabbitMQ 重启后  {"messageCount":"3"}   # 只剩持久化消息
+恢复消费日志      [PersistenceConsumer] received: persist-1 / 2 / 3
+
+RocketMQ 重启后恢复消费
+[PersistenceConsumer] received: persist-1 / 2 / 3</code></pre>
+        </div>
+
+        <div class="callout danger">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">为什么强调 restart 而不是 down/up</span>
+              本仓库的 RabbitMQ 和 RocketMQ Broker 都<strong>没有挂数据卷</strong>。
+              <code>restart</code> 复用原容器，数据还在；<code>down</code> 再 <code>up</code> 会创建新容器，
+              队列和 CommitLog 一起清空。用错命令会把「持久化正常」误判成「持久化失效」。
+            </p>
+          </div>
+        </div>
+
+        <ul>
+          <li><strong>RabbitMQ 强可靠</strong>：使用 Quorum Queue（Raft 复制），但注意它不支持优先级，且资源开销更高。</li>
+          <li><strong>RocketMQ 强可靠</strong>：<code>flushDiskType=SYNC_FLUSH</code> + 主从同步 / DLedger；吞吐会下降，按业务分级选择。</li>
+          <li><strong>持久化不等于消费成功</strong>：消息落盘只保证可再次投递，业务处理仍然要幂等。</li>
+          <li><strong>保留期</strong>：RocketMQ 默认保留 72 小时，超期清理；需要更长的审计/重放要提前规划。</li>
+        </ul>
+
+        <!-- ============================================================ -->
+        <h3 id="priority">4.5 优先级：先处理谁，以及它的边界</h3>
+        <p>
+          优先级不是「可靠」问题，而是<strong>资源有限时的调度策略</strong>。它只在消息排队时起作用，
+          不能抢占已经在处理的消息，也不能替代容量规划。两个中间件的实现路径完全不同：
+          RabbitMQ 有原生优先级队列，RocketMQ 没有消息级优先级，只能靠 Topic / 队列隔离。
+        </p>
+
+        <div class="compare">
+          <div class="box bad">
+            <h4>错误做法</h4>
+            <ul>
+              <li>消费者一直空闲，发消息时设优先级，期望「高优先级先处理」——消息一到就被取走了，没有排队可比较。</li>
+              <li>在消费端根据消息头排序，但消息已经被多线程同时取走，顺序无法改变。</li>
+              <li>RocketMQ 在消息属性里塞 <code>priority</code>，以为 Broker 会排序（Broker 只按 FIFO）。</li>
+              <li>设 100 个优先级，或把核心链路和大流量低优先级混在一个队列。</li>
+              <li>认为「高优先级」可以无限插队，不考虑低优先级被饿死。</li>
+            </ul>
+          </div>
+          <div class="box good">
+            <h4>正确做法</h4>
+            <ul>
+              <li>RabbitMQ 声明 <code>x-max-priority</code>，在消息属性里设置优先级；用暂停 / 恢复制造排队再观察。</li>
+              <li>优先级敏感时把 prefetch 调小，避免一次预取太多低优先级消息。</li>
+              <li>RocketMQ 按优先级拆 Topic + 独立消费者组，做资源隔离；低优先级可单独暂停、限流、扩容。</li>
+              <li>核心链路用独立队列 / 独立消费者，而不是只靠优先级数值。</li>
+              <li>为低优先级设计老化或保底配额，避免长期饥饿。</li>
+            </ul>
+          </div>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 410" role="img" aria-label="优先级对比：RabbitMQ 在同一队列内按 priority 重排，RocketMQ 通过三个独立 Topic 和消费者组隔离">
+              <text class="dg-text" x="30" y="28">RabbitMQ · 队列内重排</text>
+
+              <rect class="dg-box" x="36" y="56" width="178" height="256" rx="10"></rect>
+              <text class="dg-muted" x="125" y="78" text-anchor="middle">demo.priority.queue</text>
+
+              <rect class="dg-box" x="54" y="92" width="142" height="44" rx="6"></rect>
+              <text class="dg-text-sm" x="125" y="119" text-anchor="middle">p1-1 · priority=1</text>
+              <rect class="dg-box" x="54" y="156" width="142" height="44" rx="6"></rect>
+              <text class="dg-text-sm" x="125" y="183" text-anchor="middle">p5-1 · priority=5</text>
+              <rect class="dg-box-ok" x="54" y="220" width="142" height="44" rx="6"></rect>
+              <text class="dg-text-sm" x="125" y="247" text-anchor="middle">p9-1 · priority=9</text>
+              <text class="dg-muted" x="125" y="292" text-anchor="middle">x-max-priority = 10</text>
+
+              <rect class="dg-box-ok" x="300" y="142" width="116" height="62" rx="9"></rect>
+              <text class="dg-text-sm" x="358" y="168" text-anchor="middle">Consumer</text>
+              <text class="dg-muted" x="358" y="188" text-anchor="middle">concurrency = 1</text>
+
+              <line class="dg-line-ok dg-flow" x1="214" y1="173" x2="294" y2="173"></line>
+              <text class="dg-ok-text" x="254" y="132" text-anchor="middle">出队</text>
+              <text class="dg-ok-text" x="254" y="222" text-anchor="middle">p9 → p5 → p1</text>
+
+              <line class="dg-life" x1="452" y1="40" x2="452" y2="382"></line>
+
+              <text class="dg-text" x="486" y="28">RocketMQ · Topic / 消费者隔离</text>
+
+              <rect class="dg-box" x="486" y="78" width="76" height="40" rx="7"></rect>
+              <text class="dg-text-sm" x="524" y="103" text-anchor="middle">high</text>
+              <rect class="dg-box-ok" x="600" y="78" width="120" height="40" rx="7"></rect>
+              <text class="dg-muted" x="660" y="103" text-anchor="middle">priority-high-topic</text>
+              <rect class="dg-box-ok" x="760" y="78" width="110" height="40" rx="7"></rect>
+              <text class="dg-text-sm" x="815" y="103" text-anchor="middle">独立消费者</text>
+              <line class="dg-line-ok dg-flow" x1="562" y1="98" x2="594" y2="98"></line>
+              <line class="dg-line-ok dg-flow" x1="720" y1="98" x2="754" y2="98"></line>
+
+              <rect class="dg-box" x="486" y="164" width="76" height="40" rx="7"></rect>
+              <text class="dg-text-sm" x="524" y="189" text-anchor="middle">normal</text>
+              <rect class="dg-box" x="600" y="164" width="120" height="40" rx="7"></rect>
+              <text class="dg-muted" x="660" y="189" text-anchor="middle">priority-normal-topic</text>
+              <rect class="dg-box" x="760" y="164" width="110" height="40" rx="7"></rect>
+              <text class="dg-text-sm" x="815" y="189" text-anchor="middle">独立消费者</text>
+              <line class="dg-line" x1="562" y1="184" x2="594" y2="184"></line>
+              <line class="dg-line" x1="720" y1="184" x2="754" y2="184"></line>
+
+              <rect class="dg-box" x="486" y="250" width="76" height="40" rx="7"></rect>
+              <text class="dg-text-sm" x="524" y="275" text-anchor="middle">low</text>
+              <rect class="dg-box-warn" x="600" y="250" width="120" height="40" rx="7"></rect>
+              <text class="dg-muted" x="660" y="275" text-anchor="middle">priority-low-topic</text>
+              <rect class="dg-box-danger" x="760" y="250" width="110" height="40" rx="7"></rect>
+              <text class="dg-danger-text" x="815" y="275" text-anchor="middle">暂停 · 40 条</text>
+              <line class="dg-line" x1="562" y1="270" x2="594" y2="270"></line>
+              <line class="dg-line-danger dg-line-dashed" x1="720" y1="270" x2="754" y2="270"></line>
+
+              <text class="dg-muted" x="486" y="330">低优先级堆积 / 暂停时，高优先级仍有自己的</text>
+              <text class="dg-muted" x="486" y="348">队列、线程和消费位点，不会被拖慢。</text>
+              <text class="dg-muted" x="486" y="372">但这不是「插队」：不同 Topic 的消息之间没有全局顺序。</text>
+            </svg>
+          </div>
+          <figcaption>RabbitMQ 在队列内部按优先级出队；RocketMQ 用资源隔离换取高优先级链路的稳定性</figcaption>
+        </figure>
+
+        <h4>放大看：优先级队列内部是多个 FIFO 子队列</h4>
+        <p>
+          <code>x-max-priority = 10</code> 并不是让一条队列按优先级全局排序，而是让 Broker 在内部维护
+          <strong>0～10 共 11 条子队列</strong>。入队时按消息的 <code>priority</code> 放进对应子队列；
+          出队时从<strong>最高的非空子队列</strong>开始取，某一档空了才轮到下一档。每个子队列内部仍然是 FIFO。
+        </p>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 478" role="img" aria-label="优先级队列内部结构：Broker 把 demo.priority.queue 拆成 0 到 10 共 11 个 FIFO 子队列，消费时从最高非空档开始取">
+              <rect class="dg-box-accent" x="24" y="171" width="120" height="64" rx="9"></rect>
+              <text class="dg-text-sm" x="84" y="198" text-anchor="middle">Producer</text>
+              <text class="dg-muted" x="84" y="216" text-anchor="middle">消息带 priority</text>
+
+              <line class="dg-line dg-flow" x1="146" y1="203" x2="206" y2="203"></line>
+              <text class="dg-muted" x="176" y="191" text-anchor="middle">投递</text>
+
+              <rect class="dg-box" x="210" y="40" width="400" height="373" rx="12"></rect>
+              <text class="dg-text" x="226" y="66">demo.priority.queue</text>
+              <text class="dg-muted" x="226" y="84">x-max-priority = 10 → Broker 内部 0 ~ 10 共 11 个 FIFO 子队列</text>
+
+              <rect class="dg-box" x="224" y="100" width="38" height="34" rx="6"></rect>
+              <text class="dg-text-sm" x="243" y="122" text-anchor="middle">10</text>
+              <rect class="dg-lane" x="270" y="100" width="320" height="34" rx="6"></rect>
+              <text class="dg-muted" x="430" y="122" text-anchor="middle">（空）</text>
+              <text class="dg-muted" x="584" y="122" text-anchor="end">FIFO</text>
+
+              <rect class="dg-box-ok" x="224" y="143" width="38" height="34" rx="6"></rect>
+              <text class="dg-text-sm" x="243" y="165" text-anchor="middle">9</text>
+              <rect class="dg-box-ok" x="270" y="143" width="320" height="34" rx="6"></rect>
+              <rect class="dg-box" x="278" y="147" width="96" height="26" rx="5"></rect>
+              <text class="dg-text-sm" x="326" y="165" text-anchor="middle">m9-1</text>
+              <rect class="dg-box" x="382" y="147" width="96" height="26" rx="5"></rect>
+              <text class="dg-text-sm" x="430" y="165" text-anchor="middle">m9-2</text>
+              <text class="dg-muted" x="584" y="165" text-anchor="end">FIFO</text>
+
+              <rect class="dg-lane" x="224" y="186" width="366" height="34" rx="6" stroke-dasharray="4 4"></rect>
+              <text class="dg-muted" x="407" y="208" text-anchor="middle">… 6 / 7 / 8 …</text>
+
+              <rect class="dg-box" x="224" y="229" width="38" height="34" rx="6"></rect>
+              <text class="dg-text-sm" x="243" y="251" text-anchor="middle">5</text>
+              <rect class="dg-lane" x="270" y="229" width="320" height="34" rx="6"></rect>
+              <rect class="dg-box" x="278" y="233" width="96" height="26" rx="5"></rect>
+              <text class="dg-text-sm" x="326" y="251" text-anchor="middle">m5-1</text>
+              <text class="dg-muted" x="584" y="251" text-anchor="end">FIFO</text>
+
+              <rect class="dg-lane" x="224" y="272" width="366" height="34" rx="6" stroke-dasharray="4 4"></rect>
+              <text class="dg-muted" x="407" y="294" text-anchor="middle">… 4 / 3 / 2 …</text>
+
+              <rect class="dg-box" x="224" y="315" width="38" height="34" rx="6"></rect>
+              <text class="dg-text-sm" x="243" y="337" text-anchor="middle">1</text>
+              <rect class="dg-lane" x="270" y="315" width="320" height="34" rx="6"></rect>
+              <rect class="dg-box" x="278" y="319" width="96" height="26" rx="5"></rect>
+              <text class="dg-text-sm" x="326" y="337" text-anchor="middle">m1-1</text>
+              <text class="dg-muted" x="584" y="337" text-anchor="end">FIFO</text>
+
+              <rect class="dg-box" x="224" y="358" width="38" height="34" rx="6"></rect>
+              <text class="dg-text-sm" x="243" y="380" text-anchor="middle">0</text>
+              <rect class="dg-lane" x="270" y="358" width="320" height="34" rx="6"></rect>
+              <text class="dg-muted" x="430" y="380" text-anchor="middle">（空）</text>
+              <text class="dg-muted" x="584" y="380" text-anchor="end">FIFO</text>
+
+              <rect class="dg-box-ok" x="700" y="128" width="150" height="64" rx="9"></rect>
+              <text class="dg-text-sm" x="775" y="154" text-anchor="middle">Consumer</text>
+              <text class="dg-muted" x="775" y="173" text-anchor="middle">concurrency = 1</text>
+              <line class="dg-line-ok dg-flow" x1="590" y1="160" x2="694" y2="160"></line>
+              <text class="dg-ok-text" x="642" y="146" text-anchor="middle">取最高非空档</text>
+
+              <text class="dg-muted" x="24" y="443">出队顺序：最高非空子队列 → 下一档，跳过空档；每个子队列内部仍然是 FIFO。</text>
+              <text class="dg-muted" x="24" y="463">优先级只对 Ready 消息生效；已经投递给消费者的消息不会被后来者抢占。</text>
+            </svg>
+          </div>
+          <figcaption>优先级队列不是一条队列内全局排序，而是多个 FIFO 子队列按档位择优出队</figcaption>
+        </figure>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rabbitmq/.../config/RabbitMQConfig.java · consumer/PriorityConsumer.java</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>@Bean
+public Queue priorityQueue() {
+    // x-max-priority 必须在声明时指定，之后不能修改
+    return QueueBuilder.durable(PRIORITY_QUEUE)
+            .maxPriority(PRIORITY_MAX)   // 10
+            .build();
+}
+
+@RabbitListener(id = "priorityConsumer", queues = RabbitMQConfig.PRIORITY_QUEUE, concurrency = "1")
+public void receive(Message message) {
+    String body = new String(message.getBody(), StandardCharsets.UTF_8);
+    Integer priority = message.getMessageProperties().getPriority();
+    Delays.sleep(30);
+    log.info("[PriorityConsumer] received: {} (priority={})", body, priority);
+}</code></pre>
+        </div>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rabbitmq/.../controller/ReliabilityController.java · 设置优先级并整批发送</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>int level = Math.max(0, Math.min(priority, RabbitMQConfig.PRIORITY_MAX));
+rabbitTemplate.invoke(operations -&gt; {
+    for (int i = 1; i &lt;= total; i++) {
+        operations.convertAndSend("", RabbitMQConfig.PRIORITY_QUEUE, "p" + level + "-" + i,
+                message -&gt; {
+                    // 优先级写在消息属性里，不是消息体
+                    message.getMessageProperties().setPriority(level);
+                    return message;
+                });
+    }
+    return null;
+});</code></pre>
+        </div>
+
+        <div class="code">
+          <div class="code-head"><span class="path">demo-rocketmq/.../controller/ReliabilityController.java · Topic 路由</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>private record PriorityRoute(String level, String topic, String group) {
+}
+
+private PriorityRoute route(String level) {
+    String normalized = level.toLowerCase(Locale.ROOT);
+    return switch (normalized) {
+        case "high" -&gt; new PriorityRoute(normalized,
+                ReliabilityTopics.PRIORITY_HIGH_TOPIC, ReliabilityTopics.PRIORITY_HIGH_GROUP);
+        case "normal" -&gt; new PriorityRoute(normalized,
+                ReliabilityTopics.PRIORITY_NORMAL_TOPIC, ReliabilityTopics.PRIORITY_NORMAL_GROUP);
+        case "low" -&gt; new PriorityRoute(normalized,
+                ReliabilityTopics.PRIORITY_LOW_TOPIC, ReliabilityTopics.PRIORITY_LOW_GROUP);
+        default -&gt; throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST, "level must be high / normal / low");
+    };
+}</code></pre>
+        </div>
+
+        <p>RabbitMQ 验证：先暂停，让消息排队；按低 → 中 → 高发送；恢复后观察出队顺序。</p>
+        <div class="code">
+          <div class="code-head"><span class="path">终端 · 优先级验证</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># RabbitMQ
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/priority/pause'
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/priority/send?priority=1&amp;count=5'
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/priority/send?priority=5&amp;count=5'
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/priority/send?priority=9&amp;count=5'
+curl -s 'http://localhost:8081/api/rabbitmq/priority/status'
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/priority/resume'
+
+# RocketMQ：暂停 low，制造低优先级积压
+curl -s -X POST 'http://localhost:8082/api/rocketmq/priority/pause?level=low'
+curl -s -X POST 'http://localhost:8082/api/rocketmq/priority/send?level=low&amp;count=40'
+curl -s -X POST 'http://localhost:8082/api/rocketmq/priority/send?level=high&amp;count=20'
+curl -s -X POST 'http://localhost:8082/api/rocketmq/priority/send?level=normal&amp;count=10'
+curl -s -X POST 'http://localhost:8082/api/rocketmq/priority/resume?level=low'</code></pre>
+        </div>
+
+        <div class="code">
+          <div class="code-head"><span class="path">控制台 · 实测结果</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>RabbitMQ 恢复后：
+[PriorityConsumer] received: p9-1 (priority=9)   # 5 条 p9
+[PriorityConsumer] received: p5-1 (priority=5)   # 5 条 p5
+[PriorityConsumer] received: p1-1 (priority=1)   # 5 条 p1
+
+RocketMQ 暂停 low 期间：
+PriorityHighConsumer    20 条   （全部消费）
+PriorityNormalConsumer  10 条   （全部消费）
+PriorityLowConsumer      0 条   （40 条待消费）
+
+恢复 low 后：
+PriorityLowConsumer     40 条   （从原消费位点补齐）</code></pre>
+        </div>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">RabbitMQ 优先级的三个边界</span>
+              ① 只对<strong>还在队列里排队（Ready）</strong>的消息生效，已在消费者手里的无法被抢占；
+              ② prefetch 越大，一次预取的低优先级越多，效果越弱；
+              ③ 优先级会牺牲吞吐，Quorum Queue 不支持优先级。核心链路的实时性更应该靠独立队列 / 独立消费者。
+            </p>
+          </div>
+        </div>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <p><span class="title">RocketMQ 的替代方案</span>
+              如果必须在同一 Topic 内按优先级处理，只能在应用内调度：消费者把消息放进
+              <code>PriorityBlockingQueue</code>，少量线程按优先级取出。代价是消息在内存排队、
+              ACK 延迟、进程崩溃会重复消费、内存可能堆积，必须配容量上限和幂等。
+              更常见的做法是低优先级用延迟消息错峰，或直接拆独立集群做物理隔离。
+            </p>
+          </div>
+        </div>
+
+        <h3>把五个问题串起来</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>如果只做一件事</th><th>会发生什么</th><th>还需要补什么</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>只加消费者解决积压</td><td>吞吐上去了，但同一队列并发消费破坏顺序</td><td>按 key 拆队列，或接受无序</td></tr>
+              <tr><td>只开持久化</td><td>重启不丢，但重复投递仍会发生</td><td>消费端幂等 + ACK 时机</td></tr>
+              <tr><td>只做顺序</td><td>一条失败消息阻塞整个队列</td><td>失败分类 + DLQ + 告警</td></tr>
+              <tr><td>只设优先级</td><td>高优先级在空闲时没有意义，低优先级可能饿死</td><td>隔离 + 配额 / 老化</td></tr>
+              <tr><td>只做幂等</td><td>重复没了，但积压、丢消息、乱序照旧</td><td>五个问题一起设计</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <section id="selection">
+        <h2><span class="no">05</span>选型与生产清单</h2>
+        <p class="lead">
+          选型不是「谁更先进」，而是「哪组约束更重要」。先列出必须满足的约束，再看哪个中间件的默认能力更接近，
+          最后用工程手段补齐差距。
+        </p>
+
+        <h3>按约束选，而不是按名气选</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>你的约束 / 场景</th><th>更合适</th><th>原因</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>路由维度多：按业务域、通配符、一封多投</td>
+                <td>RabbitMQ</td>
+                <td>Exchange + Binding 表达力强，改路由不用改生产代码</td>
+              </tr>
+              <tr>
+                <td>高吞吐、海量堆积、日志 / 埋点 / 事件流</td>
+                <td>RocketMQ</td>
+                <td>CommitLog 顺序写，堆积能力和吞吐更适合大规模</td>
+              </tr>
+              <tr>
+                <td>同一订单 / 用户严格有序，且要并行处理不同 key</td>
+                <td>RocketMQ</td>
+                <td>sharding key + ORDERLY 是内建能力；RabbitMQ 需自己按 key 拆队列</td>
+              </tr>
+              <tr>
+                <td>本地事务与发消息必须最终一致</td>
+                <td>RocketMQ</td>
+                <td>原生事务消息 + 回查；RabbitMQ 通常靠 Outbox / 本地消息表</td>
+              </tr>
+              <tr>
+                <td>延迟 / 定时投递</td>
+                <td>RocketMQ（固定级别）</td>
+                <td>delayLevel 开箱即用；RabbitMQ 需 TTL + DLX 或延迟插件</td>
+              </tr>
+              <tr>
+                <td>需要按时间回溯、重置位点重放</td>
+                <td>RocketMQ</td>
+                <td>消息保留 + offset 重置；RabbitMQ 消费即删，回溯要靠归档</td>
+              </tr>
+              <tr>
+                <td>消息级优先级，且希望由 Broker 排序</td>
+                <td>RabbitMQ</td>
+                <td>原生 <code>x-max-priority</code>；RocketMQ 只能做 Topic 隔离</td>
+              </tr>
+              <tr>
+                <td>需要 MQTT / STOMP 等多协议接入</td>
+                <td>RabbitMQ</td>
+                <td>协议插件生态成熟；RocketMQ 以自有协议为主</td>
+              </tr>
+              <tr>
+                <td>团队规模小、消息量不大、追求低运维成本</td>
+                <td>RabbitMQ</td>
+                <td>单机即可覆盖多数场景，管理台直观</td>
+              </tr>
+              <tr>
+                <td>金融级不丢 + 可审计 + 高可用</td>
+                <td>两者都可，但都要补齐</td>
+                <td>持久化 + 副本 + 确认 + 幂等 + 演练，缺一不可</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout tip">
+          <span class="ico">✓</span>
+          <div>
+            <p><span class="title">一个务实的判断顺序</span>
+              先看<strong>投递语义和顺序要求</strong>，再看<strong>吞吐与堆积规模</strong>，
+              然后看<strong>路由灵活性和运维成本</strong>。不要因为「RocketMQ 吞吐高」就把一个只需要
+              路由分发的内部系统迁过去，也不要因为「RabbitMQ 简单」就让它承担海量事件流。
+            </p>
+          </div>
+        </div>
+
+        <h3>上线前检查清单</h3>
+        <div class="card">
+          <ul class="checklist">
+            <li><strong>业务唯一 ID</strong>：每条消息都有稳定的业务键，消费端有原子去重（Redis / DB 唯一索引）。</li>
+            <li><strong>发送可靠</strong>：RabbitMQ 开 confirm；RocketMQ 用 <code>syncSend</code> 或带回调的 async；失败有重试和补偿。</li>
+            <li><strong>本地事务一致性</strong>：要么用 RocketMQ 事务消息，要么用 Outbox / 本地消息表，不能「先写库再随手发」。</li>
+            <li><strong>消费重试上限</strong>：配置最大重试次数，超过后进入 DLQ，并有告警和人工处理入口。</li>
+            <li><strong>ACK 时机</strong>：业务处理成功后再 ACK / 提交位点，不要自动 ACK。</li>
+            <li><strong>持久化与副本</strong>：RabbitMQ durable + persistent + 持久化卷；RocketMQ CommitLog + 副本 + 刷盘策略。</li>
+            <li><strong>顺序 key 设计</strong>：key 稳定、分布均匀；评估热点和扩容重新哈希的影响。</li>
+            <li><strong>积压监控</strong>：RabbitMQ 监控 Ready / Unacked；RocketMQ 监控 Diff 和消费 RT；设置阈值告警。</li>
+            <li><strong>容量与降级</strong>：知道单实例消费能力、下游瓶颈和降级开关；积压时有削峰 / 限流方案。</li>
+            <li><strong>优先级隔离</strong>：核心链路独立队列 / Topic / 消费者；不要只靠 priority 数值。</li>
+            <li><strong>消息契约</strong>：字段只增不删、版本兼容、消费端能处理未知字段；大消息走对象存储。</li>
+            <li><strong>可观测性</strong>：日志带 traceId / messageId / 业务键，能从一个订单追到生产和消费两端。</li>
+            <li><strong>演练</strong>：Broker 重启、网络抖动、消费者下线、重复投递、位点重放，至少各做一次。</li>
+          </ul>
+        </div>
+
+        <h3>常见反模式</h3>
+        <div class="grid2">
+          <div class="card">
+            <p><span class="pill bad">反模式</span></p>
+            <ul class="small">
+              <li>把消息中间件当数据库，依赖「消息一定在」做唯一数据源。</li>
+              <li>消费者里做长事务、同步调用多个下游，吞吐被一个慢服务拖死。</li>
+              <li>用消息体传巨大文件，Broker 磁盘和网络被打满。</li>
+              <li>所有业务共用一个 Topic / 队列，出问题互相影响。</li>
+              <li>重试没有上限，失败消息无限循环。</li>
+            </ul>
+          </div>
+          <div class="card">
+            <p><span class="pill ok">替代做法</span></p>
+            <ul class="small">
+              <li>消息只做「事件通知」，权威数据仍在数据库。</li>
+              <li>消费逻辑短小，重活异步拆给下游或线程池。</li>
+              <li>大消息存对象存储，消息体只放引用和元数据。</li>
+              <li>按业务域 / 优先级拆 Topic / 队列 / 消费者组。</li>
+              <li>重试 → 延迟重试 → DLQ，每层都有指标和告警。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <section id="cheatsheet">
+        <h2><span class="no">06</span>命令与日志速查</h2>
+        <p class="lead">
+          实验时最常用的接口、命令和日志都放在这里。所有路径均以本地默认端口为准，
+          如果改过端口或上下文路径，请相应替换。
+        </p>
+
+        <h3>RabbitMQ 接口（8081）</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>场景</th><th>方法与路径</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr><td>简单队列</td><td><code>POST /api/rabbitmq/simple?message=</code></td><td>默认交换机 → <code>demo.simple.queue</code></td></tr>
+              <tr><td>工作队列</td><td><code>POST /api/rabbitmq/work?message=</code></td><td>两个消费者竞争同一条队列</td></tr>
+              <tr><td>Fanout</td><td><code>POST /api/rabbitmq/fanout?message=</code></td><td>两个队列各收一份</td></tr>
+              <tr><td>Direct</td><td><code>POST /api/rabbitmq/direct?routingKey=&amp;message=</code></td><td>routing key 精确匹配</td></tr>
+              <tr><td>Topic</td><td><code>POST /api/rabbitmq/topic?routingKey=&amp;message=</code></td><td>通配符匹配</td></tr>
+              <tr><td>Confirm</td><td><code>POST /api/rabbitmq/confirm?message=</code></td><td>观察 confirm 回调日志</td></tr>
+              <tr><td>死信</td><td><code>POST /api/rabbitmq/dlx?message=</code></td><td>主队列拒收 → DLQ</td></tr>
+              <tr><td>幂等</td><td><code>POST /api/rabbitmq/idempotent?messageId=&amp;duplicate=</code></td><td><code>duplicate=true</code> 连发两条</td></tr>
+              <tr><td>顺序</td><td><code>POST /api/rabbitmq/ordered?count=</code></td><td>单消费者，严格递增</td></tr>
+              <tr><td>乱序反例</td><td><code>POST /api/rabbitmq/unordered?count=</code></td><td>4 个并发消费者</td></tr>
+              <tr><td>积压</td><td><code>POST /api/rabbitmq/backlog/{pause|resume|send}</code><br><code>GET /api/rabbitmq/backlog/status</code></td><td>send 支持 <code>count</code></td></tr>
+              <tr><td>持久化</td><td><code>POST /api/rabbitmq/persistence/{pause|resume|send}</code><br><code>GET /api/rabbitmq/persistence/status</code></td><td>send 支持 <code>count</code>、<code>persistent</code></td></tr>
+              <tr><td>优先级</td><td><code>POST /api/rabbitmq/priority/{pause|resume|send}</code><br><code>GET /api/rabbitmq/priority/status</code></td><td>send 支持 <code>priority</code>（0–10）、<code>count</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>RocketMQ 接口（8082）</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>场景</th><th>方法与路径</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr><td>普通</td><td><code>POST /api/rocketmq/simple?message=</code></td><td><code>demo-simple-topic</code></td></tr>
+              <tr><td>顺序</td><td><code>POST /api/rocketmq/orderly?orderKey=&amp;message=</code></td><td>同 key 进同一队列</td></tr>
+              <tr><td>标签</td><td><code>POST /api/rocketmq/tag?tag=&amp;message=</code></td><td>消费者只订阅 <code>TagA</code></td></tr>
+              <tr><td>延迟</td><td><code>POST /api/rocketmq/delay?message=&amp;delayLevel=</code></td><td>默认 level 3 = 10s</td></tr>
+              <tr><td>事务</td><td><code>POST /api/rocketmq/transaction?message=</code></td><td>半消息 + 本地事务</td></tr>
+              <tr><td>广播</td><td><code>POST /api/rocketmq/broadcast?message=</code></td><td>每个实例都收到</td></tr>
+              <tr><td>幂等</td><td><code>POST /api/rocketmq/idempotent?messageId=&amp;duplicate=</code></td><td>重复消息只处理一次</td></tr>
+              <tr><td>顺序批量</td><td><code>POST /api/rocketmq/ordered-batch?orderKey=&amp;count=</code></td><td>ORDERLY 消费者逐条处理</td></tr>
+              <tr><td>乱序反例</td><td><code>POST /api/rocketmq/unordered?count=</code></td><td>默认并发消费</td></tr>
+              <tr><td>积压</td><td><code>POST /api/rocketmq/backlog/{pause|resume|send}</code><br><code>GET /api/rocketmq/backlog/status</code></td><td>堆积量看 Dashboard Diff</td></tr>
+              <tr><td>持久化</td><td><code>POST /api/rocketmq/persistence/{pause|resume|send}</code><br><code>GET /api/rocketmq/persistence/status</code></td><td>send 支持 <code>count</code></td></tr>
+              <tr><td>优先级隔离</td><td><code>POST /api/rocketmq/priority/{send|pause|resume}</code><br><code>GET /api/rocketmq/priority/status</code></td><td><code>level=high|normal|low</code>，默认 low</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>常用命令</h3>
+        <div class="code">
+          <div class="code-head"><span class="path">终端 · Docker 与排障</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># 启动
+docker compose up -d rabbitmq
+docker compose up -d rocketmq-namesrv rocketmq-broker rocketmq-dashboard
+
+# 只重启（保住容器内数据）；不要用 down/up 验证持久化
+docker compose restart rabbitmq
+docker compose restart rocketmq-broker
+
+# RabbitMQ 队列深度（Ready / Unacked）
+docker compose exec rabbitmq rabbitmqctl list_queues name messages_ready messages_unacknowledged
+
+# RocketMQ 查看 Topic 队列与位点
+docker exec demo-rocketmq-broker-1 sh -c \
+  'cd /home/rocketmq/rocketmq-4.9.4/bin &amp;&amp; ./mqadmin topicStatus \
+   -n rocketmq-namesrv:9876 -t demo-persistence-topic'
+
+# 消费进度（组必须先有消费记录，否则 offset 表为空）
+docker exec demo-rocketmq-broker-1 sh -c \
+  'cd /home/rocketmq/rocketmq-4.9.4/bin &amp;&amp; ./mqadmin consumerProgress \
+   -n rocketmq-namesrv:9876 -g demo-backlog-consumer-group'
+
+# 日志
+docker compose logs -f rabbitmq
+docker compose logs -f rocketmq-broker</code></pre>
+        </div>
+
+        <h3>关键日志长什么样</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>场景</th><th>预期日志</th></tr></thead>
+            <tbody>
+              <tr><td>RabbitMQ 发送确认</td><td><code>[ConfirmProducer] message confirmed by broker, id=confirm-1</code></td></tr>
+              <tr><td>RabbitMQ 死信</td><td><code>[DeadLetterConsumer-DLQ] received dead letter: dlx-msg</code></td></tr>
+              <tr><td>RabbitMQ 幂等</td><td><code>[IdempotentConsumer] processed: REL-1</code> / <code>duplicate ignored: REL-1</code></td></tr>
+              <tr><td>RabbitMQ 顺序</td><td><code>[OrderedConsumer] received: step-1</code> … <code>step-10</code></td></tr>
+              <tr><td>RabbitMQ 优先级</td><td><code>[PriorityConsumer] received: p9-1 (priority=9)</code> → p5 → p1</td></tr>
+              <tr><td>RocketMQ 顺序</td><td><code>[OrderlyConsumer] thread=... received: step-1</code> … <code>step-10</code></td></tr>
+              <tr><td>RocketMQ 延迟</td><td><code>[DelayConsumer] received at 1761...: delay msg</code></td></tr>
+              <tr><td>RocketMQ 事务</td><td><code>[TransactionListener] executing local transaction for: ...</code></td></tr>
+              <tr><td>RocketMQ 广播</td><td><code>[BroadcastConsumer] received: broadcast msg</code>（每个实例各一条）</td></tr>
+              <tr><td>RocketMQ 优先级隔离</td><td><code>[PriorityHighConsumer]</code> / <code>[PriorityNormalConsumer]</code> / <code>[PriorityLowConsumer]</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>现象排查表</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>现象</th><th>可能原因</th><th>处理</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>访问 8082 根路径 404</td>
+                <td>RocketMQ 模块没有测试页</td>
+                <td>用 8081 的页面，或直接调 8082 的 API</td>
+              </tr>
+              <tr>
+                <td>RocketMQ 新 Topic 一直没日志</td>
+                <td>路由刷新延迟，最长约 30s</td>
+                <td>等待；去 Dashboard 确认 Topic / 消费组已出现</td>
+              </tr>
+              <tr>
+                <td>Dashboard 打不开或列表为空</td>
+                <td>Dashboard 先于 NameServer 启动</td>
+                <td><code>docker compose restart rocketmq-dashboard</code></td>
+              </tr>
+              <tr>
+                <td>暂停后还在消费</td>
+                <td>在途消息 / 已预取到客户端</td>
+                <td>正常现象；观察位点稳定后不再增长即可</td>
+              </tr>
+              <tr>
+                <td>RabbitMQ 顺序仍然乱</td>
+                <td>发布落到多个 channel；多消费者；多实例</td>
+                <td>用 <code>invoke</code> 绑 channel；单队列单消费者</td>
+              </tr>
+              <tr>
+                <td>RocketMQ 顺序仍然乱</td>
+                <td>sharding key 不稳定；消费模式不是 ORDERLY；多队列</td>
+                <td>固定业务 key；<code>ConsumeMode.ORDERLY</code></td>
+              </tr>
+              <tr>
+                <td>RabbitMQ 优先级没效果</td>
+                <td>消费者没停，消息一到就被取走；prefetch 太大</td>
+                <td>先 pause 再发送；调小 prefetch</td>
+              </tr>
+              <tr>
+                <td>持久化消息也没了</td>
+                <td>用了 down/up；消息非持久化；没等 confirm</td>
+                <td>用 restart；设置 PERSISTENT；等 confirm</td>
+              </tr>
+              <tr>
+                <td>重复消息没被忽略</td>
+                <td>两次业务 ID 不同；应用重启；多实例各有内存表</td>
+                <td>检查消息体；生产换共享存储</td>
+              </tr>
+              <tr>
+                <td>RabbitMQ 启动报 PRECONDITION_FAILED</td>
+                <td>队列参数与已存在队列不一致</td>
+                <td>删除旧队列重建，或改用新队列名</td>
+              </tr>
+              <tr>
+                <td>mqadmin 报 offset 表为空</td>
+                <td>该消费组还没有消费记录；nameserver 地址错</td>
+                <td>先正常消费一批；确认 <code>-n rocketmq-namesrv:9876</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <section id="codemap">
+        <h2><span class="no">07</span>代码地图</h2>
+        <p class="lead">
+          想改代码时从这里跳转。文件路径相对本页所在目录，打开后可直接对照实现。
+        </p>
+
+        <h3>demo-rabbitmq</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>文件</th><th>职责</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><a href="../demo-rabbitmq/src/main/java/com/example/demo/rabbitmq/config/RabbitMQConfig.java">config/RabbitMQConfig.java</a></td>
+                <td>所有队列、交换机、绑定、DLX 参数、优先级队列</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rabbitmq/src/main/java/com/example/demo/rabbitmq/controller/RabbitMQDemoController.java">controller/RabbitMQDemoController.java</a></td>
+                <td>简单 / 工作 / Fanout / Direct / Topic / Confirm / DLX 接口</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rabbitmq/src/main/java/com/example/demo/rabbitmq/controller/ReliabilityController.java">controller/ReliabilityController.java</a></td>
+                <td>幂等、顺序、积压、持久化、优先级的发送与暂停/恢复</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rabbitmq/src/main/java/com/example/demo/rabbitmq/producer/ConfirmProducer.java">producer/ConfirmProducer.java</a></td>
+                <td>Publisher Confirm / Return 回调与关联 ID</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rabbitmq/src/main/java/com/example/demo/rabbitmq/consumer/DeadLetterConsumer.java">consumer/DeadLetterConsumer.java</a></td>
+                <td>主队列拒收与 DLQ 消费</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rabbitmq/src/main/java/com/example/demo/rabbitmq/consumer/OrderedConsumer.java">consumer/OrderedConsumer.java</a></td>
+                <td>单消费者顺序消费（<code>concurrency=1</code>）</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rabbitmq/src/main/java/com/example/demo/rabbitmq/consumer/UnorderedConsumer.java">consumer/UnorderedConsumer.java</a></td>
+                <td>并发消费反例</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rabbitmq/src/main/java/com/example/demo/rabbitmq/consumer/PriorityConsumer.java">consumer/PriorityConsumer.java</a></td>
+                <td>读取消息属性中的 priority</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rabbitmq/src/main/java/com/example/demo/rabbitmq/support/InMemoryIdempotentStore.java">support/InMemoryIdempotentStore.java</a></td>
+                <td>进程内原子去重 + TTL + 失败撤销</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rabbitmq/README.md">README.md</a></td>
+                <td>十二个场景的完整操作步骤与实测输出</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>demo-rocketmq</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>文件</th><th>职责</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><a href="../demo-rocketmq/src/main/java/com/example/demo/rocketmq/config/ReliabilityTopics.java">config/ReliabilityTopics.java</a></td>
+                <td>可靠性场景的 Topic / ConsumerGroup 常量（含三档优先级）</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rocketmq/src/main/java/com/example/demo/rocketmq/controller/RocketMQDemoController.java">controller/RocketMQDemoController.java</a></td>
+                <td>普通 / 顺序 / 标签 / 延迟 / 事务 / 广播接口</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rocketmq/src/main/java/com/example/demo/rocketmq/controller/ReliabilityController.java">controller/ReliabilityController.java</a></td>
+                <td>幂等、顺序、积压、持久化、优先级隔离接口</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rocketmq/src/main/java/com/example/demo/rocketmq/producer/OrderlyProducer.java">producer/OrderlyProducer.java</a></td>
+                <td><code>syncSendOrderly</code> 按 sharding key 选队列</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rocketmq/src/main/java/com/example/demo/rocketmq/consumer/OrderlyConsumer.java">consumer/OrderlyConsumer.java</a></td>
+                <td><code>ConsumeMode.ORDERLY</code> 队列锁消费</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rocketmq/src/main/java/com/example/demo/rocketmq/consumer/UnorderedConsumer.java">consumer/UnorderedConsumer.java</a></td>
+                <td>默认并发消费反例</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rocketmq/src/main/java/com/example/demo/rocketmq/listener/TransactionListenerImpl.java">listener/TransactionListenerImpl.java</a></td>
+                <td>本地事务执行与 Broker 回查</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rocketmq/src/main/java/com/example/demo/rocketmq/producer/DelayProducer.java">producer/DelayProducer.java</a></td>
+                <td>固定 delayLevel 的延迟消息</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rocketmq/src/main/java/com/example/demo/rocketmq/consumer/TagFilterConsumer.java">consumer/TagFilterConsumer.java</a></td>
+                <td><code>selectorExpression = "TagA"</code></td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rocketmq/src/main/java/com/example/demo/rocketmq/consumer/BroadcastConsumer.java">consumer/BroadcastConsumer.java</a></td>
+                <td><code>MessageModel.BROADCASTING</code></td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rocketmq/src/main/java/com/example/demo/rocketmq/support/RocketMQConsumerControl.java">support/RocketMQConsumerControl.java</a></td>
+                <td>按 consumerGroup 查找容器并 suspend / resume</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rocketmq/src/main/java/com/example/demo/rocketmq/support/InMemoryIdempotentStore.java">support/InMemoryIdempotentStore.java</a></td>
+                <td>与 RabbitMQ 模块同构的幂等登记表</td>
+              </tr>
+              <tr>
+                <td><a href="../demo-rocketmq/README.md">README.md</a></td>
+                <td>十一个场景的完整操作步骤与实测输出</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>文档与基础设施</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>文件</th><th>职责</th></tr></thead>
+            <tbody>
+              <tr><td><a href="../docker-compose.yml">docker-compose.yml</a></td><td>RabbitMQ、RocketMQ NameServer / Broker / Dashboard、MySQL 等</td></tr>
+              <tr><td><a href="../README.md">README.md</a></td><td>仓库总览与三个 DDD 业务服务的启动方式</td></tr>
+              <tr><td><a href="../demo-rabbitmq/src/main/resources/static/index.html">demo-rabbitmq/.../static/index.html</a></td><td>8081 可视化测试页（含可靠性场景标签）</td></tr>
+              <tr><td><a href="messaging-guide.html">docs/messaging-guide.html</a></td><td>本页</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout tip">
+          <span class="ico">✓</span>
+          <div>
+            <p><span class="title">下一步怎么练</span>
+              把五个场景按「先制造问题，再修」的方式各走一遍：例如先去掉幂等登记看重复日志，
+              再去掉 <code>invoke</code> 看顺序乱掉，最后把消费者暂停制造积压。
+              亲眼见过失败路径，比记住结论更有用。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        <p><strong>消息中间件实战指南</strong> · 基于本仓库 <code>demo-rabbitmq</code> / <code>demo-rocketmq</code> 当前代码整理。</p>
+        <p>命令与预期日志以两个模块的 README 为准；实验前请确认 Broker 已启动、端口未被占用。最后核对：2026-10-28。</p>
+      </footer>
+    </div>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var toggle = document.getElementById('themeToggle');
+
+    function syncToggleLabel() {
+      if (toggle) toggle.textContent = root.dataset.theme === 'dark' ? '浅色' : '深色';
+    }
+    syncToggleLabel();
+
+    if (toggle) {
+      toggle.addEventListener('click', function () {
+        var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        try { localStorage.setItem('msg-guide-theme', next); } catch (e) { /* ignore */ }
+        syncToggleLabel();
+      });
+    }
+
+    document.querySelectorAll('[data-copy]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var block = btn.closest('.code');
+        var code = block ? block.querySelector('code') : null;
+        if (!code) return;
+        var text = code.innerText;
+        var done = function () {
+          var old = btn.textContent;
+          btn.textContent = '已复制';
+          setTimeout(function () { btn.textContent = old; }, 1400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done).catch(function () { fallback(text, done); });
+        } else {
+          fallback(text, done);
+        }
+      });
+    });
+
+    function fallback(text, done) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+      document.body.removeChild(ta);
+      done();
+    }
+
+    var links = Array.prototype.slice.call(document.querySelectorAll('.toc a[href^="#"]'));
+    var byId = {};
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      byId[id] = a;
+    });
+    var targets = Object.keys(byId).map(function (id) { return document.getElementById(id); }).filter(Boolean);
+
+    function setActive(id) {
+      links.forEach(function (a) { a.classList.remove('active'); });
+      var link = byId[id];
+      if (link) link.classList.add('active');
+    }
+
+    function onScroll() {
+      var y = window.scrollY + 140;
+      var current = targets.length ? targets[0] : null;
+      for (var i = 0; i < targets.length; i++) {
+        var top = targets[i].getBoundingClientRect().top + window.scrollY;
+        if (top <= y) current = targets[i];
+      }
+      if (current) setActive(current.id);
+      var bar = document.querySelector('.progress span');
+      if (bar) {
+        var max = document.documentElement.scrollHeight - window.innerHeight;
+        bar.style.width = (max > 0 ? Math.min(100, Math.max(0, window.scrollY / max * 100)) : 0) + '%';
+      }
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    onScroll();
+  })();
+</script>
+</body>
+</html>

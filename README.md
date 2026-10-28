@@ -142,6 +142,8 @@ docker compose up -d rocketmq-namesrv rocketmq-broker rocketmq-dashboard
 其中的 RocketMQ 标签页直接调用 8082 接口，所以测 RocketMQ 时两个应用都要启动；
 `demo-rocketmq` 自身没有静态页面）。每个按钮对应的接口、预期日志和排障方法写在各自模块的 README 里。
 
+想把这两个模块的原理和故障处理串起来看，可以打开图文教程 [docs/messaging-guide.html](docs/messaging-guide.html)：结构图、流程图、逐段代码和实验记录都在里面，单个 HTML 文件，浏览器直接打开即可。
+
 ---
 
 ## 3. 消息架构
