@@ -37,6 +37,13 @@ public class RabbitMQConfig {
     public static final String DLX_QUEUE = "demo.dlx.queue";
     public static final String DLQ_MAIN_QUEUE = "demo.dlq.main.queue";
 
+    // 可靠性场景：每条队列只承载一个演示，互不干扰
+    public static final String IDEMPOTENT_QUEUE = "demo.idempotent.queue";
+    public static final String ORDERED_QUEUE = "demo.ordered.queue";
+    public static final String UNORDERED_QUEUE = "demo.unordered.queue";
+    public static final String BACKLOG_QUEUE = "demo.backlog.queue";
+    public static final String PERSISTENCE_QUEUE = "demo.persistence.queue";
+
     @Bean
     public Queue simpleQueue() {
         return new Queue(SIMPLE_QUEUE);
@@ -145,5 +152,33 @@ public class RabbitMQConfig {
     @Bean
     public Binding dlxBinding() {
         return BindingBuilder.bind(dlxQueue()).to(dlxExchange()).with("dlq");
+    }
+
+    // 可靠性场景队列都使用 durable 队列：Broker 重启后队列定义仍然存在。
+    // 消息本身是否存活还取决于 MessageDeliveryMode，见 ReliabilityController。
+
+    @Bean
+    public Queue idempotentQueue() {
+        return new Queue(IDEMPOTENT_QUEUE);
+    }
+
+    @Bean
+    public Queue orderedQueue() {
+        return new Queue(ORDERED_QUEUE);
+    }
+
+    @Bean
+    public Queue unorderedQueue() {
+        return new Queue(UNORDERED_QUEUE);
+    }
+
+    @Bean
+    public Queue backlogQueue() {
+        return new Queue(BACKLOG_QUEUE);
+    }
+
+    @Bean
+    public Queue persistenceQueue() {
+        return new Queue(PERSISTENCE_QUEUE);
     }
 }

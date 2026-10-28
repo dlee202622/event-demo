@@ -28,7 +28,9 @@ docker compose up -d rocketmq-namesrv rocketmq-broker rocketmq-dashboard
 ./mvnw -pl demo-rocketmq spring-boot:run
 ```
 
-打开 <http://localhost:8082/>，切到 **RocketMQ (8082)** 标签页即可点按钮；
+打开 <http://localhost:8081/>（测试页由 `demo-rabbitmq` 提供），切到 **RocketMQ (8082)**
+标签页即可点按钮；它通过 CORS 直接调用 8082 的接口，所以两个应用都要启动。
+`demo-rocketmq` 自己**没有静态页面**，访问 <http://localhost:8082/> 会返回 404。
 Dashboard 在 <http://localhost:19876/>（无需登录）。
 
 启动成功的关键日志：
@@ -85,10 +87,12 @@ Producer ──▶ NameServer（路由注册/发现，无状态，可集群）
 demo-rocketmq/src/main/
 ├── resources/application.yaml              # name-server + producer group + 超时
 └── java/com/example/demo/rocketmq/
-    ├── controller/RocketMQDemoController.java   # 6 个 POST 接口
+    ├── controller/RocketMQDemoController.java   # 6 个基础场景接口
+    ├── controller/ReliabilityController.java    # 幂等 / 顺序 / 积压 / 持久化接口
     ├── producer/*Producer.java                  # 每个场景一个生产者
     ├── consumer/*Consumer.java                  # 每个场景一个消费者（注解声明）
-    └── listener/TransactionListenerImpl.java    # 事务消息的本地事务 + 回查
+    ├── listener/TransactionListenerImpl.java    # 事务消息的本地事务 + 回查
+    └── support/                                 # 内存幂等表、消费者暂停控制
 ```
 
 配置只有三行关键内容：
@@ -106,10 +110,14 @@ rocketmq:
 
 ---
 
-## 4. 六个场景逐个跑
+## 4. 十个场景逐个跑
 
 所有接口返回 `"status":"sent"` 仅表示**发送成功（Broker 已收下）**，消费是异步的。
 看效果请关注应用日志；Topic 是否创建、有多少消息、消费有没有堆积，看 Dashboard。
+
+> **首次发送新 Topic 的等待**：本 Demo 的 Topic 靠 Broker 自动创建，消费者的路由信息默认
+> 每 30 秒刷新一次。第一次调用某个场景后，应用日志可能要等十几秒到半分钟才出现，属正常现象；
+> 之后再发就是秒级。看到「发送成功但暂时没消费日志」不要急着怀疑代码。
 
 ### 4.1 普通消息：最基础的一条线
 
@@ -339,6 +347,173 @@ done
 
 ---
 
+### 4.7 幂等：重复投递只处理一次
+
+RocketMQ 同样只保证「至少一次」：超时重发、消费失败重试、Broker 重投都会让同一条消息到达多次。
+幂等要靠**消息体里的业务唯一 ID**，而不是 Broker 的 msgId（重投后会变）。
+
+```bash
+curl -s -X POST 'http://localhost:8082/api/rocketmq/idempotent?messageId=RID-1&duplicate=true'
+```
+
+响应：
+
+```json
+{"messageId":"RID-1","topic":"demo-idempotent-topic","sent":"2"}
+```
+
+预期日志（两条几乎同时处理）：
+
+```text
+[IdempotentConsumer] processed: RID-1
+[IdempotentConsumer] duplicate ignored: RID-1
+```
+
+注意：幂等消费者是**并发消费**（多个 `ConsumeMessageThread`），两条重复消息可能同时到达，
+所以这两行日志的**先后顺序可能互换**，只要 `processed` 只出现一次就说明去重生效。
+实现与 RabbitMQ 版本一致：`InMemoryIdempotentStore.tryAcquire` 用 `ConcurrentHashMap.compute`
+原子抢占，TTL 10 分钟，业务失败时 `release` 归还重试机会。
+
+生产做法同样是 Redis `SET NX EX` 或数据库唯一索引；进程内 Map 只适合单实例 Demo，
+重启和多实例都会失效。详见 `demo-rabbitmq/README.md` 的 4.8 节。
+
+---
+
+### 4.8 顺序：同一 sharding key 进同一队列
+
+```bash
+curl -s -X POST 'http://localhost:8082/api/rocketmq/ordered-batch?orderKey=ORDER-1&count=10'
+```
+
+预期日志（严格 step-1 → step-10）：
+
+```text
+[OrderlyConsumer] thread=ConsumeMessageThread_demo-orderly-consumer-group_1 received: step-1
+[OrderlyConsumer] thread=..._2 received: step-2
+...
+[OrderlyConsumer] thread=..._9 received: step-10
+```
+
+**不要用线程名判断顺序**：ORDERLY 模式会在同一个队列上加锁逐条消费，但每次提交到线程池的
+线程可能不同。判断依据是消息序号，不是 `thread=`。
+
+生产端的关键是 `syncSendOrderly`：
+
+```java
+rocketTemplate.syncSendOrderly("demo-orderly-topic", message, orderKey);
+```
+
+它用 `orderKey` 哈希选队列：**同一个 key 的消息一定进同一个队列**，不同 key 分散到不同队列。
+消费端加 `consumeMode = ConsumeMode.ORDERLY` 后，Broker 对每个队列逐条投递并等待消费成功，
+因此同 key 消息严格有序，不同队列之间仍可并行。
+
+反例：普通发送 + 并发消费（`CONCURRENTLY`）：
+
+```bash
+curl -s -X POST 'http://localhost:8082/api/rocketmq/unordered?count=10'
+```
+
+日志会出现 step-3、step-1、step-9、step-8 ... 的乱序，因为多个线程同时处理同一 Topic。
+
+要点：
+
+- RocketMQ 的顺序是**队列级**的，不是 Topic 全局有序；需要全局有序只能单队列，吞吐会明显下降；
+- `orderKey` 必须是稳定的业务键（订单号、用户 ID），不能每次随机；
+- 增加队列数会让 key 重新哈希映射，扩缩容期间顺序可能短暂受影响，低峰期操作；
+- ORDERLY 消费失败默认会阻塞当前队列重试，务必做好失败告警，避免一个毒消息拖住整个队列。
+
+---
+
+### 4.9 积压：暂停消费者，观察 Diff 增长
+
+```bash
+# 1) 暂停消费者
+curl -s -X POST 'http://localhost:8082/api/rocketmq/backlog/pause'
+
+# 2) 发 200 条
+curl -s -X POST 'http://localhost:8082/api/rocketmq/backlog/send?count=200'
+
+# 3) 打开 Dashboard 看堆积：消费者 → demo-backlog-consumer-group → Diff
+#    http://localhost:19876/
+
+# 4) 恢复消费
+curl -s -X POST 'http://localhost:8082/api/rocketmq/backlog/resume'
+```
+
+`/backlog/status` 只返回暂停状态，堆积量要看 Dashboard：
+
+```json
+{"topic":"demo-backlog-topic","consumerGroup":"demo-backlog-consumer-group","suspended":"true", ...}
+```
+
+暂停是通过消费者客户端的 `DefaultMQPushConsumer.suspend()/resume()` 实现的
+（`support/RocketMQConsumerControl`）：
+
+```java
+DefaultRocketMQListenerContainer container = ... // 按 consumerGroup 找到容器
+container.getConsumer().suspend();               // 停止拉取
+container.getConsumer().resume();                // 继续拉取
+```
+
+一个实测细节：**暂停只阻止继续拉取，已经拉到本地 processQueue 的消息仍会被消费**。
+所以点完暂停再发消息，Diff 可能先下降几条再稳定，这是正常的，不是暂停失效。
+
+生产上处理积压的思路：
+
+- **先看 Diff 增速**：持续增长说明消费能力不足；忽高忽低多为下游抖动；
+- **提升并行度**：消费并行度上限由 Topic 的队列数决定，队列不够时加机器也没用；
+- **批量消费**：`consumeMessageBatchMaxSize` 配合批量写库，比逐条快很多；
+- **保护下游**：限流、降级、异步落库，避免把数据库打死造成雪崩；
+- **毒消息**：重试 16 次后进入 `%DLQ%<consumerGroup>`，必须监控并人工/自动处理。
+
+---
+
+### 4.10 持久化：重启 Broker 后消息还在吗
+
+RocketMQ 的消息统一写入 CommitLog，`syncSend` 返回 `SendStatus.SEND_OK` 表示 Broker 已接收并落盘
+（默认 `ASYNC_FLUSH`，即写入页缓存，由操作系统异步刷盘）。
+
+```bash
+# 1) 暂停消费者
+curl -s -X POST 'http://localhost:8082/api/rocketmq/persistence/pause'
+
+# 2) 发 3 条
+curl -s -X POST 'http://localhost:8082/api/rocketmq/persistence/send?count=3'
+
+# 3) 重启 Broker（不是 down/up）
+docker compose restart rocketmq-broker
+
+# 4) 恢复消费
+curl -s -X POST 'http://localhost:8082/api/rocketmq/persistence/resume'
+```
+
+预期日志（重启后仍能消费到重启前的 3 条）：
+
+```text
+[PersistenceConsumer] received: persist-1
+[PersistenceConsumer] received: persist-2
+[PersistenceConsumer] received: persist-3
+```
+
+也可以用命令行确认消息确实写进了 Topic：
+
+```bash
+docker exec demo-rocketmq-broker-1 sh -c \
+  'cd /home/rocketmq/rocketmq-4.9.4/bin && ./mqadmin topicStatus \
+   -n rocketmq-namesrv:9876 -t demo-persistence-topic'
+```
+
+要点：
+
+- `syncSend` 只保证「Broker 已收下」，不等于「消费者已处理」；消费失败仍会重试，幂等不能省；
+- 默认 `ASYNC_FLUSH` 下，**Broker 进程重启不丢**（数据在页缓存/磁盘），但**整机断电可能丢最后一批**。
+  强可靠场景要开 `flushDiskType=SYNC_FLUSH`，并配主从同步或 DLedger（Raft）；
+- 本仓库的 Broker **没有挂数据卷**，`docker compose down` 会删除容器和 CommitLog，验证请用 `restart`；
+- RocketMQ 默认保留 72 小时（`fileReservedTime`），过期清理；需要回溯就靠 Consumer 位点重放，
+  这是它和 RabbitMQ「消费即删除」最大的差异之一。
+
+---
+
 ## 5. Dashboard 怎么用（19876）
 
 - **驾驶舱 / 集群**：Broker 是否在线、消息量与 TPS。
@@ -373,6 +548,7 @@ done
 - **重试与死信**：消费失败默认重试 16 次后进入 `%DLQ%<consumerGroup>`，需要监控和人工处理；
 - **顺序与并发的取舍**：ORDERLY 会牺牲吞吐；能靠业务状态机容忍乱序时优先并发消费；
 - **事务消息的回查实现**：本地事务表必须可查、可幂等，回查逻辑要能处理「事务进行中」；
+- **持久化**：默认 `ASYNC_FLUSH`，进程重启不丢但断电可能丢最后一批；强可靠要开 `SYNC_FLUSH` 并配主从 / DLedger，Broker 数据目录必须挂卷；
 - **监控**：消费堆积（Diff）、发送失败率、RT、DLQ 数量，比看应用日志更早发现问题。
 
 ---

@@ -36,6 +36,7 @@
         <div class="tabs">
             <div class="tab active" data-panel="rabbitmq">RabbitMQ (8081)</div>
             <div class="tab" data-panel="rocketmq">RocketMQ (8082)</div>
+            <div class="tab" data-panel="reliability">可靠性场景</div>
         </div>
 
         <!-- RabbitMQ Panel -->
@@ -209,6 +210,135 @@
                 <div class="response" id="res-rmq-bc"></div>
             </div>
         </div>
+
+        <!-- Reliability Panel：先启动对应模块，再按“暂停 → 发送 → 查状态 → 恢复”操作 -->
+        <div class="panel" id="panel-reliability">
+            <div class="endpoint">
+                <div class="endpoint-title">使用说明</div>
+                <div class="endpoint-desc">
+                    先启动对应模块，再按「暂停 → 发送 → 查状态 → 恢复」操作。幂等去重表在进程内存里，
+                    重启即清空；RocketMQ 新 Topic 首次发送后，消费端刷新路由最多需要约 30 秒；
+                    持久化演示请用 docker compose restart 重启 Broker，不要用 down/up。
+                </div>
+            </div>
+            <div class="endpoint">
+                <div class="endpoint-title">RabbitMQ · 幂等消费</div>
+                <div class="endpoint-path">POST /api/rabbitmq/idempotent</div>
+                <div class="endpoint-desc">同一业务 ID 连发两条，消费端只处理一次，第二条打印 duplicate ignored</div>
+                <div class="form-row">
+                    <label>业务 ID</label>
+                    <input type="text" id="rel-rmq-id" value="ID-1" style="max-width:140px">
+                    <label>重复发送</label>
+                    <input type="text" id="rel-rmq-dup" value="true" style="max-width:80px">
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/idempotent', {messageId: val('rel-rmq-id'), duplicate: val('rel-rmq-dup')}, 'res-rel-rmq-idem')">发送</button>
+                </div>
+                <div class="response" id="res-rel-rmq-idem"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">RabbitMQ · 顺序消费</div>
+                <div class="endpoint-path">POST /api/rabbitmq/ordered | /unordered</div>
+                <div class="endpoint-desc">有序队列单消费者；无序队列 4 个并发消费者做反例，观察日志顺序差异</div>
+                <div class="form-row">
+                    <label>条数</label>
+                    <input type="number" id="rel-rmq-order-count" value="10" style="max-width:80px">
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/ordered', {count: val('rel-rmq-order-count')}, 'res-rel-rmq-order')">有序发送</button>
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/unordered', {count: val('rel-rmq-order-count')}, 'res-rel-rmq-order')">无序发送</button>
+                </div>
+                <div class="response" id="res-rel-rmq-order"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">RabbitMQ · 消息积压</div>
+                <div class="endpoint-path">/api/rabbitmq/backlog/*</div>
+                <div class="endpoint-desc">先暂停消费者，再批量发送并查状态，最后恢复消费</div>
+                <div class="form-row">
+                    <label>条数</label>
+                    <input type="number" id="rel-rmq-backlog-count" value="100" style="max-width:80px">
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/backlog/pause', {}, 'res-rel-rmq-backlog')">暂停</button>
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/backlog/send', {count: val('rel-rmq-backlog-count')}, 'res-rel-rmq-backlog')">发送</button>
+                    <button class="send" onclick="get('http://localhost:8081/api/rabbitmq/backlog/status', 'res-rel-rmq-backlog')">查状态</button>
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/backlog/resume', {}, 'res-rel-rmq-backlog')">恢复</button>
+                </div>
+                <div class="response" id="res-rel-rmq-backlog"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">RabbitMQ · 消息持久化</div>
+                <div class="endpoint-path">/api/rabbitmq/persistence/*</div>
+                <div class="endpoint-desc">暂停后发送 → docker compose restart rabbitmq → 查状态 → 恢复；persistent=false 可做对比</div>
+                <div class="form-row">
+                    <label>条数</label>
+                    <input type="number" id="rel-rmq-persist-count" value="3" style="max-width:80px">
+                    <label>persistent</label>
+                    <input type="text" id="rel-rmq-persist-flag" value="true" style="max-width:80px">
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/persistence/pause', {}, 'res-rel-rmq-persist')">暂停</button>
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/persistence/send', {count: val('rel-rmq-persist-count'), persistent: val('rel-rmq-persist-flag')}, 'res-rel-rmq-persist')">发送</button>
+                    <button class="send" onclick="get('http://localhost:8081/api/rabbitmq/persistence/status', 'res-rel-rmq-persist')">查状态</button>
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/persistence/resume', {}, 'res-rel-rmq-persist')">恢复</button>
+                </div>
+                <div class="response" id="res-rel-rmq-persist"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">RocketMQ · 幂等消费</div>
+                <div class="endpoint-path">POST /api/rocketmq/idempotent</div>
+                <div class="endpoint-desc">同一业务 ID 连发两条，消费端只处理一次</div>
+                <div class="form-row">
+                    <label>业务 ID</label>
+                    <input type="text" id="rel-mq-id" value="ID-1" style="max-width:140px">
+                    <label>重复发送</label>
+                    <input type="text" id="rel-mq-dup" value="true" style="max-width:80px">
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/idempotent', {messageId: val('rel-mq-id'), duplicate: val('rel-mq-dup')}, 'res-rel-mq-idem')">发送</button>
+                </div>
+                <div class="response" id="res-rel-mq-idem"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">RocketMQ · 顺序消费</div>
+                <div class="endpoint-path">POST /api/rocketmq/ordered-batch | /unordered</div>
+                <div class="endpoint-desc">同一 orderKey 顺序发送；无序 topic 用并发消费做反例</div>
+                <div class="form-row">
+                    <label>Order Key</label>
+                    <input type="text" id="rel-mq-order-key" value="ORDER-1" style="max-width:120px">
+                    <label>条数</label>
+                    <input type="number" id="rel-mq-order-count" value="10" style="max-width:80px">
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/ordered-batch', {orderKey: val('rel-mq-order-key'), count: val('rel-mq-order-count')}, 'res-rel-mq-order')">有序发送</button>
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/unordered', {count: val('rel-mq-order-count')}, 'res-rel-mq-order')">无序发送</button>
+                </div>
+                <div class="response" id="res-rel-mq-order"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">RocketMQ · 消息积压</div>
+                <div class="endpoint-path">/api/rocketmq/backlog/*</div>
+                <div class="endpoint-desc">先暂停消费者，再批量发送；堆积量到 Dashboard 消费者页看 Diff</div>
+                <div class="form-row">
+                    <label>条数</label>
+                    <input type="number" id="rel-mq-backlog-count" value="100" style="max-width:80px">
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/backlog/pause', {}, 'res-rel-mq-backlog')">暂停</button>
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/backlog/send', {count: val('rel-mq-backlog-count')}, 'res-rel-mq-backlog')">发送</button>
+                    <button class="send" onclick="get('http://localhost:8082/api/rocketmq/backlog/status', 'res-rel-mq-backlog')">查状态</button>
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/backlog/resume', {}, 'res-rel-mq-backlog')">恢复</button>
+                </div>
+                <div class="response" id="res-rel-mq-backlog"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">RocketMQ · 消息持久化</div>
+                <div class="endpoint-path">/api/rocketmq/persistence/*</div>
+                <div class="endpoint-desc">暂停后发送 → docker compose restart rocketmq-broker → 恢复，验证消息重新投递</div>
+                <div class="form-row">
+                    <label>条数</label>
+                    <input type="number" id="rel-mq-persist-count" value="3" style="max-width:80px">
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/persistence/pause', {}, 'res-rel-mq-persist')">暂停</button>
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/persistence/send', {count: val('rel-mq-persist-count')}, 'res-rel-mq-persist')">发送</button>
+                    <button class="send" onclick="get('http://localhost:8082/api/rocketmq/persistence/status', 'res-rel-mq-persist')">查状态</button>
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/persistence/resume', {}, 'res-rel-mq-persist')">恢复</button>
+                </div>
+                <div class="response" id="res-rel-mq-persist"></div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -233,6 +363,23 @@
                 const params = new URLSearchParams();
                 Object.entries(body).forEach(([k, v]) => params.append(k, v));
                 const resp = await fetch(url, { method: 'POST', body: params });
+                const data = await resp.json();
+                el.textContent = 'HTTP ' + resp.status + '\n' + JSON.stringify(data, null, 2);
+                if (!resp.ok) el.classList.add('error');
+            } catch (e) {
+                el.classList.add('error');
+                el.textContent = '请求失败: ' + e.message + '\n请确保对应的 demo 应用已启动';
+            }
+        }
+
+        // 可靠性场景的“查状态”按钮走 GET，单独封装一个请求函数
+        async function get(url, resId) {
+            const el = document.getElementById(resId);
+            el.classList.add('show');
+            el.classList.remove('error');
+            el.textContent = '查询中...';
+            try {
+                const resp = await fetch(url);
                 const data = await resp.json();
                 el.textContent = 'HTTP ' + resp.status + '\n' + JSON.stringify(data, null, 2);
                 if (!resp.ok) el.classList.add('error');

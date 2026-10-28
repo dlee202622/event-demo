@@ -81,9 +81,11 @@ demo-rabbitmq/src/main/
 └── java/com/example/demo/rabbitmq/
     ├── config/RabbitMQConfig.java  # 所有队列 / 交换机 / 绑定，建议先读这个
     ├── config/WebConfig.java       # 测试页跨端口调用用的 CORS
-    ├── controller/RabbitMQDemoController.java  # 7 个 POST 接口
+    ├── controller/RabbitMQDemoController.java  # 7 个基础场景接口
+    ├── controller/ReliabilityController.java   # 幂等 / 顺序 / 积压 / 持久化接口
     ├── producer/*Producer.java     # 每个场景一个生产者，只有几行
-    └── consumer/*Consumer.java     # 每个场景一个消费者，只打日志
+    ├── consumer/*Consumer.java     # 每个场景一个消费者，只打日志
+    └── support/                    # 内存幂等表、延迟工具
 ```
 
 **推荐阅读顺序**：`RabbitMQConfig`（拓扑）→ `RabbitMQDemoController`（入口）→ 对应
@@ -93,7 +95,7 @@ demo-rabbitmq/src/main/
 
 ---
 
-## 4. 七个场景逐个跑
+## 4. 十一个场景逐个跑
 
 ### 4.0 场景速查表
 
@@ -107,6 +109,11 @@ demo-rabbitmq/src/main/
 | topic | `demo.topic.exchange` | `order.created` | `demo.topic.queue.all-order` + `.created` |
 | confirm | `""`（默认） | `demo.simple.queue` | `demo.simple.queue` |
 | dlx | `""`（默认） | `demo.dlq.main.queue` | 先到主队列，被拒绝后进 `demo.dlx.queue` |
+| idempotent | `""`（默认） | `demo.idempotent.queue` | `demo.idempotent.queue`（重复只处理一次） |
+| ordered | `""`（默认） | `demo.ordered.queue` | `demo.ordered.queue`（1 个消费者） |
+| unordered | `""`（默认） | `demo.unordered.queue` | `demo.unordered.queue`（4 个消费者抢） |
+| backlog | `""`（默认） | `demo.backlog.queue` | `demo.backlog.queue`（可暂停 / 恢复） |
+| persistence | `""`（默认） | `demo.persistence.queue` | `demo.persistence.queue`（重启后对比） |
 
 所有接口都返回 JSON，`status: "sent"` 只代表**消息已交给 Broker**，不代表已被消费。
 
@@ -362,6 +369,218 @@ Demo 应用、发一条消息，3 秒后管理台里它会从 `demo.dlq.main.que
 
 ---
 
+### 4.8 幂等：重复投递只处理一次
+
+Broker 只能保证「至少一次」：消费者处理完还没 ACK 就断线、消息被重投，业务就会收到两遍。
+幂等的关键是**消息体里带一个稳定的业务唯一 ID**，消费端用这个 ID 去重。
+
+```bash
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/idempotent?messageId=REL-1&duplicate=true'
+```
+
+响应（`duplicate=true` 会把同一条业务 ID 连发两次）：
+
+```json
+{"messageId":"REL-1","queue":"demo.idempotent.queue","sent":"2"}
+```
+
+预期日志：
+
+```text
+[IdempotentConsumer] processed: REL-1
+[IdempotentConsumer] duplicate ignored: REL-1
+```
+
+实现只有两步（`consumer/IdempotentConsumer` + `support/InMemoryIdempotentStore`）：
+
+```java
+if (!idempotentStore.tryAcquire("rabbitmq", messageId)) {   // 1. 原子抢占去重记录
+    log.info("[IdempotentConsumer] duplicate ignored: {}", messageId);
+    return;
+}
+try {
+    // 2. 执行业务；失败必须 release，否则重投会被误判为重复
+} catch (RuntimeException e) {
+    idempotentStore.release("rabbitmq", messageId);
+    throw e;
+}
+```
+
+去重表用 `ConcurrentHashMap.compute` 实现原子抢占，TTL 10 分钟：
+
+```java
+expireAtByKey.compute(key, (ignored, expireAt) -> {
+    if (expireAt == null || expireAt <= now) {
+        first[0] = true;                 // 首次出现，允许处理
+        return now + TTL_MILLIS;
+    }
+    return expireAt;                     // 未过期，判定为重复
+});
+```
+
+要点：
+
+- 去重 key 必须来自**消息体**（订单号、事件 ID）。不要用 Broker 的 `messageId`：重投时它会变；
+- 必须**先抢占、再处理**，否则两条重复消息会同时通过检查；处理失败要 `release`，把重试机会还回去；
+- 这个实现是**进程内**的，只适合单实例 Demo：应用重启记录清空，多实例各存一份；
+- 生产做法：Redis `SET demo:consumed:{id} 1 NX EX 600`（原子 + 自动过期），或数据库唯一索引 / 去重表。
+  还要想清楚 Redis 挂掉时是拒绝消费还是降级放行，不能静默丢消息。
+
+---
+
+### 4.9 顺序：单队列 + 单消费者，生产端也要有序
+
+先看正例（`demo.ordered.queue`，1 个消费者）：
+
+```bash
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/ordered?count=10'
+```
+
+预期日志（同一个消费线程，严格递增）：
+
+```text
+[OrderedConsumer] received: step-1        # 线程 orderedConsumer-1
+[OrderedConsumer] received: step-2
+...
+[OrderedConsumer] received: step-10
+```
+
+再看反例（`demo.unordered.queue`，4 个并发消费者）：
+
+```bash
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/unordered?count=8'
+```
+
+预期日志（4 个线程交错，顺序被打乱）：
+
+```text
+[UnorderedConsumer] thread=...Container#10-3 received: step-3
+[UnorderedConsumer] thread=...Container#10-1 received: step-1
+[UnorderedConsumer] thread=...Container#10-2 received: step-2
+[UnorderedConsumer] thread=...Container#10-4 received: step-6
+```
+
+**只把消费者改成 `concurrency = 1` 还不够。** 开启 publisher confirm 后，一个 channel 在
+确认回来之前不会归还连接池，循环里的 `convertAndSend` 会落到多个 channel 上；而 Broker
+只保证**同一个 channel 内**的发布顺序。实测只改消费端时，日志仍会出现 step-4/5/6 乱序。
+所以发送端用 `invoke` 把整批消息绑定到同一个 channel，并在退出前等待确认：
+
+```java
+rabbitTemplate.invoke(operations -> {
+    for (int i = 1; i <= total; i++) {
+        operations.convertAndSend("", RabbitMQConfig.ORDERED_QUEUE, "step-" + i);
+    }
+    return null;
+});
+```
+
+完整的顺序方案需要同时满足：
+
+- **生产端**：同一业务 key 的消息走同一个 channel / 同一个队列，且前一条确认后再发下一条（或如上整批绑定）；
+- **队列**：只用一个队列，不要给同一队列挂多个消费者（competing consumers 会轮流取消息）；
+- **消费端**：`concurrency = 1`，处理失败不要跳过，否则后续消息会越过失败的那条；
+- **扩容方式**：按业务 key（订单号、用户 ID）拆成多个队列各自单消费者，而不是给一个队列加线程。
+
+---
+
+### 4.10 积压：先暂停消费者，把消息堆起来
+
+```bash
+# 1) 暂停消费者
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/backlog/pause'
+
+# 2) 发 200 条
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/backlog/send?count=200'
+
+# 3) 看堆积
+curl -s 'http://localhost:8081/api/rabbitmq/backlog/status'
+
+# 4) 恢复消费
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/backlog/resume'
+```
+
+预期结果：
+
+```text
+暂停后            {"messageCount":"200","consumerRunning":"false"}
+恢复后约 1 秒      {"messageCount":"0","consumerRunning":"true"}
+```
+
+暂停/恢复通过监听容器 id 控制：
+
+```java
+MessageListenerContainer container = listenerRegistry.getListenerContainer("backlogConsumer");
+container.stop();    // 停止拉取，未 ACK 的消息会重新入队
+container.start();   // 重新拉取
+```
+
+堆积量来自管理 API：`amqpAdmin.getQueueInfo(queue).getMessageCount()`，统计的是 **Ready**
+（还没投递给消费者）的消息；已投递未 ACK 的要看管理台的 **Unacked**。
+
+生产上遇到积压，按顺序排查：
+
+1. **消费者是否还活着**：管理台 Consumers 数为 0 就是实例挂了或队列没绑上；
+2. **消费是否变慢**：下游数据库 / RPC 抖动，看日志耗时和错误率，不要盲目加机器；
+3. **提升消费能力**：加消费者实例、调大 `prefetch`（一次多取几条），但要先确认消息处理是幂等的；
+4. **毒消息**：某条消息一直失败会反复重投，配置重试次数 + DLQ，别让它卡住整个队列；
+5. **临时削峰**：先落库/落盘再异步处理，或对非核心消息做限流、降级。
+
+---
+
+### 4.11 持久化：重启 Broker 后消息还在吗
+
+RabbitMQ 的持久化需要**三个条件同时成立**：队列 durable、消息 `deliveryMode=PERSISTENT`、
+交换机 durable（默认交换机天然满足）。少一个都可能在重启后丢消息。
+
+```bash
+# 1) 暂停消费者，避免消息被立刻消费
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/persistence/pause'
+
+# 2) 发 3 条持久化 + 3 条非持久化
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/persistence/send?count=3&persistent=true'
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/persistence/send?count=3&persistent=false'
+
+# 3) 确认 6 条都在
+curl -s 'http://localhost:8081/api/rabbitmq/persistence/status'
+
+# 4) 重启 Broker（注意是 restart，不是 down/up）
+docker compose restart rabbitmq
+
+# 5) 再查：只剩 3 条持久化消息
+curl -s 'http://localhost:8081/api/rabbitmq/persistence/status'
+
+# 6) 恢复消费，日志只会出现 persist-1/2/3
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/persistence/resume'
+```
+
+实测结果：
+
+```text
+重启前  {"messageCount":"6", ...}
+重启后  {"messageCount":"3", ...}      # 非持久化的 3 条没了
+恢复后  {"messageCount":"0", ...} + [PersistenceConsumer] received: persist-1/2/3
+```
+
+消息属性这样设置（`ReliabilityController#sendPersistence`）：
+
+```java
+MessageProperties properties = new MessageProperties();
+properties.setDeliveryMode(persistent
+        ? MessageDeliveryMode.PERSISTENT      // 写磁盘
+        : MessageDeliveryMode.NON_PERSISTENT);
+rabbitTemplate.send("", RabbitMQConfig.PERSISTENCE_QUEUE, new Message(body, properties));
+```
+
+要点：
+
+- `RabbitTemplate.convertAndSend` 默认已经带 `PERSISTENT`，只有显式改成 `NON_PERSISTENT` 才会丢；
+- 非持久化消息在内存压力下可能被换页到磁盘，所以「重启后偶尔还在」不代表它可靠，**只有持久化才是保证**；
+- 持久化只保证「消息不丢」，不保证「只消费一次」——消费者 ACK 前崩溃仍会重投，需要配合 4.8 的幂等；
+- 本仓库 `docker-compose.yml` 的 RabbitMQ **没有挂数据卷**，`docker compose down` 会连容器一起删除、数据全丢；
+  验证请用 `restart`。生产必须挂持久化卷，并考虑镜像队列 / Quorum Queue 做高可用。
+
+---
+
 ## 5. 管理台怎么用（15672）
 
 - **Overview**：连接数、消息速率，排查「消费者到底连上没有」。
@@ -393,7 +612,8 @@ Demo 应用、发一条消息，3 秒后管理台里它会从 `demo.dlq.main.que
 
 - **队列/交换机别在应用里声明**：生产多用 IaC（Terraform / 管理台脚本）统一管理，避免多实例启动时参数冲突；
 - **手动 ACK + 重试 + DLQ**：本 Demo 靠异常触发拒收，生产应配合重试次数、退避和死信告警；
-- **持久化**：`new Queue(name)` 默认 durable，但消息本身要设 `deliveryMode=PERSISTENT`（`RabbitTemplate` 默认已是持久化）；
+- **消费幂等**：至少一次投递意味着可能重复，用业务唯一 ID + Redis/数据库去重，别用 Broker 的 messageId；
+- **持久化**：`new Queue(name)` 默认 durable，但消息本身要设 `deliveryMode=PERSISTENT`（`RabbitTemplate` 默认已是持久化），并确认 Broker 挂了数据卷；
 - **Confirm 的兜底**：`ack=false` 要重发，并加超时（`CorrelationData.getFuture()`），别只打日志；
 - **连接与线程**：一个应用共享 `ConnectionFactory`，监听容器按队列数开线程；队列特别多时注意 channel 数；
 - **多实例**：同一条队列上的消费者越多吞吐越高，但**顺序性会丢**——需要顺序就按聚合 ID 拆队列或换模型。

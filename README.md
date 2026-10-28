@@ -125,8 +125,8 @@ docker compose up -d xxl-job-db-init xxl-job-admin
 
 | 模块 | 应用端口 | 管理台 | 覆盖场景 | 文档 |
 | --- | --- | --- | --- | --- |
-| demo-rabbitmq | 8081 | <http://localhost:15672>（guest / guest） | 简单队列 / 工作队列 / Fanout / Direct / Topic / Confirm / DLX | [demo-rabbitmq/README.md](demo-rabbitmq/README.md) |
-| demo-rocketmq | 8082 | <http://localhost:19876> | 普通 / 顺序 / Tag 过滤 / 延迟 / 事务 / 广播 | [demo-rocketmq/README.md](demo-rocketmq/README.md) |
+| demo-rabbitmq | 8081 | <http://localhost:15672>（guest / guest） | 简单队列 / 工作队列 / Fanout / Direct / Topic / Confirm / DLX / 幂等 / 顺序 / 积压 / 持久化 | [demo-rabbitmq/README.md](demo-rabbitmq/README.md) |
+| demo-rocketmq | 8082 | <http://localhost:19876> | 普通 / 顺序 / Tag 过滤 / 延迟 / 事务 / 广播 / 幂等 / 积压 / 持久化 | [demo-rocketmq/README.md](demo-rocketmq/README.md) |
 
 ```bash
 # RabbitMQ
@@ -138,8 +138,9 @@ docker compose up -d rocketmq-namesrv rocketmq-broker rocketmq-dashboard
 ./mvnw -pl demo-rocketmq spring-boot:run
 ```
 
-启动后打开 <http://localhost:8081/> 或 <http://localhost:8082/>，页面上直接点按钮发消息，
-每个按钮对应的接口、预期日志和排障方法写在各自模块的 README 里。
+启动后打开 <http://localhost:8081/> 点按钮发消息（页面由 `demo-rabbitmq` 提供，
+其中的 RocketMQ 标签页直接调用 8082 接口，所以测 RocketMQ 时两个应用都要启动；
+`demo-rocketmq` 自身没有静态页面）。每个按钮对应的接口、预期日志和排障方法写在各自模块的 README 里。
 
 ---
 
