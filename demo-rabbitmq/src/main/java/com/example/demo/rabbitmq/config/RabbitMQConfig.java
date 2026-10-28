@@ -126,6 +126,8 @@ public class RabbitMQConfig {
     public Queue dlxMainQueue() {
         return QueueBuilder.durable(DLQ_MAIN_QUEUE)
                 .withArgument("x-dead-letter-exchange", DLX_EXCHANGE)
+                // 不指定时死信沿用原 routing key（这里是队列名），与 DLX 绑定键 "dlq" 不匹配会被丢弃
+                .withArgument("x-dead-letter-routing-key", "dlq")
                 .withArgument("x-message-ttl", 3000)
                 .build();
     }
