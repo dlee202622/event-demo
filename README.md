@@ -16,8 +16,8 @@ demo
 ├── demo-order-service                 订单服务（9001，订单上下文 + 诊断接口）
 ├── demo-inventory-service             库存服务（9002，订阅 OrderCreated / OrderCancelled）
 ├── demo-loyalty-service               积分服务（9003，订阅 OrderPaid）
-├── demo-rabbitmq                      RabbitMQ 基础用法示例
-└── demo-rocketmq                      RocketMQ 基础用法示例
+├── demo-rabbitmq                      RabbitMQ 基础用法示例（[文档](demo-rabbitmq/README.md)）
+└── demo-rocketmq                      RocketMQ 基础用法示例（[文档](demo-rocketmq/README.md)）
 ```
 
 服务之间只共享**事件契约**，不共享聚合、仓储或代码模块：每个服务各自定义它消费/发布的事件结构。
@@ -118,6 +118,28 @@ docker compose up -d xxl-job-db-init xxl-job-admin
 - 在调度中心新建任务：JobHandler 填 `unpaidOrderTimeoutJob`，cron 例 `0 */1 * * * ?`，也可手动执行一次；
 - 单次最多处理 `demo.order.expiry-batch-size`（默认 100）笔，逐单独立事务，单笔失败不影响整批；
 - 可用环境变量覆盖：`XXL_JOB_ENABLED` / `XXL_JOB_ADMIN` / `XXL_JOB_EXECUTOR_ADDRESS`。
+
+### 消息中间件 Demo（RabbitMQ / RocketMQ）
+
+两个独立模块，不依赖上面三个业务服务，用来单独练习中间件基础用法：
+
+| 模块 | 应用端口 | 管理台 | 覆盖场景 | 文档 |
+| --- | --- | --- | --- | --- |
+| demo-rabbitmq | 8081 | <http://localhost:15672>（guest / guest） | 简单队列 / 工作队列 / Fanout / Direct / Topic / Confirm / DLX | [demo-rabbitmq/README.md](demo-rabbitmq/README.md) |
+| demo-rocketmq | 8082 | <http://localhost:19876> | 普通 / 顺序 / Tag 过滤 / 延迟 / 事务 / 广播 | [demo-rocketmq/README.md](demo-rocketmq/README.md) |
+
+```bash
+# RabbitMQ
+docker compose up -d rabbitmq
+./mvnw -pl demo-rabbitmq spring-boot:run
+
+# RocketMQ（NameServer + Broker + Dashboard）
+docker compose up -d rocketmq-namesrv rocketmq-broker rocketmq-dashboard
+./mvnw -pl demo-rocketmq spring-boot:run
+```
+
+启动后打开 <http://localhost:8081/> 或 <http://localhost:8082/>，页面上直接点按钮发消息，
+每个按钮对应的接口、预期日志和排障方法写在各自模块的 README 里。
 
 ---
 
