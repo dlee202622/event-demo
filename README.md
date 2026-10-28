@@ -125,8 +125,8 @@ docker compose up -d xxl-job-db-init xxl-job-admin
 
 | 模块 | 应用端口 | 管理台 | 覆盖场景 | 文档 |
 | --- | --- | --- | --- | --- |
-| demo-rabbitmq | 8081 | <http://localhost:15672>（guest / guest） | 简单队列 / 工作队列 / Fanout / Direct / Topic / Confirm / DLX / 幂等 / 顺序 / 积压 / 持久化 | [demo-rabbitmq/README.md](demo-rabbitmq/README.md) |
-| demo-rocketmq | 8082 | <http://localhost:19876> | 普通 / 顺序 / Tag 过滤 / 延迟 / 事务 / 广播 / 幂等 / 积压 / 持久化 | [demo-rocketmq/README.md](demo-rocketmq/README.md) |
+| demo-rabbitmq | 8081 | <http://localhost:15672>（guest / guest） | 简单队列 / 工作队列 / Fanout / Direct / Topic / Confirm / DLX / 幂等 / 顺序 / 积压 / 持久化 / 优先级 | [demo-rabbitmq/README.md](demo-rabbitmq/README.md) |
+| demo-rocketmq | 8082 | <http://localhost:19876> | 普通 / 顺序 / Tag 过滤 / 延迟 / 事务 / 广播 / 幂等 / 积压 / 持久化 / 优先级隔离 | [demo-rocketmq/README.md](demo-rocketmq/README.md) |
 
 ```bash
 # RabbitMQ

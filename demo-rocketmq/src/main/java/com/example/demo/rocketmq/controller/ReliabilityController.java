@@ -4,16 +4,19 @@ import com.example.demo.rocketmq.config.ReliabilityTopics;
 import com.example.demo.rocketmq.producer.OrderlyProducer;
 import com.example.demo.rocketmq.support.RocketMQConsumerControl;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Locale;
 import java.util.Map;
 
 /**
- * 消息可靠性场景的演示接口：幂等、顺序、积压、持久化。
+ * 消息可靠性场景的演示接口：幂等、顺序、积压、持久化、优先级。
  *
  * <p>这些接口只负责“制造现象”，真正的处理逻辑在对应的 Consumer 里。
  * 积压/持久化通过 {@link RocketMQConsumerControl} 暂停消费者，
@@ -186,8 +189,83 @@ public class ReliabilityController {
     }
 
     // ------------------------------------------------------------------
+    // 5. 优先级（RocketMQ 无原生优先级，用 Topic 隔离模拟）
+    // ------------------------------------------------------------------
+
+    /**
+     * 按优先级发送消息。
+     *
+     * <p>RocketMQ 的队列是严格 FIFO 的，消息属性里也没有 priority 字段，Broker 不会帮你排序。
+     * 生产上的折中是**按优先级拆 Topic / 队列，并给每个优先级独立消费者**：</p>
+     * <ul>
+     *   <li>高优先级走独立 Topic，消费者线程和队列与低优先级互不争抢；</li>
+     *   <li>低优先级可以单独暂停、降速或扩容，积压时不影响高优先级；</li>
+     *   <li>代价是生产者要自己判定优先级，且同一条流内无法“插队”。</li>
+     * </ul>
+     *
+     * <p>level 只接受 high / normal / low；发送后观察对应 Consumer 的日志。
+     * 想验证隔离效果：先暂停 low，再发大量 low，然后发 high，high 仍会被立刻消费。</p>
+     */
+    @PostMapping("/priority/send")
+    public Map<String, String> sendPriority(
+            @RequestParam(defaultValue = "normal") String level,
+            @RequestParam(defaultValue = "10") int count) {
+        PriorityRoute route = route(level);
+        int total = clamp(count);
+        for (int i = 1; i <= total; i++) {
+            rocketTemplate.syncSend(route.topic(), route.level() + "-" + i);
+        }
+        return Map.of(
+                "level", route.level(),
+                "topic", route.topic(),
+                "sent", String.valueOf(total),
+                "note", "RocketMQ 无原生优先级：靠 Topic + 独立消费者组做隔离");
+    }
+
+    /** 暂停指定优先级的消费者（level=high/normal/low），制造该优先级的堆积。 */
+    @PostMapping("/priority/pause")
+    public Map<String, String> pausePriority(@RequestParam(defaultValue = "low") String level) {
+        PriorityRoute route = route(level);
+        consumerControl.suspend(route.group());
+        return status(route.topic(), route.group());
+    }
+
+    /** 恢复指定优先级的消费者，从原消费位点继续。 */
+    @PostMapping("/priority/resume")
+    public Map<String, String> resumePriority(@RequestParam(defaultValue = "low") String level) {
+        PriorityRoute route = route(level);
+        consumerControl.resume(route.group());
+        return status(route.topic(), route.group());
+    }
+
+    /** 查看指定优先级消费者的暂停状态与堆积提示。 */
+    @GetMapping("/priority/status")
+    public Map<String, String> priorityStatus(@RequestParam(defaultValue = "low") String level) {
+        PriorityRoute route = route(level);
+        return status(route.topic(), route.group());
+    }
+
+    // ------------------------------------------------------------------
     // 公共辅助
     // ------------------------------------------------------------------
+
+    /** 优先级到 Topic / ConsumerGroup 的映射。 */
+    private record PriorityRoute(String level, String topic, String group) {
+    }
+
+    private PriorityRoute route(String level) {
+        String normalized = level.toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "high" -> new PriorityRoute(normalized,
+                    ReliabilityTopics.PRIORITY_HIGH_TOPIC, ReliabilityTopics.PRIORITY_HIGH_GROUP);
+            case "normal" -> new PriorityRoute(normalized,
+                    ReliabilityTopics.PRIORITY_NORMAL_TOPIC, ReliabilityTopics.PRIORITY_NORMAL_GROUP);
+            case "low" -> new PriorityRoute(normalized,
+                    ReliabilityTopics.PRIORITY_LOW_TOPIC, ReliabilityTopics.PRIORITY_LOW_GROUP);
+            default -> throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "level must be high / normal / low");
+        };
+    }
 
     /** 批量参数做边界收敛，避免一次请求发送过多消息。 */
     private int clamp(int count) {

@@ -43,6 +43,10 @@ public class RabbitMQConfig {
     public static final String UNORDERED_QUEUE = "demo.unordered.queue";
     public static final String BACKLOG_QUEUE = "demo.backlog.queue";
     public static final String PERSISTENCE_QUEUE = "demo.persistence.queue";
+    public static final String PRIORITY_QUEUE = "demo.priority.queue";
+
+    /** 优先级上限；级别越多 Broker 内部排序成本越高，生产通常 5~10 级。 */
+    public static final int PRIORITY_MAX = 10;
 
     @Bean
     public Queue simpleQueue() {
@@ -180,5 +184,19 @@ public class RabbitMQConfig {
     @Bean
     public Queue persistenceQueue() {
         return new Queue(PERSISTENCE_QUEUE);
+    }
+
+    /**
+     * 优先级队列：x-max-priority 必须在队列声明时指定，之后不能修改。
+     *
+     * <p>Broker 会在队列内部按 priority 从高到低投递，但只对**尚未投递**（Ready）的消息生效；
+     * 已经发给消费者的消息无法被后来的高优先级消息抢占。消息的 priority 见
+     * {@code ReliabilityController#sendPriority}。</p>
+     */
+    @Bean
+    public Queue priorityQueue() {
+        return QueueBuilder.durable(PRIORITY_QUEUE)
+                .maxPriority(PRIORITY_MAX)
+                .build();
     }
 }

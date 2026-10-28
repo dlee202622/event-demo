@@ -20,6 +20,14 @@ public final class ReliabilityTopics {
     public static final String PERSISTENCE_TOPIC = "demo-persistence-topic";
     public static final String PERSISTENCE_GROUP = "demo-persistence-consumer-group";
 
+    // RocketMQ 没有消息优先级：按优先级拆 Topic + 独立消费者组，靠资源隔离模拟
+    public static final String PRIORITY_HIGH_TOPIC = "demo-priority-high-topic";
+    public static final String PRIORITY_HIGH_GROUP = "demo-priority-high-consumer-group";
+    public static final String PRIORITY_NORMAL_TOPIC = "demo-priority-normal-topic";
+    public static final String PRIORITY_NORMAL_GROUP = "demo-priority-normal-consumer-group";
+    public static final String PRIORITY_LOW_TOPIC = "demo-priority-low-topic";
+    public static final String PRIORITY_LOW_GROUP = "demo-priority-low-consumer-group";
+
     private ReliabilityTopics() {
     }
 }

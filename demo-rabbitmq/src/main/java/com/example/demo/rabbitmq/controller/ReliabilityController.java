@@ -19,7 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
- * 消息可靠性场景的演示接口：幂等、顺序、积压、持久化。
+ * 消息可靠性场景的演示接口：幂等、顺序、积压、持久化、优先级。
  *
  * <p>这些接口只负责“制造现象”，真正的处理逻辑在对应的 Consumer 里。
  * 暂停/恢复消费者通过 {@link RabbitListenerEndpointRegistry} 按监听容器 id 控制，
@@ -34,6 +34,7 @@ public class ReliabilityController {
 
     private static final String BACKLOG_CONTAINER = "backlogConsumer";
     private static final String PERSISTENCE_CONTAINER = "persistenceConsumer";
+    private static final String PRIORITY_CONTAINER = "priorityConsumer";
 
     private final RabbitTemplate rabbitTemplate;
     private final RabbitListenerEndpointRegistry listenerRegistry;
@@ -210,6 +211,63 @@ public class ReliabilityController {
     @GetMapping("/persistence/status")
     public Map<String, String> persistenceStatus() {
         return queueStatus(RabbitMQConfig.PERSISTENCE_QUEUE, PERSISTENCE_CONTAINER);
+    }
+
+    // ------------------------------------------------------------------
+    // 5. 优先级
+    // ------------------------------------------------------------------
+
+    /**
+     * 发送带优先级的消息。
+     *
+     * <p>priority 越大越先出队，取值范围 0 ~ {@link RabbitMQConfig#PRIORITY_MAX}。
+     * 正确观察方式：先 /priority/pause 让消息在队列里排队，再按低 → 中 → 高发送，
+     * 最后 /priority/resume，日志会先出现高优先级。</p>
+     *
+     * <p>注意：如果消费者一直在运行，消息一进队列就被取走，优先级起不到作用——
+     * 优先级只在“多条消息同时处于 Ready”时决定谁先被投递。</p>
+     */
+    @PostMapping("/priority/send")
+    public Map<String, String> sendPriority(
+            @RequestParam(defaultValue = "5") int priority,
+            @RequestParam(defaultValue = "10") int count) {
+        int level = Math.max(0, Math.min(priority, RabbitMQConfig.PRIORITY_MAX));
+        int total = clamp(count);
+        // 整批绑定到同一个 channel，保证同一优先级内也按发送顺序入队（原因见 /ordered 的说明）
+        rabbitTemplate.invoke(operations -> {
+            for (int i = 1; i <= total; i++) {
+                String body = "p" + level + "-" + i;
+                operations.convertAndSend("", RabbitMQConfig.PRIORITY_QUEUE, body,
+                        message -> {
+                            // 优先级写在消息属性里，而不是消息体；消费端通过 getPriority() 读取
+                            message.getMessageProperties().setPriority(level);
+                            return message;
+                        });
+            }
+            return null;
+        });
+        return Map.of(
+                "queue", RabbitMQConfig.PRIORITY_QUEUE,
+                "priority", String.valueOf(level),
+                "sent", String.valueOf(total));
+    }
+
+    /** 暂停优先级消费者，让消息在队列中按优先级排队。 */
+    @PostMapping("/priority/pause")
+    public Map<String, String> pausePriority() {
+        return setContainerRunning(PRIORITY_CONTAINER, false);
+    }
+
+    /** 恢复优先级消费者，观察高优先级消息先出队。 */
+    @PostMapping("/priority/resume")
+    public Map<String, String> resumePriority() {
+        return setContainerRunning(PRIORITY_CONTAINER, true);
+    }
+
+    /** 查看优先级队列深度与消费者状态。 */
+    @GetMapping("/priority/status")
+    public Map<String, String> priorityStatus() {
+        return queueStatus(RabbitMQConfig.PRIORITY_QUEUE, PRIORITY_CONTAINER);
     }
 
     // ------------------------------------------------------------------

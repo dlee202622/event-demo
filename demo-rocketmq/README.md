@@ -110,7 +110,7 @@ rocketmq:
 
 ---
 
-## 4. 十个场景逐个跑
+## 4. 十一个场景逐个跑
 
 所有接口返回 `"status":"sent"` 仅表示**发送成功（Broker 已收下）**，消费是异步的。
 看效果请关注应用日志；Topic 是否创建、有多少消息、消费有没有堆积，看 Dashboard。
@@ -514,6 +514,64 @@ docker exec demo-rocketmq-broker-1 sh -c \
 
 ---
 
+### 4.11 优先级：RocketMQ 没有原生优先级
+
+RocketMQ 的消息没有 `priority` 属性，队列严格 FIFO，Broker 不会按优先级排序。
+生产上的折中是**按优先级拆 Topic / 队列，并用独立消费者组做资源隔离**。
+
+本 Demo 拆了三个 Topic，单条处理耗时故意不同：
+
+| level | Topic | ConsumerGroup | 单条耗时 |
+| --- | --- | --- | --- |
+| high | `demo-priority-high-topic` | `demo-priority-high-consumer-group` | 5ms |
+| normal | `demo-priority-normal-topic` | `demo-priority-normal-consumer-group` | 30ms |
+| low | `demo-priority-low-topic` | `demo-priority-low-consumer-group` | 100ms |
+
+验证隔离效果：
+
+```bash
+# 1) 暂停低优先级消费者
+curl -s -X POST 'http://localhost:8082/api/rocketmq/priority/pause?level=low'
+
+# 2) 低优先级发 40 条（会一直堆积）
+curl -s -X POST 'http://localhost:8082/api/rocketmq/priority/send?level=low&count=40'
+
+# 3) 高 / 普通优先级各发一批
+curl -s -X POST 'http://localhost:8082/api/rocketmq/priority/send?level=high&count=20'
+curl -s -X POST 'http://localhost:8082/api/rocketmq/priority/send?level=normal&count=10'
+
+# 4) Dashboard 消费者页：low 的 Diff = 40，high / normal 已归零
+#    http://localhost:19876/
+
+# 5) 恢复低优先级
+curl -s -X POST 'http://localhost:8082/api/rocketmq/priority/resume?level=low'
+```
+
+实测结果：
+
+```text
+暂停 low 期间：
+  PriorityHighConsumer   20 条   （全部消费）
+  PriorityNormalConsumer 10 条   （全部消费）
+  PriorityLowConsumer     0 条   （消费位点不动，40 条待消费）
+
+恢复 low 后：
+  PriorityLowConsumer    40 条   （从原消费位点补齐）
+```
+
+要点：
+
+- **这不是严格的优先级调度**：无法让后到的高优先级消息插队到已经进入低优先级 Topic 的消息之前，
+  生产者必须先判断优先级再决定发到哪个 Topic；
+- 隔离收益是真实的：低优先级积压、降速、暂停都不会占用高优先级消费者的线程和队列；
+- 暂停同样只是停止拉取，已经拉到客户端的消息仍可能继续消费（与 4.9 节一致）；
+- 如果非要在同一 Topic 内按优先级处理，只能在应用内调度（消费者把消息放进
+  `PriorityBlockingQueue`，由少量线程按优先级取出）。代价是消息在内存排队、ACK 延迟、
+  进程崩溃重复消费、内存可能堆积，必须配合幂等和容量上限，一般只在特殊场景使用；
+- 更常见的替代方案：低优先级用延迟消息错峰（4.4 节），或按业务拆分独立集群做物理隔离。
+
+---
+
 ## 5. Dashboard 怎么用（19876）
 
 - **驾驶舱 / 集群**：Broker 是否在线、消息量与 TPS。
@@ -547,6 +605,7 @@ docker exec demo-rocketmq-broker-1 sh -c \
 - **消费幂等**：至少一次投递 + 重试意味着可能重复，业务侧用唯一键/状态机去重；
 - **重试与死信**：消费失败默认重试 16 次后进入 `%DLQ%<consumerGroup>`，需要监控和人工处理；
 - **顺序与并发的取舍**：ORDERLY 会牺牲吞吐；能靠业务状态机容忍乱序时优先并发消费；
+- **优先级**：没有消息级优先级，别指望消费端排序；按业务拆 Topic / 队列，并给低优先级单独限流或降级；
 - **事务消息的回查实现**：本地事务表必须可查、可幂等，回查逻辑要能处理「事务进行中」；
 - **持久化**：默认 `ASYNC_FLUSH`，进程重启不丢但断电可能丢最后一批；强可靠要开 `SYNC_FLUSH` 并配主从 / DLedger，Broker 数据目录必须挂卷；
 - **监控**：消费堆积（Diff）、发送失败率、RT、DLQ 数量，比看应用日志更早发现问题。
@@ -560,6 +619,7 @@ docker exec demo-rocketmq-broker-1 sh -c \
 | 路由模型 | Topic + Tag，模型简单、天然分区 | Exchange + Binding，路由灵活 |
 | 消息保留 | 按时间/大小保留，可按 offset 回溯 | 消费后删除，回溯需额外设计 |
 | 顺序 | 同一队列 / 同一 sharding key 有序 | 单队列单消费者有序 |
+| 优先级 | 无原生优先级，按 Topic / 队列拆分隔离 | 原生 `x-max-priority`，只对排队消息生效 |
 | 延迟消息 | 原生延迟等级 / 定时消息 | TTL + DLX 间接实现 |
 | 事务消息 | 半消息 + 本地事务回查 | 无原生支持，本地消息表 / Outbox |
 | 广播 | `BROADCASTING`，实例各自维护 offset | Fanout 交换机复制到多个队列 |

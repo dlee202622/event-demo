@@ -95,7 +95,7 @@ demo-rabbitmq/src/main/
 
 ---
 
-## 4. 十一个场景逐个跑
+## 4. 十二个场景逐个跑
 
 ### 4.0 场景速查表
 
@@ -114,6 +114,7 @@ demo-rabbitmq/src/main/
 | unordered | `""`（默认） | `demo.unordered.queue` | `demo.unordered.queue`（4 个消费者抢） |
 | backlog | `""`（默认） | `demo.backlog.queue` | `demo.backlog.queue`（可暂停 / 恢复） |
 | persistence | `""`（默认） | `demo.persistence.queue` | `demo.persistence.queue`（重启后对比） |
+| priority | `""`（默认） | `demo.priority.queue` | `demo.priority.queue`（按 priority 高 → 低出队） |
 
 所有接口都返回 JSON，`status: "sent"` 只代表**消息已交给 Broker**，不代表已被消费。
 
@@ -581,6 +582,61 @@ rabbitTemplate.send("", RabbitMQConfig.PERSISTENCE_QUEUE, new Message(body, prop
 
 ---
 
+### 4.12 优先级：让高优先级消息先出队
+
+RabbitMQ 原生支持优先级队列，但**必须在声明队列时**用 `x-max-priority` 指定（本 Demo 是 10）：
+
+```java
+QueueBuilder.durable(PRIORITY_QUEUE).maxPriority(RabbitMQConfig.PRIORITY_MAX).build();
+```
+
+发送时把优先级写进**消息属性**（0 ~ 10，越大越优先）：
+
+```java
+rabbitTemplate.convertAndSend("", RabbitMQConfig.PRIORITY_QUEUE, body, message -> {
+    message.getMessageProperties().setPriority(9);
+    return message;
+});
+```
+
+操作步骤（先暂停，让消息在队列里排队）：
+
+```bash
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/priority/pause'
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/priority/send?priority=1&count=5'
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/priority/send?priority=5&count=5'
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/priority/send?priority=9&count=5'
+
+# 15 条都在队列里
+curl -s 'http://localhost:8081/api/rabbitmq/priority/status'
+
+curl -s -X POST 'http://localhost:8081/api/rabbitmq/priority/resume'
+```
+
+预期日志（高优先级先全部出队，再轮到中、低）：
+
+```text
+[PriorityConsumer] received: p9-1 (priority=9)
+[PriorityConsumer] received: p9-2 (priority=9)
+...                                    # 5 条 priority=9
+[PriorityConsumer] received: p5-1 (priority=5)
+...                                    # 5 条 priority=5
+[PriorityConsumer] received: p1-1 (priority=1)
+...                                    # 5 条 priority=1
+```
+
+要点：
+
+- 优先级只影响**已经入队、还在等待投递**的消息。消费者空闲时消息一到就被取走，
+  之后才到的高优先级消息**无法抢占**；
+- `prefetch` 越大，消费者一次预取的低优先级消息越多，优先级效果越弱。对优先级敏感时把它调小（如 1 ~ 10）；
+- `x-max-priority` 在队列声明时固定，之后不能修改；改级别要删除队列重建；
+- 级别不是越多越好：Broker 内部按级别维护子队列，级别过多会增加调度开销，生产一般 ≤ 10；
+- 优先级会牺牲部分吞吐，且不能替代资源隔离。核心链路的高实时性更可靠的做法是
+  **独立队列 + 独立消费者**，避免被大流量低优先级消息拖住。
+
+---
+
 ## 5. 管理台怎么用（15672）
 
 - **Overview**：连接数、消息速率，排查「消费者到底连上没有」。
@@ -616,7 +672,8 @@ rabbitTemplate.send("", RabbitMQConfig.PERSISTENCE_QUEUE, new Message(body, prop
 - **持久化**：`new Queue(name)` 默认 durable，但消息本身要设 `deliveryMode=PERSISTENT`（`RabbitTemplate` 默认已是持久化），并确认 Broker 挂了数据卷；
 - **Confirm 的兜底**：`ack=false` 要重发，并加超时（`CorrelationData.getFuture()`），别只打日志；
 - **连接与线程**：一个应用共享 `ConnectionFactory`，监听容器按队列数开线程；队列特别多时注意 channel 数；
-- **多实例**：同一条队列上的消费者越多吞吐越高，但**顺序性会丢**——需要顺序就按聚合 ID 拆队列或换模型。
+- **多实例**：同一条队列上的消费者越多吞吐越高，但**顺序性会丢**——需要顺序就按聚合 ID 拆队列或换模型；
+- **优先级**：只在队列有积压时生效，且会牺牲部分吞吐；核心链路的实时性应靠独立队列 / 独立消费者做隔离，而不是只调 priority。
 
 ---
 
@@ -629,6 +686,7 @@ rabbitTemplate.send("", RabbitMQConfig.PERSISTENCE_QUEUE, new Message(body, prop
 | 路由 | Exchange + binding + routingKey | Topic + Tag，订阅关系更简单 |
 | 广播 | Fanout 交换机复制到多队列 | `MessageModel.BROADCASTING`，每个实例都收 |
 | 顺序 | 单队列 + 单消费者保证 | 按 key 选队列，`syncSendOrderly` |
+| 优先级 | 原生 `x-max-priority`，只对排队中的消息生效 | 无原生优先级，按 Topic / 队列拆分做隔离 |
 | 延迟消息 | 靠 TTL + DLX 间接实现 | 原生延迟等级（1s/5s/10s...） |
 | 事务消息 | 无原生支持，需本地消息表 | 半消息 + 本地事务回查 |
 | 运维 | 管理台轻量，队列级观察 | NameServer + Broker，Dashboard 看 topic/消费位点 |

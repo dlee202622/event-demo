@@ -338,6 +338,40 @@
                 </div>
                 <div class="response" id="res-rel-mq-persist"></div>
             </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">RabbitMQ · 消息优先级</div>
+                <div class="endpoint-path">/api/rabbitmq/priority/*</div>
+                <div class="endpoint-desc">先暂停，再按 1 / 5 / 9 各发 5 条，恢复后日志顺序应为 9 → 5 → 1（仅队列中排队的消息生效）</div>
+                <div class="form-row">
+                    <label>优先级</label>
+                    <input type="number" id="rel-rmq-prio-level" value="9" style="max-width:70px">
+                    <label>条数</label>
+                    <input type="number" id="rel-rmq-prio-count" value="5" style="max-width:70px">
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/priority/pause', {}, 'res-rel-rmq-prio')">暂停</button>
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/priority/send', {priority: val('rel-rmq-prio-level'), count: val('rel-rmq-prio-count')}, 'res-rel-rmq-prio')">发送</button>
+                    <button class="send" onclick="get('http://localhost:8081/api/rabbitmq/priority/status', 'res-rel-rmq-prio')">查状态</button>
+                    <button class="send" onclick="post('http://localhost:8081/api/rabbitmq/priority/resume', {}, 'res-rel-rmq-prio')">恢复</button>
+                </div>
+                <div class="response" id="res-rel-rmq-prio"></div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-title">RocketMQ · 优先级隔离</div>
+                <div class="endpoint-path">/api/rocketmq/priority/*</div>
+                <div class="endpoint-desc">RocketMQ 无原生优先级，按 level 拆 Topic + 独立消费者。先暂停 low 发 40 条，再发 high，high 仍立即消费</div>
+                <div class="form-row">
+                    <label>level</label>
+                    <input type="text" id="rel-mq-prio-level" value="low" style="max-width:80px">
+                    <label>条数</label>
+                    <input type="number" id="rel-mq-prio-count" value="20" style="max-width:70px">
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/priority/pause', {level: 'low'}, 'res-rel-mq-prio')">暂停 low</button>
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/priority/send', {level: val('rel-mq-prio-level'), count: val('rel-mq-prio-count')}, 'res-rel-mq-prio')">发送</button>
+                    <button class="send" onclick="get('http://localhost:8082/api/rocketmq/priority/status?level=low', 'res-rel-mq-prio')">查状态</button>
+                    <button class="send" onclick="post('http://localhost:8082/api/rocketmq/priority/resume', {level: 'low'}, 'res-rel-mq-prio')">恢复 low</button>
+                </div>
+                <div class="response" id="res-rel-mq-prio"></div>
+            </div>
         </div>
     </div>
 
