@@ -1,0 +1,2153 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Redis 实战指南 · 数据类型 × 限流 × 分布式锁 × 缓存一致性</title>
+<script>
+  try {
+    var savedTheme = localStorage.getItem('redis-guide-theme');
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = savedTheme || (prefersDark ? 'dark' : 'light');
+  } catch (e) { /* 隐私模式下 localStorage 可能不可用，退回默认主题 */ }
+</script>
+<style>
+  :root {
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sidebar: 276px;
+    --maxw: 980px;
+
+    --bg: #f5f7fb;
+    --surface: #ffffff;
+    --surface-2: #eef2f8;
+    --text: #1b2433;
+    --muted: #5c6a7e;
+    --border: #dde4ef;
+    --accent: #4f46e5;
+    --accent-2: #0f766e;
+    --accent-weak: #eef0ff;
+    --ok: #047857;
+    --ok-bg: #ecfdf5;
+    --warn: #b45309;
+    --warn-bg: #fff7ed;
+    --danger: #b91c1c;
+    --danger-bg: #fef2f2;
+    --code-bg: #0c1424;
+    --code-head: #131f35;
+    --code-border: #22304c;
+    --code-text: #dbe4f5;
+    --shadow: 0 10px 30px -18px rgba(23, 37, 84, .35);
+  }
+  html[data-theme="dark"] {
+    --bg: #080d18;
+    --surface: #101829;
+    --surface-2: #0c1322;
+    --text: #e6ebf5;
+    --muted: #97a5bb;
+    --border: #22304a;
+    --accent: #8f9cff;
+    --accent-2: #2dd4bf;
+    --accent-weak: #1a2344;
+    --ok: #34d399;
+    --ok-bg: #08251d;
+    --warn: #fbbf24;
+    --warn-bg: #2a1e08;
+    --danger: #f87171;
+    --danger-bg: #2a1013;
+    --code-bg: #070c17;
+    --code-head: #0d1626;
+    --code-border: #1c2942;
+    --code-text: #dbe4f5;
+    --shadow: 0 12px 34px -18px rgba(0, 0, 0, .7);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.78;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  img, svg { max-width: 100%; }
+  ::selection { background: var(--accent); color: #fff; }
+
+  .progress {
+    position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 60;
+    background: transparent; pointer-events: none;
+  }
+  .progress span {
+    display: block; height: 100%; width: 0;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width .12s linear;
+  }
+  .theme-toggle {
+    position: fixed; top: 16px; right: 18px; z-index: 61;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font: 600 12px/1 var(--sans);
+    padding: 9px 13px; border-radius: 999px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+  }
+  .theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+  .shell {
+    display: grid;
+    grid-template-columns: var(--sidebar) minmax(0, 1fr);
+    max-width: 1520px;
+    margin: 0 auto;
+  }
+
+  /* ---------- 侧边目录 ---------- */
+  .sidebar {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    padding: 30px 18px 48px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    scrollbar-width: thin;
+  }
+  .brand { padding: 0 10px 18px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .brand .mark {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700; letter-spacing: .16em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  .brand .mark::before {
+    content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 4px var(--accent-weak);
+  }
+  .brand h1 { margin: 10px 0 2px; font-size: 18px; letter-spacing: -.01em; }
+  .brand p { margin: 0; font-size: 12px; color: var(--muted); }
+
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a {
+    display: block; padding: 6px 10px;
+    color: var(--muted); font-size: 13.5px; line-height: 1.5;
+    border-left: 2px solid transparent; border-radius: 0 8px 8px 0;
+  }
+  .toc a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }
+  .toc a.active {
+    color: var(--accent); background: var(--accent-weak);
+    border-left-color: var(--accent); font-weight: 600;
+  }
+  .toc .sub a { padding-left: 26px; font-size: 12.8px; }
+  .toc .group {
+    padding: 14px 10px 4px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .12em;
+    color: var(--muted); text-transform: uppercase;
+  }
+  .side-note {
+    margin-top: 22px; padding: 12px;
+    border-radius: 10px; background: var(--surface-2);
+    color: var(--muted); font-size: 11.5px; line-height: 1.65;
+  }
+
+  /* ---------- 主体 ---------- */
+  main { padding: 34px clamp(18px, 4vw, 58px) 96px; min-width: 0; }
+  .content { max-width: var(--maxw); margin: 0 auto; }
+
+  .hero {
+    position: relative; overflow: hidden;
+    border-radius: 22px;
+    padding: clamp(26px, 5vw, 48px);
+    color: #fff;
+    background:
+      radial-gradient(800px 320px at 88% -10%, rgba(45, 212, 191, .38), transparent 62%),
+      radial-gradient(620px 300px at 0% 110%, rgba(167, 139, 250, .35), transparent 60%),
+      linear-gradient(135deg, #1e1b4b 0%, #3730a3 52%, #115e59 100%);
+    box-shadow: 0 26px 60px -32px rgba(30, 27, 75, .75);
+  }
+  .hero::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(rgba(255,255,255,.16) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: linear-gradient(120deg, transparent 40%, #000 100%);
+  }
+  .hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase;
+    color: #c7d2fe;
+  }
+  .hero .eyebrow::before { content: ""; width: 26px; height: 1px; background: currentColor; }
+  .hero h2 { margin: 14px 0 12px; font-size: clamp(30px, 4.4vw, 46px); line-height: 1.18; letter-spacing: -.02em; }
+  .hero .sub { max-width: 720px; margin: 0; color: #dbe3ff; font-size: 15.5px; }
+  .hero .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  .hero .badges span {
+    font-size: 11.5px; padding: 5px 10px; border-radius: 999px;
+    background: rgba(255,255,255,.11); border: 1px solid rgba(255,255,255,.22);
+    color: #eef2ff;
+  }
+  .hero .stats {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px; margin-top: 28px;
+    border-radius: 14px; overflow: hidden;
+    background: rgba(255,255,255,.18);
+  }
+  .hero .stat { padding: 14px 16px; background: rgba(15, 23, 42, .28); }
+  .hero .stat b { display: block; font-size: 22px; line-height: 1.2; }
+  .hero .stat small { color: #cbd5ff; font-size: 11.5px; letter-spacing: .03em; }
+  .hero .jump { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+  .hero .jump a {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 10px 16px; border-radius: 10px;
+    font-size: 13px; font-weight: 600;
+    background: #fff; color: #312e81;
+  }
+  .hero .jump a.ghost {
+    background: transparent; color: #e0e7ff; border: 1px solid rgba(255,255,255,.35);
+  }
+  .hero .jump a:hover { text-decoration: none; transform: translateY(-1px); }
+
+  section { margin-top: 78px; scroll-margin-top: 24px; }
+  h2 {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    margin: 0 0 10px; font-size: clamp(24px, 2.7vw, 30px);
+    letter-spacing: -.02em; line-height: 1.3;
+  }
+  h2 .no {
+    font: 700 12px/1 var(--mono); color: var(--accent);
+    background: var(--accent-weak); border: 1px solid var(--border);
+    padding: 5px 9px; border-radius: 7px;
+  }
+  h3 { margin: 44px 0 10px; font-size: 21px; letter-spacing: -.01em; scroll-margin-top: 24px; }
+  h4 { margin: 26px 0 8px; font-size: 16px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  strong { font-weight: 650; }
+  .lead { color: var(--muted); font-size: 15.5px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .02em;
+    padding: 3px 9px; border-radius: 999px;
+    color: var(--accent); background: var(--accent-weak);
+    border: 1px solid var(--border); white-space: nowrap;
+  }
+  .pill.ok { color: var(--ok); background: var(--ok-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .pill.bad { color: var(--danger); background: var(--danger-bg); }
+  .pill.gray { color: var(--muted); background: var(--surface-2); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px 22px; margin: 18px 0;
+    box-shadow: var(--shadow);
+  }
+  .card > :first-child { margin-top: 0; }
+  .card > :last-child { margin-bottom: 0; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+
+  .callout {
+    display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px;
+    margin: 18px 0; padding: 14px 16px;
+    border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface-2); font-size: 14.5px;
+  }
+  .callout .ico {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: grid; place-items: center;
+    font: 700 12px/1 var(--sans);
+    background: var(--accent-weak); color: var(--accent);
+  }
+  .callout p { margin: 0; }
+  .callout p + p { margin-top: 6px; }
+  .callout .title { font-weight: 700; display: block; margin-bottom: 2px; }
+  .callout.tip { background: var(--ok-bg); border-color: var(--border); }
+  .callout.tip .ico { background: var(--ok); color: #fff; }
+  .callout.warn { background: var(--warn-bg); border-color: var(--border); }
+  .callout.warn .ico { background: var(--warn); color: #fff; }
+  .callout.danger { background: var(--danger-bg); border-color: var(--border); }
+  .callout.danger .ico { background: var(--danger); color: #fff; }
+
+  .compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 18px 0; }
+  .box { border: 1px solid var(--border); border-radius: 12px; padding: 15px 18px; background: var(--surface); }
+  .box.bad { border-left: 4px solid var(--danger); }
+  .box.good { border-left: 4px solid var(--ok); }
+  .box h4 { margin: 0 0 8px; font-size: 14px; letter-spacing: .03em; }
+  .box.bad h4 { color: var(--danger); }
+  .box.good h4 { color: var(--ok); }
+  .box ul { margin: 0; padding-left: 18px; font-size: 14px; }
+  .box li { margin: 5px 0; }
+
+  .code {
+    margin: 18px 0; border-radius: 12px; overflow: hidden;
+    background: var(--code-bg); border: 1px solid var(--code-border);
+    box-shadow: var(--shadow);
+  }
+  .code-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 8px 12px 8px 15px;
+    background: var(--code-head); border-bottom: 1px solid var(--code-border);
+    color: #93a4c3; font: 12px/1.4 var(--mono);
+  }
+  .code-head .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .copy {
+    flex: 0 0 auto; border: 1px solid var(--code-border); border-radius: 6px;
+    background: transparent; color: #a9b8d4; cursor: pointer;
+    font: 11px/1 var(--sans); padding: 5px 9px;
+  }
+  .copy:hover { color: #fff; border-color: #4c5f85; }
+  .code pre { margin: 0; padding: 15px 17px; overflow-x: auto; }
+  .code code { font: 12.6px/1.72 var(--mono); color: var(--code-text); white-space: pre; }
+  /* 执行结果：与代码块同尺寸，但用虚线边框和浅色底区分「这是跑出来的」 */
+  .code.out { background: var(--surface); border-style: dashed; box-shadow: none; }
+  .code.out .code-head { background: var(--surface-2); color: var(--muted); }
+  .code.out .code-head .path { font-weight: 700; letter-spacing: .02em; }
+  .code.out code { color: var(--text); }
+  :not(pre) > code {
+    font: .9em/1.5 var(--mono); color: var(--accent);
+    background: var(--surface-2); border: 1px solid var(--border);
+    padding: 1px 5px; border-radius: 5px;
+  }
+
+  .table-wrap {
+    margin: 18px 0; overflow-x: auto;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13.8px; min-width: 560px; }
+  th, td { padding: 10px 14px; text-align: left; vertical-align: top; }
+  th {
+    background: var(--surface-2); color: var(--muted);
+    font-size: 11.5px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td { border-top: 1px solid var(--border); }
+  tbody tr:first-child td { border-top: 0; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td code { white-space: nowrap; }
+
+  .diagram {
+    margin: 22px 0; padding: 18px 18px 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow);
+  }
+  .diagram-scroll { overflow-x: auto; }
+  .diagram svg { display: block; width: 100%; height: auto; min-width: 640px; }
+  .diagram figcaption {
+    margin-top: 10px; color: var(--muted); font-size: 12.5px; text-align: center;
+  }
+  .svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .dg text { font-family: var(--sans); }
+  .dg-box { fill: var(--surface); stroke: var(--border); stroke-width: 1.4; }
+  .dg-box-accent { fill: var(--accent-weak); stroke: var(--accent); stroke-width: 1.5; }
+  .dg-box-ok { fill: var(--ok-bg); stroke: var(--ok); stroke-width: 1.5; }
+  .dg-box-danger { fill: var(--danger-bg); stroke: var(--danger); stroke-width: 1.5; }
+  .dg-box-warn { fill: var(--warn-bg); stroke: var(--warn); stroke-width: 1.5; }
+  .dg-lane { fill: var(--surface-2); stroke: var(--border); stroke-width: 1; }
+  .dg-text { fill: var(--text); font-size: 13.5px; font-weight: 600; }
+  .dg-text-sm { fill: var(--text); font-size: 11.5px; }
+  .dg-muted { fill: var(--muted); font-size: 10.8px; }
+  .dg-accent-text { fill: var(--accent); font-size: 11.5px; font-weight: 700; }
+  .dg-ok-text { fill: var(--ok); font-size: 11.5px; font-weight: 700; }
+  .dg-danger-text { fill: var(--danger); font-size: 11.5px; font-weight: 700; }
+  .dg-line { stroke: var(--muted); stroke-width: 1.5; fill: none; marker-end: url(#ar); }
+  .dg-line-accent { stroke: var(--accent); stroke-width: 1.6; fill: none; marker-end: url(#ar-accent); }
+  .dg-line-ok { stroke: var(--ok); stroke-width: 1.6; fill: none; marker-end: url(#ar-ok); }
+  .dg-line-danger { stroke: var(--danger); stroke-width: 1.6; fill: none; marker-end: url(#ar-danger); }
+  .dg-line-dashed { stroke-dasharray: 5 5; }
+  .dg-life { stroke: var(--border); stroke-width: 1.2; stroke-dasharray: 3 5; }
+  .mk-muted { fill: var(--muted); }
+  .mk-accent { fill: var(--accent); }
+  .mk-ok { fill: var(--ok); }
+  .mk-danger { fill: var(--danger); }
+  .dg-flow { stroke-dasharray: 6 7; animation: flow 1.4s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -13; } }
+
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps > li {
+    position: relative; padding-left: 40px; margin: 12px 0;
+  }
+  .steps > li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 0; top: 2px;
+    width: 25px; height: 25px; border-radius: 50%;
+    display: grid; place-items: center;
+    font: 700 11.5px/1 var(--mono);
+    color: var(--accent); background: var(--accent-weak);
+    border: 1px solid var(--border);
+  }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li {
+    position: relative; padding-left: 30px; margin: 9px 0;
+  }
+  .checklist li::before {
+    content: ""; position: absolute; left: 4px; top: 7px;
+    width: 13px; height: 13px; border-radius: 4px;
+    border: 1.5px solid var(--accent);
+  }
+
+  .kbd {
+    font: 12px/1.6 var(--mono);
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px;
+    white-space: nowrap;
+  }
+
+  footer {
+    margin-top: 90px; padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 12.5px;
+  }
+  footer p { margin: 4px 0; }
+
+  @media (max-width: 1100px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar {
+      position: static; height: auto; overflow: visible;
+      border-right: 0; border-bottom: 1px solid var(--border);
+      padding: 22px 18px;
+    }
+    .toc { max-height: 250px; overflow-y: auto; }
+    .toc .sub { display: none; }
+    main { padding-top: 26px; }
+    /* 窄屏下固定按钮会压住内容，改为跟随页面流排布 */
+    .theme-toggle {
+      position: static; display: block; width: fit-content;
+      margin: 14px 14px 0 auto; box-shadow: none;
+    }
+  }
+  @media (max-width: 760px) {
+    .grid2, .grid3, .compare { grid-template-columns: 1fr; }
+    .hero .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .theme-toggle { margin: 10px 12px 0 auto; }
+    body { line-height: 1.72; }
+    table { font-size: 13px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+
+  @media print {
+    .sidebar, .theme-toggle, .progress, .copy, .hero .jump { display: none !important; }
+    .shell { display: block; }
+    main { padding: 0; }
+    body { background: #fff; color: #111; font-size: 11pt; }
+    .content { max-width: none; }
+    .hero { box-shadow: none; border-radius: 0; padding: 18pt; background: #eef2ff !important; color: #111 !important; }
+    .hero .sub, .hero .badges span, .hero .stat small, .hero .eyebrow { color: #333 !important; }
+    .hero .badges span { border-color: #bbb; background: #fff; }
+    .hero .stat { background: #fff; }
+    .card, .diagram, .code, .table-wrap, .compare, .callout { box-shadow: none; break-inside: avoid; }
+    section { margin-top: 28pt; break-inside: auto; }
+    h2, h3 { break-after: avoid; }
+    .diagram svg { min-width: 0; }
+    .code { background: #fff; border-color: #ccc; }
+    .code-head { background: #f1f5f9; color: #333; border-color: #ccc; }
+    .code code { color: #111; white-space: pre-wrap; word-break: break-word; }
+    .diagram { page-break-inside: avoid; }
+    a { color: #111; text-decoration: underline; }
+    @page { margin: 14mm; }
+  }
+</style>
+</head>
+<body>
+
+<svg class="svg-defs" aria-hidden="true" focusable="false">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-muted" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-accent" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-ok" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-danger" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-danger" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+  </defs>
+</svg>
+
+<div class="progress" aria-hidden="true"><span></span></div>
+<button class="theme-toggle" id="themeToggle" type="button" aria-label="切换深浅色主题">深色</button>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">Redis Field Guide</div>
+      <h1>Redis 实战</h1>
+      <p>数据类型 × 限流 × 分布式锁 × 缓存一致性</p>
+    </div>
+    <nav class="toc" aria-label="目录">
+      <a href="#intro">开始之前</a>
+      <a href="#model">1 · 心智模型</a>
+      <a href="#types">2 · 九种数据类型</a>
+      <div class="sub">
+        <a href="#t-string">String</a>
+        <a href="#t-hash">Hash</a>
+        <a href="#t-list">List</a>
+        <a href="#t-set">Set</a>
+        <a href="#t-zset">ZSet</a>
+        <a href="#t-bitmap">Bitmap</a>
+        <a href="#t-hll">HyperLogLog</a>
+        <a href="#t-geo">Geo</a>
+        <a href="#t-stream">Stream</a>
+      </div>
+
+      <a href="#ratelimit">3 · 限流六种算法</a>
+      <div class="sub">
+        <a href="#rl-fixed">固定窗口</a>
+        <a href="#rl-log">滑动日志</a>
+        <a href="#rl-counter">双窗口计数</a>
+        <a href="#rl-bucket">滑动分桶</a>
+        <a href="#rl-token">令牌桶</a>
+        <a href="#rl-leaky">漏桶</a>
+        <a href="#rl-boundary">边界实验与选型</a>
+      </div>
+
+      <a href="#lock">4 · 分布式锁</a>
+      <div class="sub">
+        <a href="#lock-naive">从 SETNX 到正确实现</a>
+        <a href="#lock-watchdog">看门狗与租约</a>
+        <a href="#lock-redisson">Redisson</a>
+        <a href="#lock-counter">并发计数实验</a>
+      </div>
+
+      <a href="#cache">5 · 延迟双删</a>
+      <a href="#run">6 · 运行与速查</a>
+      <a href="#codemap">7 · 代码地图</a>
+    </nav>
+    <div class="side-note">
+      文中命令与返回都来自 <code>demo-redis</code> 当前实现，可在本地 Docker + IDE 中逐条复现。
+    </div>
+  </aside>
+
+  <main>
+    <div class="content">
+
+      <header class="hero">
+        <div class="eyebrow">Redis Field Guide</div>
+        <h2>把 Redis 当成<br>九种容器，而不是一个缓存</h2>
+        <p class="sub">
+          同一条命令，为什么有时是计数器、有时是排行榜、有时是消息队列？
+          这份指南从「数据结构的形状」讲起，再走进三个最容易踩坑的场景：
+          限流、分布式锁、缓存一致性。每个结论都对应一段可运行的代码。
+        </p>
+        <div class="badges">
+          <span>Redis 7.4</span>
+          <span>Spring Boot 4.1</span>
+          <span>Spring Data Redis</span>
+          <span>Redisson 4.8</span>
+          <span>全部示例可运行</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><b>9</b><small>数据类型案例</small></div>
+          <div class="stat"><b>6</b><small>限流算法</small></div>
+          <div class="stat"><b>4</b><small>锁实验</small></div>
+          <div class="stat"><b>1</b><small>缓存竞态复现</small></div>
+        </div>
+        <div class="jump">
+          <a href="#types">先看数据类型</a>
+          <a href="#ratelimit" class="ghost">直接看限流</a>
+          <a href="#lock" class="ghost">直接看锁</a>
+          <a href="#cache" class="ghost">延迟双删</a>
+        </div>
+      </header>
+
+      <!-- ============================================================ -->
+      <section id="intro">
+        <h2><span class="no">00</span>开始之前</h2>
+        <p class="lead">
+          这份指南假设你会写 Java、用过 Spring Boot，但没系统用过 Redis。
+          所有实验都在本仓库的 <code>demo-redis</code> 模块里，一个 HTTP 请求就能跑完一个案例。
+        </p>
+
+        <div class="card">
+          <h4>五分钟跑起来</h4>
+          <div class="code">
+            <div class="code-head"><span class="path">终端</span><button class="copy" type="button" data-copy>复制</button></div>
+            <pre><code># 1) Redis + MySQL（商品表用于演示延迟双删）
+docker compose up -d redis mysql
+
+# 2) 启动模块，默认 9004
+./mvnw -pl demo-redis spring-boot:run
+
+# 3) 看看九种数据类型
+curl -s http://localhost:9004/api/redis/types/all</code></pre>
+          </div>
+          <div class="code out">
+            <div class="code-head"><span class="path">执行结果 · 启动日志（隔离实例 9014）</span><button class="copy" type="button" data-copy>复制</button></div>
+            <pre><code>INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 9014 (http)
+INFO  c.e.demo.redis.RedisDemoApplication - Started RedisDemoApplication in 8.271 seconds
+INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 5 ms
+
+# 端口由 SERVER_PORT 决定；日志里的 9014 是隔离验证实例，默认启动是 9004</code></pre>
+          </div>
+          <p class="small muted">
+            端口 9001~9003 被三个 DDD 业务服务占用，所以本模块用 9004。
+            想并行验证可另起实例，并换 <code>SERVER_PORT</code>、<code>REDIS_DB</code>、数据库名。
+          </p>
+        </div>
+
+        <h3>这份指南怎么读</h3>
+        <ul class="checklist">
+          <li><strong>先看形状</strong>：每种数据类型对应一种「容器」，先记住它擅长什么，再记命令。</li>
+          <li><strong>再制造问题</strong>：限流先看窗口边界怎么放大流量，锁先看业务超时后锁过期，缓存先看旧值怎么回填。</li>
+          <li><strong>最后对照代码</strong>：每节末尾都有文件路径，点开就能看到当前实现。</li>
+        </ul>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">Demo 不是生产模板</span>
+             演示会把时间压缩到几秒、把失败路径显式造出来。真实系统还要考虑集群、主从切换、
+             网络分区、监控告警和容量规划，文末的「生产清单」会逐条提醒。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <section id="model">
+        <h2><span class="no">01</span>心智模型：Redis 是「数据结构的服务器」</h2>
+        <p class="lead">
+          很多人把 Redis 记成一堆命令，于是总在「这个场景该用哪个命令」上卡住。
+          更省力的记法是：先想数据长什么形状，形状对了，命令自然就出来了。
+        </p>
+
+        <p>
+          把 Redis 想成一个巨大的药柜：每个抽屉有一个名字（<strong>key</strong>），
+          抽屉里放的不是随便一坨字节，而是九种标准容器之一（<strong>value</strong>）。
+          <code>SET</code> 是往抽屉里放一张纸条，<code>HSET</code> 是放一个带格子的药盒，
+          <code>ZADD</code> 是放一个会自动按分数排序的文件夹。
+        </p>
+
+        <div class="grid3">
+          <div class="card">
+            <h4>单线程执行命令</h4>
+            <p class="small">
+              Redis 用一个线程按顺序执行命令（网络读写可以多线程）。
+              所以单条命令天然原子，不需要你加锁；但也意味着一条慢命令会堵住所有人。
+            </p>
+          </div>
+          <div class="card">
+            <h4>Lua 是「原子事务」</h4>
+            <p class="small">
+              需要「先判断再写入」时，把逻辑写成 Lua。脚本执行期间不会插入其他命令，
+              限流和锁都靠这一点保证正确性。
+            </p>
+          </div>
+          <div class="card">
+            <h4>内存 + 持久化</h4>
+            <p class="small">
+              数据主要在内存，RDB 做快照、AOF 记命令日志。
+              重启能不能恢复、丢多少，取决于持久化配置，不是「Redis 一定不丢」。
+            </p>
+          </div>
+        </div>
+
+        <h3>先问三个问题，再选类型</h3>
+        <ol class="steps">
+          <li><strong>你要按 key 取整块值，还是要操作其中一部分？</strong> 整块用 String，字段级用 Hash。</li>
+          <li><strong>顺序重要吗？</strong> 要排队/时间线用 List，要按分数排名用 ZSet。</li>
+          <li><strong>是集合运算还是布尔标记？</strong> 去重/交并用 Set，大规模 0/1 状态用 Bitmap。</li>
+        </ol>
+
+        <div class="callout tip">
+          <span class="ico">✓</span>
+          <div>
+            <p><span class="title">命名空间是给自己留的后路</span>
+             本仓库统一用 <code>demo:types:zset:leaderboard</code> 这种冒号分隔的 key。
+             生产里至少带上「业务:对象:ID」，否则 <code>KEYS *</code> 和清理脚本会变成灾难。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <section id="types">
+        <h2><span class="no">02</span>九种数据类型：先看形状，再记命令</h2>
+        <p class="lead">
+          九种类型并不是九个孤立的知识点。它们覆盖了四种基本形状：
+          单值、字段集合、有序集合、以及「用位/概率压缩的集合」。
+        </p>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 360" role="img" aria-label="Redis 九种数据类型及其典型场景">
+              <rect class="dg-box-accent" x="40" y="24" width="240" height="76" rx="10"></rect>
+              <text class="dg-text" x="60" y="52">String</text>
+              <text class="dg-muted" x="60" y="72">一个值：缓存、计数、SETNX 占位</text>
+              <text class="dg-muted" x="60" y="89">INCR / SET / GET</text>
+
+              <rect class="dg-box" x="330" y="24" width="240" height="76" rx="10"></rect>
+              <text class="dg-text" x="350" y="52">Hash</text>
+              <text class="dg-muted" x="350" y="72">字段集合：对象、购物车</text>
+              <text class="dg-muted" x="350" y="89">HSET / HGET / HINCRBY</text>
+
+              <rect class="dg-box" x="620" y="24" width="240" height="76" rx="10"></rect>
+              <text class="dg-text" x="640" y="52">List</text>
+              <text class="dg-muted" x="640" y="72">有序、可重复：队列、栈、时间线</text>
+              <text class="dg-muted" x="640" y="89">LPUSH / RPOP / BRPOP</text>
+
+              <rect class="dg-box" x="40" y="126" width="240" height="76" rx="10"></rect>
+              <text class="dg-text" x="60" y="154">Set</text>
+              <text class="dg-muted" x="60" y="174">无序、去重：标签、共同好友</text>
+              <text class="dg-muted" x="60" y="191">SADD / SINTER / SUNION</text>
+
+              <rect class="dg-box-accent" x="330" y="126" width="240" height="76" rx="10"></rect>
+              <text class="dg-text" x="350" y="154">ZSet</text>
+              <text class="dg-muted" x="350" y="174">按分数排序：排行榜、延迟队列</text>
+              <text class="dg-muted" x="350" y="191">ZADD / ZINCRBY / ZRANGEBYSCORE</text>
+
+              <rect class="dg-box" x="620" y="126" width="240" height="76" rx="10"></rect>
+              <text class="dg-text" x="640" y="154">Bitmap</text>
+              <text class="dg-muted" x="640" y="174">按位标记：签到、在线状态</text>
+              <text class="dg-muted" x="640" y="191">SETBIT / GETBIT / BITCOUNT</text>
+
+              <rect class="dg-box" x="40" y="228" width="240" height="76" rx="10"></rect>
+              <text class="dg-text" x="60" y="256">HyperLogLog</text>
+              <text class="dg-muted" x="60" y="276">估算基数：UV 统计，固定约 12KB</text>
+              <text class="dg-muted" x="60" y="293">PFADD / PFCOUNT</text>
+
+              <rect class="dg-box" x="330" y="228" width="240" height="76" rx="10"></rect>
+              <text class="dg-text" x="350" y="256">Geo</text>
+              <text class="dg-muted" x="350" y="276">经纬度：附近的人/店（底层 ZSet）</text>
+              <text class="dg-muted" x="350" y="293">GEOADD / GEOSEARCH / GEODIST</text>
+
+              <rect class="dg-box-ok" x="620" y="228" width="240" height="76" rx="10"></rect>
+              <text class="dg-text" x="640" y="256">Stream</text>
+              <text class="dg-muted" x="640" y="276">消息流：消费者组、pending、ACK</text>
+              <text class="dg-muted" x="640" y="293">XADD / XREADGROUP / XACK</text>
+
+              <text class="dg-muted" x="40" y="340">下面每个案例都能单独执行：GET /api/redis/types/{string|hash|list|set|zset|bitmap|hyperloglog|geo|stream}</text>
+            </svg>
+          </div>
+          <figcaption>九种容器，覆盖「单值、字段集合、有序集合、压缩标记、消息流」五类需求</figcaption>
+        </figure>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>类型</th><th>一句话</th><th>典型场景</th><th>别拿它做</th></tr></thead>
+            <tbody>
+              <tr><td>String</td><td>一个 key 一个值</td><td>对象缓存、计数器、SETNX 占位</td><td>存超大 JSON（会阻塞单线程）</td></tr>
+              <tr><td>Hash</td><td>一个 key 多个字段</td><td>用户资料、购物车、配置</td><td>字段极多还频繁 HGETALL</td></tr>
+              <tr><td>List</td><td>链表，两端进出</td><td>队列、栈、最新 N 条</td><td>需要 ACK/重投的消息队列</td></tr>
+              <tr><td>Set</td><td>无序去重集合</td><td>标签、共同好友、抽奖去重</td><td>需要按分数排序</td></tr>
+              <tr><td>ZSet</td><td>带分数的有序集合</td><td>排行榜、延迟队列、权重队列</td><td>纯去重（用 Set 更省）</td></tr>
+              <tr><td>Bitmap</td><td>按位标记的 String</td><td>签到、在线状态、布尔统计</td><td>偏移量无界（会浪费内存）</td></tr>
+              <tr><td>HyperLogLog</td><td>估算基数</td><td>UV、独立访客</td><td>需要精确值或原始元素</td></tr>
+              <tr><td>Geo</td><td>经纬度 + 半径查询</td><td>附近的人/店</td><td>高精度轨迹计算</td></tr>
+              <tr><td>Stream</td><td>消息流 + 消费者组</td><td>轻量消息队列、事件流</td><td>超大规模消息中间件替代品</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="small muted">目录接口返回每个类型的名称与适用场景，实测（2026-10-28）：</p>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/redis/types</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>[
+  {"name":"string","title":"String","scenario":"缓存对象、计数器、SETNX 占位"},
+  {"name":"hash","title":"Hash","scenario":"对象字段单独更新，如用户资料、购物车"},
+  {"name":"list","title":"List","scenario":"队列/栈、最新 N 条、时间线"},
+  {"name":"set","title":"Set","scenario":"去重、标签、共同好友"},
+  {"name":"zset","title":"ZSet","scenario":"排行榜、延迟队列、带权重的集合"},
+  {"name":"bitmap","title":"Bitmap","scenario":"签到、在线状态、布尔型大规模统计"},
+  {"name":"hyperloglog","title":"HyperLogLog","scenario":"UV 去重计数，固定 12KB"},
+  {"name":"geo","title":"Geo","scenario":"附近的人/店，基于 geohash"},
+  {"name":"stream","title":"Stream","scenario":"消息流 + 消费者组 + ACK"}
+]</code></pre>
+        </div>
+
+        <h3 id="t-string">String：最普通，也最常被低估</h3>
+        <p>
+          String 是一个抽屉里放一张纸条：整张读、整张写。三种高频用法是
+          <strong>对象缓存</strong>、<strong>原子计数</strong>、<strong>SETNX 占位</strong>。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">Redis 命令</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># 整块写、整块读
+SET  demo:types:string:user:1:name 张三          # → OK，读回 "张三"
+
+# 原子计数：INCR 不会丢更新，因为单条命令由 Redis 串行执行
+INCR demo:types:string:article:1001:views        # → 1
+INCRBY demo:types:string:article:1001:views 9    # → 10
+
+# SETNX：key 不存在才写入，用来做「占位」
+SETNX demo:types:string:lock:order:1 instance-A  # → 1（第一次成功）
+SETNX demo:types:string:lock:order:1 instance-B  # → 0（第二次失败）</code></pre>
+        </div>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../types/DataTypeService.java</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>// 整块写入一个字符串值
+redis.opsForValue().set(nameKey, "张三");
+
+// 原子自增：返回自增后的值，两行分别得到 1、10
+Long views = redis.opsForValue().increment(viewsKey);
+views = redis.opsForValue().increment(viewsKey, 9);
+
+// SETNX 语义：key 已存在时返回 false，不会覆盖
+Boolean first = redis.opsForValue().setIfAbsent(lockKey, "instance-A");
+Boolean second = redis.opsForValue().setIfAbsent(lockKey, "instance-B");
+// first=true, second=false</code></pre>
+        </div>
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">SETNX 只是锁的起点</span>
+             它没有过期时间，也没有「只删自己的锁」的校验。进程崩溃后锁就永远在了。
+             正确的锁在 <a href="#lock">第 4 节</a>，由 <code>SET NX PX</code> + Lua 组成。
+            </p>
+          </div>
+        </div>
+
+        <h3 id="t-hash">Hash：只改一个字段，不用搬整个对象</h3>
+        <p>
+          把用户资料存成 JSON 时，改城市要先读出来、改完再写回去。
+          Hash 把对象拆成字段，<code>HSET user city 杭州</code> 只动一个格子。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">Redis 命令</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># 一次写入三个字段，返回新增字段数 3
+HSET demo:types:hash:user:1001 name 张三 age 28 city 上海
+
+# 只改 city，其他字段原样保留，返回 0 表示是覆盖而非新增
+HSET demo:types:hash:user:1001 city 杭州
+
+# 字段级原子自增，返回 29
+HINCRBY demo:types:hash:user:1001 age 1</code></pre>
+        </div>
+        <p class="small muted">
+          适用：字段较多、每次只改少数字段。注意字段特别多时不要频繁 <code>HGETALL</code>，
+          用 <code>HMGET</code> 按需取。小 Hash 在 Redis 内部用 listpack 紧凑存储。
+        </p>
+
+        <h3 id="t-list">List：两端进出的链表</h3>
+        <p>
+          把 List 想成一列火车：<code>LPUSH</code> 从车头挂车厢，<code>RPUSH</code> 从车尾挂。
+          左边进右边出是队列，同一边进出就是栈。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">Redis 命令</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>RPUSH demo:types:list:task:queue task-1 task-2 task-3
+# → [task-1, task-2, task-3]
+LPUSH demo:types:list:task:queue task-0
+# → [task-0, task-1, task-2, task-3]
+RPOP  demo:types:list:task:queue
+# → task-3，剩余 3 个</code></pre>
+        </div>
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">List 不是可靠队列</span>
+             <code>BRPOP</code> 取走消息后进程崩溃，消息就丢了，没有 ACK 和重投。
+             需要这些能力时用 Stream（本节最后一个案例）。
+            </p>
+          </div>
+        </div>
+
+        <h3 id="t-set">Set：去重和交并差</h3>
+        <p>
+          Set 像一袋不重复的弹珠。共同好友就是 <code>SINTER</code>，推荐候选就是 <code>SUNION</code>，
+          运算在 Redis 内部完成，不用把整袋弹珠倒到应用里。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">Redis 命令</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># 两个用户的标签集合
+SADD demo:types:set:user:1:tags 篮球 音乐 编程
+SADD demo:types:set:user:2:tags 音乐 旅行
+
+# 交集：共同标签 → [音乐]
+SINTER demo:types:set:user:1:tags demo:types:set:user:2:tags
+
+# 并集：去重后合并 → 篮球、音乐、编程、旅行
+SUNION demo:types:set:user:1:tags demo:types:set:user:2:tags</code></pre>
+        </div>
+        <p class="small muted">
+          大集合的交集复杂度与元素数相关。抽奖去重、共同关注、黑名单都常用 Set。
+        </p>
+
+        <h3 id="t-zset">ZSet：会自己排序的集合</h3>
+        <p>
+          ZSet 给每个成员挂一个分数（score），查询时按分数排序。
+          排行榜只是它的一半用途，另一半是<strong>延迟队列</strong>：
+          把 score 写成「到期时间戳」，轮询 score ≤ now 的成员即可。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">Redis 命令</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># 写入三名玩家：分数在前，成员在后
+ZADD demo:types:zset:leaderboard 100 张三 80 李四 60 王五
+
+# 给李四加 30 分，返回新分数 110（原子操作）
+ZINCRBY demo:types:zset:leaderboard 30 李四
+
+# 按分数从高到低取前两名 → 李四 110，张三 100
+ZREVRANGE demo:types:zset:leaderboard 0 1 WITHSCORES
+
+# 延迟任务：score 存到期毫秒时间戳，轮询 ZRANGEBYSCORE 0 now
+ZADD demo:types:zset:delay 1793188597088 order-1001</code></pre>
+        </div>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../types/DataTypeService.java</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>// 写入成员与分数
+redis.opsForZSet().add(key, "张三", 100);
+
+// 给李四加 30 分，返回 110.0
+Double score = redis.opsForZSet().incrementScore(key, "李四", 30);
+
+// 按分数倒序取前两名，TypedTuple 同时带 member 和 score
+Set&lt;ZSetOperations.TypedTuple&lt;String&gt;&gt; top =
+        redis.opsForZSet().reverseRangeWithScores(key, 0, 1);</code></pre>
+        </div>
+        <p class="small muted">
+          底层是跳表 + 哈希：按分数范围查、取排名都是 O(logN)。
+          相同 score 的成员按字典序排列，这个细节在分页时会影响稳定性。
+        </p>
+
+        <p class="small muted">同一个案例走 HTTP 的返回体（<code>GET /api/redis/types/zset</code>，2026-10-28，已省略部分字段）：</p>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/redis/types/zset</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>{"type":"zset","title":"ZSet","scenario":"排行榜 / 延迟队列",
+ "steps":[
+   {"command":"ZADD ...leaderboard 100 张三 80 李四 60 王五",
+    "result":[{"member":"张三","score":100.0},{"member":"李四","score":80.0},{"member":"王五","score":60.0}]},
+   {"command":"ZINCRBY ...leaderboard 30 李四","result":110.0},
+   {"command":"ZREVRANGE ...leaderboard 0 1 WITHSCORES",
+    "result":[{"member":"李四","score":110.0},{"member":"张三","score":100.0}]},
+   {"command":"ZADD ...delay 1793190080465 order-1001",
+    "result":{"用途":"score 存到期时间就是延迟队列","到期时间":1793190080465}}],
+ "notes":["ZSet 按 score 排序，member 唯一；相同 score 按字典序",
+          "底层是跳表 + 哈希，范围查询和排名都是 O(logN)",
+          "延迟队列的 score 用「到期毫秒时间戳」，用 ZRANGEBYSCORE 取到期任务"]}</code></pre>
+        </div>
+
+        <h3 id="t-bitmap">Bitmap：用位来记「有 / 没有」</h3>
+        <p>
+          Bitmap 本质是 String，但按位读写。一个用户一个月的签到只需要 31 个 bit（4 字节），
+          <code>BITCOUNT</code> 直接得到签到天数。在线状态同理：用户 ID 当偏移量。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">Redis 命令</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>SETBIT demo:types:bitmap:sign:user:1:2026-10 0 1   # 第 1 天
+SETBIT demo:types:bitmap:sign:user:1:2026-10 1 1   # 第 2 天
+SETBIT demo:types:bitmap:sign:user:1:2026-10 3 1   # 第 4 天
+SETBIT demo:types:bitmap:sign:user:1:2026-10 7 1   # 第 8 天
+SETBIT demo:types:bitmap:sign:user:1:2026-10 15 1  # 第 16 天
+BITCOUNT demo:types:bitmap:sign:user:1:2026-10     # → 5
+GETBIT   demo:types:bitmap:sign:user:1:2026-10 2   # → 0（第 3 天没签到）</code></pre>
+        </div>
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">偏移量必须可控</span>
+             如果用用户 ID 当偏移量，而 ID 是雪花算法生成的长整型，Bitmap 会被撑到极大。
+             这种场景要先把 ID 映射到连续的小编号，或者换 Set。
+            </p>
+          </div>
+        </div>
+
+        <h3 id="t-hll">HyperLogLog：用 12KB 估算千万 UV</h3>
+        <p>
+          统计 UV 时，精确去重需要把每个用户都存下来。HyperLogLog 只维护一个概率结构，
+          无论多少元素都占约 12KB，标准误差 0.81%。代价是：<strong>只给估算值，拿不回原始元素</strong>。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">Redis 命令</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>PFADD demo:types:hll:uv:2026-10-28 u1 u2 u3 u2   # → 3（u2 重复）
+PFADD demo:types:hll:uv:2026-10-28 u4 u5         # → 5
+PFCOUNT demo:types:hll:uv:2026-10-28             # → 5，内存约 12KB</code></pre>
+        </div>
+        <p class="small muted">
+          适合看板级 UV；需要精确账单、风控名单时不要用。多个 HLL 可以用 <code>PFMERGE</code> 合并。
+        </p>
+
+        <h3 id="t-geo">Geo：把经纬度塞进 ZSet</h3>
+        <p>
+          Geo 没有独立的数据结构：它把经纬度编码成 geohash 存进 ZSet 的 score，
+          所以 <code>ZREM</code> 之类的命令也能用。查询时按半径过滤并带出距离。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">Redis 命令</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># 写入店铺坐标（经度、纬度、名称）
+GEOADD demo:types:geo:shops 116.404 39.915 天安门 116.417 39.909 王府井 ...
+
+# 以天安门为圆心找 3km 内的店，同时带出距离和坐标
+GEOSEARCH demo:types:geo:shops FROMLONLAT 116.404 39.915 BYRADIUS 3 km WITHDIST WITHCOORD
+# → 天安门 0km、王府井 1.29km、前门 1.42km；上海外滩超出半径被排除
+
+# 两点直线距离，单位 km
+GEODIST demo:types:geo:shops 天安门 王府井 km   # → 1.2942</code></pre>
+        </div>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../types/DataTypeService.java</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>// fromCoordinate 是圆心，Distance(3, KILOMETERS) 是半径
+GeoResults&lt;GeoLocation&lt;String&gt;&gt; results = redis.opsForGeo().search(key,
+        GeoReference.fromCoordinate(new Point(116.404, 39.915)),
+        new Distance(3, Metrics.KILOMETERS),
+        // 不显式 include，getPoint()/getDistance() 会拿到 null
+        RedisGeoCommands.GeoSearchCommandArgs.newGeoSearchArgs()
+                .includeCoordinates().includeDistance());</code></pre>
+        </div>
+        <p class="small muted">
+          精度受 geohash 位数限制，城市级「附近」足够；高精度轨迹、路径规划不要用它。
+        </p>
+
+        <h3 id="t-stream">Stream：Redis 版消息队列</h3>
+        <p>
+          Stream 是唯一自带「消费进度」的类型：消息追加写、消费者组分配、
+          消费后进入 pending，<code>XACK</code> 才算确认。消费失败的消息留在 pending，
+          可以用 <code>XPENDING</code> / <code>XCLAIM</code> 重投。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">Redis 命令</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># 追加两条消息，* 表示由 Redis 生成消息 ID（时间戳-序号）
+XADD demo:types:stream:orders * orderId ORD-1001 status CREATED
+XADD demo:types:stream:orders * orderId ORD-1002 status PAID
+
+# 按 ID 范围读全部消息
+XRANGE demo:types:stream:orders - +
+
+# 创建消费者组，0 表示从第一条开始消费
+XGROUP CREATE demo:types:stream:orders order-group 0
+
+# 投递给 consumer-1：消息进入 pending，但还没确认
+XREADGROUP GROUP order-group consumer-1 STREAMS demo:types:stream:orders &gt;
+
+# XACK 之后才从 pending 移除；不 ACK 就一直留在 pending 里
+XACK demo:types:stream:orders order-group 1793188192568-0</code></pre>
+        </div>
+        <div class="callout tip">
+          <span class="ico">✓</span>
+          <div>
+            <p><span class="title">什么时候用 Stream，什么时候用 MQ</span>
+             Stream 轻量、无需额外组件，适合中小规模事件流或本地可靠队列；
+             跨团队、大吞吐、需要死信/延迟/事务消息时，还是 RabbitMQ / RocketMQ 更合适
+             （见 <a href="messaging-guide.html">消息中间件实战</a>）。
+            </p>
+          </div>
+        </div>
+      </section>
+      <!-- ============================================================ -->
+      <section id="ratelimit">
+        <h2><span class="no">03</span>限流：六种算法，回答同一个问题</h2>
+        <p class="lead">
+          限流器只做两件事：这次请求放不放？如果拒绝，客户端等多久再来？
+          不同算法的差别，全在「怎么记住过去这段时间的请求」。
+        </p>
+
+        <p>
+          先把窗口想成一个<strong>滑动的时间框</strong>：任何时刻往前看 N 秒，框里的请求数不能超过 limit。
+          固定窗口把它切成一个个格子，滑动日志把每次请求都记下来，双窗口只记两个计数，
+          分桶记 N 个小格子，令牌桶/漏桶则换成「按速率补充/漏出」的模型。
+        </p>
+
+        <h3 id="rl-fixed">固定窗口：最简单，也最容易在边界翻倍</h3>
+        <p>
+          把时间轴按窗口长度切开，每个窗口一个计数器。窗口编号用
+          <code>floor(now / windowMs)</code> 计算，计数存进 Hash 的对应字段。
+          实现简单、内存固定，但<strong>窗口边界会漏过接近两倍的流量</strong>。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../support/LuaScripts.java · FIXED_WINDOW</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>-- ARGV: 1=当前毫秒时间戳 2=窗口长度 3=上限
+local now = tonumber(ARGV[1])
+local windowMs = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+
+-- 窗口编号对齐时间轴：同一窗口的请求都落在同一个 Hash 字段
+local windowIndex = math.floor(now / windowMs)
+-- 读出当前窗口已放行的数量，没有则当 0
+local current = tonumber(redis.call('HGET', KEYS[1], tostring(windowIndex)) or '0')
+if current &gt;= limit then
+    -- 拒绝：返回「允许|剩余|重试毫秒」，重试 = 距离本窗口结束的时间
+    return '0|0|' .. (windowMs - (now % windowMs))
+end
+
+-- 放行：先自增，再清掉两个窗口之前的旧字段，最后给整个 Hash 续 TTL
+current = redis.call('HINCRBY', KEYS[1], tostring(windowIndex), 1)
+redis.call('HDEL', KEYS[1], tostring(windowIndex - 2))
+redis.call('PEXPIRE', KEYS[1], windowMs * 2)
+-- 剩余名额 = 上限 - 已放行数
+return '1|' .. (limit - current) .. '|0'</code></pre>
+        </div>
+        <p class="small muted">
+          这里用「窗口编号对齐时间轴」而不是「第一次请求开始计时」，
+          这样边界实验才能稳定复现。最后的 <code>PEXPIRE</code> 保证旧窗口字段会被清理。
+        </p>
+
+        <h3 id="rl-log">滑动日志：每次请求都记一笔，最精确</h3>
+        <p>
+          ZSet 的 score 存请求时间戳，每次先删掉窗口外的记录，再数窗口内有多少条。
+          精确，但请求量大时 ZSet 会很长，清理和内存都是成本。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../support/LuaScripts.java · SLIDING_WINDOW_LOG</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>-- 先删掉滑出窗口的记录（score 存的是请求时间戳，单位 ms）
+redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, now - windowMs)
+-- 剩下的条数就是窗口内的请求数
+local count = redis.call('ZCARD', KEYS[1])
+if count &gt;= limit then
+    -- 最早那条记录滑出窗口还需要多久 = 它的 score + 窗口长度 - 现在
+    local oldest = redis.call('ZRANGE', KEYS[1], 0, 0, 'WITHSCORES')
+    local retry = 0
+    if oldest[2] then
+        retry = tonumber(oldest[2]) + windowMs - now
+    end
+    if retry &lt; 0 then retry = 0 end
+    return '0|0|' .. retry
+end
+-- 放行：本次请求也记一条，score 用当前时间；TTL 多留 1s 兜底
+redis.call('ZADD', KEYS[1], now, member)
+redis.call('PEXPIRE', KEYS[1], windowMs + 1000)
+-- 减 1 是因为刚把自己加进 ZSet
+return '1|' .. (limit - count - 1) .. '|0'</code></pre>
+        </div>
+        <p class="small muted">
+          返回的 <code>retry</code> 是「最早那条记录滑出窗口」还需要多久，比直接让客户端等一个完整窗口更友好。
+        </p>
+
+        <h3 id="rl-counter">双窗口计数：内存固定，近似平滑</h3>
+        <p>
+          只存当前窗口和上一窗口的计数，用当前时间在窗口里的进度做加权：
+          <code>上一窗计数 × 剩余比例 + 当前窗计数</code>。
+          比固定窗口平滑得多，代价是临界值附近只是估算。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../support/LuaScripts.java · SLIDING_WINDOW_COUNTER</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>-- 前置：脚本开头已从 Hash 读出上一窗口 previous 和当前窗口 current
+-- elapsed = 当前窗口已经过去的比例（0 ~ 1）
+local elapsed = (now % windowMs) / windowMs
+-- 上一窗口按剩余比例衰减，再加上当前窗口的计数，得到近似滑动值
+local estimated = previous * (1 - elapsed) + current
+if estimated + 1 &gt; limit then
+    -- 拒绝：剩余额度向下取整；重试时间 = 等到下一个窗口
+    local retry = windowMs - (now % windowMs)
+    if retry &lt; 1 then retry = 1 end
+    return '0|' .. math.floor(limit - estimated) .. '|' .. retry
+end
+-- 放行：当前窗口计数 +1，TTL 覆盖两个窗口
+redis.call('HINCRBY', KEYS[1], tostring(currentWindow), 1)
+redis.call('PEXPIRE', KEYS[1], windowMs * 2)</code></pre>
+        </div>
+        <p class="small muted">
+          Redis 官方常用的近似算法。它的「剩余额度」可能是小数被向下取整，
+          所以更适合做保护阈值，而不是精确配额。
+        </p>
+
+        <h3 id="rl-bucket">滑动分桶：精度和内存之间的旋钮</h3>
+        <p>
+          把一个窗口切成 N 个桶（本实现 N=10），每次累加最近 N 个桶的计数。
+          桶越多越接近滑动日志，桶越少越省内存。拒绝时从最旧的桶开始累加，
+          找到「腾出一个名额」的时间点作为重试等待。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../support/LuaScripts.java · SLIDING_WINDOW_BUCKET</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>-- 每个桶的时长 = 窗口 / 桶数（本实现桶数 10）
+local bucketMs = math.floor(windowMs / buckets)
+-- 当前桶编号，桶编号同样对齐时间轴
+local current = math.floor(now / bucketMs)
+-- 累加最近 buckets 个桶：等价于「过去一个窗口」的请求数
+local sum = 0
+for i = 0, buckets - 1 do
+    local value = redis.call('HGET', KEYS[1], tostring(current - i))
+    if value then sum = sum + tonumber(value) end
+end
+if sum &gt;= limit then
+    -- 需要腾出的名额数
+    local overflow = sum - limit + 1
+    local freed = 0
+    local retry = bucketMs
+    -- 从最旧的桶开始累计，凑够 overflow 时的桶边界就是重试时间
+    for i = buckets - 1, 0, -1 do
+        local index = current - i
+        local value = tonumber(redis.call('HGET', KEYS[1], tostring(index)) or '0')
+        freed = freed + value
+        if freed &gt;= overflow then
+            retry = (index + 1) * bucketMs - now
+            break
+        end
+    end
+    if retry &lt; 1 then retry = 1 end
+    return '0|0|' .. retry
+end
+-- 放行：只在当前桶 +1
+redis.call('HINCRBY', KEYS[1], tostring(current), 1)</code></pre>
+        </div>
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">重试时间不能拍脑袋</span>
+             最初版本直接用「最旧桶的过期时间」当 retry，但最旧桶可能根本没有请求，
+             结果返回 0ms，测试直接抓到。正确做法是累计到「足够腾出一个名额」的那个桶。
+            </p>
+          </div>
+        </div>
+
+        <h3 id="rl-token">令牌桶：允许突发，按速率补充</h3>
+        <p>
+          桶里最多放 <code>capacity</code> 个令牌，按 <code>capacity / window</code> 的速率持续补充。
+          请求来了先拿一个令牌，拿不到就拒绝。它允许短时突发（桶里攒着令牌），
+          但长期平均速率被限制住。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../support/LuaScripts.java · TOKEN_BUCKET</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>-- 距上次请求过去了多少秒（时钟回拨时按 0 处理）
+local elapsed = math.max(0, now - ts) / 1000
+-- 按补充速率加令牌，但不超过桶容量：这就是「允许突发」的来源
+tokens = math.min(capacity, tokens + elapsed * refillPerSec)
+if tokens &gt;= 1 then
+    -- 够一个令牌就放行，并扣掉
+    tokens = tokens - 1
+    allowed = 1
+else
+    -- 不够：算出还差多少毫秒才能攒够 1 个令牌
+    retry = math.ceil((1 - tokens) / refillPerSec * 1000)
+end
+-- 无论放行与否，都回写令牌余额和时间戳
+redis.call('HSET', KEYS[1], 'tokens', tostring(tokens), 'ts', tostring(now))</code></pre>
+        </div>
+        <p class="small muted">
+          令牌桶关心「能不能马上处理」，适合保护下游 API；它不保证请求之间的间隔均匀。
+        </p>
+
+        <h3 id="rl-leaky">漏桶：请求先入桶，再匀速漏出</h3>
+        <p>
+          漏桶把请求当成水：桶有容量，底部按固定速率漏水。桶满就拒绝。
+          它保证<strong>输出速率恒定</strong>，适合削峰、保护慢速下游；代价是不允许突发。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../support/LuaScripts.java · LEAKY_BUCKET</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>-- 距上次请求过去多少秒，期间桶里的水按漏出速率减少
+local elapsed = math.max(0, now - ts) / 1000
+level = math.max(0, level - elapsed * leakPerSec)
+if level + 1 &lt;= capacity then
+    -- 还有空间：请求入桶，level +1
+    level = level + 1
+    allowed = 1
+else
+    -- 桶满：算出要等多久才能腾出 1 个单位
+    retry = math.ceil((level + 1 - capacity) / leakPerSec * 1000)
+end
+-- 回写当前水位和时间戳
+redis.call('HSET', KEYS[1], 'level', tostring(level), 'ts', tostring(now))</code></pre>
+        </div>
+
+        <h3 id="rl-boundary">边界实验：为什么固定窗口会翻倍</h3>
+        <p>
+          设 limit=5、窗口=4 秒。在窗口结束前打满 5 次，跨过边界后再打 5 次。
+          固定窗口把它们记进两个计数器，于是 10 次全部放行；三种滑动方案仍然记得上一批。
+        </p>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 330" role="img" aria-label="固定窗口在边界前后各放行一批请求，滑动窗口则拦截第二批">
+              <text class="dg-text" x="40" y="30">固定窗口：边界 = 重置</text>
+              <line class="dg-line" x1="60" y1="90" x2="850" y2="90" stroke-dasharray="0"></line>
+              <line class="dg-line" x1="450" y1="52" x2="450" y2="118" stroke-dasharray="4 4"></line>
+              <text class="dg-muted" x="450" y="44" text-anchor="middle">窗口边界</text>
+              <rect class="dg-box-warn" x="320" y="62" width="110" height="26" rx="6"></rect>
+              <text class="dg-text-sm" x="375" y="80" text-anchor="middle">5 次 · 放行</text>
+              <rect class="dg-box-warn" x="470" y="62" width="110" height="26" rx="6"></rect>
+              <text class="dg-text-sm" x="525" y="80" text-anchor="middle">5 次 · 又放行</text>
+              <text class="dg-danger-text" x="620" y="80">4 秒内实际 10 次</text>
+
+              <text class="dg-text" x="40" y="170">滑动窗口：过去 4 秒始终可见</text>
+              <line class="dg-line" x1="60" y1="232" x2="850" y2="232"></line>
+              <rect class="dg-box-accent" x="290" y="196" width="320" height="24" rx="6"></rect>
+              <text class="dg-muted" x="450" y="188" text-anchor="middle">滑动窗口（跨过边界仍然覆盖第一批）</text>
+              <rect class="dg-box-accent" x="320" y="258" width="110" height="26" rx="6"></rect>
+              <text class="dg-text-sm" x="375" y="276" text-anchor="middle">5 次 · 放行</text>
+              <rect class="dg-box-danger" x="470" y="258" width="110" height="26" rx="6"></rect>
+              <text class="dg-text-sm" x="525" y="276" text-anchor="middle">5 次 · 全拒绝</text>
+              <text class="dg-muted" x="600" y="276">窗口里已经有 5 条记录</text>
+
+              <text class="dg-muted" x="40" y="316">实测：fixed_window 第二批 5 次放行；sliding_log / sliding_counter / sliding_bucket 均为 0。</text>
+            </svg>
+          </div>
+          <figcaption>跨窗口边界时，固定窗口会放大流量；滑动窗口仍然记得上一批请求</figcaption>
+        </figure>
+
+        <p>实测返回（<code>limit=5&amp;windowSeconds=4</code>）：</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>算法</th><th>第一批</th><th>第二批</th><th>结论</th></tr></thead>
+            <tbody>
+              <tr><td>fixed_window</td><td>5</td><td><strong>5</strong></td><td>两个窗口各自满额，边界处放大流量</td></tr>
+              <tr><td>sliding_log</td><td>5</td><td>0</td><td>ZSet 里仍有上一批记录</td></tr>
+              <tr><td>sliding_counter</td><td>5</td><td>0</td><td>上一窗口按比例加权，仍然拦住</td></tr>
+              <tr><td>sliding_bucket</td><td>5</td><td>0</td><td>最近 N 个桶累加，仍然拦住</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/redis/ratelimit/boundary</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>[{"algorithm":"fixed_window","firstBatchAllowed":5,"secondBatchAllowed":5,"acceptedWithinMillis":11,
+  "verdict":"第二批全部放行：跨窗口边界实际放大了流量"},
+ {"algorithm":"sliding_log","firstBatchAllowed":5,"secondBatchAllowed":0,"acceptedWithinMillis":0,
+  "verdict":"第二批被拦截：滑动窗口仍然记得上一批请求"},
+ {"algorithm":"sliding_counter","firstBatchAllowed":5,"secondBatchAllowed":0,"acceptedWithinMillis":0,
+  "verdict":"第二批被拦截：滑动窗口仍然记得上一批请求"},
+ {"algorithm":"sliding_bucket","firstBatchAllowed":5,"secondBatchAllowed":0,"acceptedWithinMillis":0,
+  "verdict":"第二批被拦截：滑动窗口仍然记得上一批请求"}]</code></pre>
+        </div>
+
+        <h3>同一个流量，六种算法的表现</h3>
+        <p>
+          <code>limit=5</code>、窗口 10 秒、每 100ms 发一次，共 15 次。
+          六种算法都是前 5 次放行，第 6 次（约 535ms）开始拒绝；差异在「什么时候恢复」和「允不允许突发」。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">终端</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>curl -s 'http://localhost:9004/api/redis/ratelimit/compare?limit=5&amp;windowSeconds=10&amp;requests=15&amp;intervalMillis=100'
+
+# 突发：连打 12 次，六种算法都是 5 放行 / 7 拒绝
+curl -s 'http://localhost:9004/api/redis/ratelimit/sliding_log/burst?limit=5&amp;windowSeconds=10&amp;requests=12'
+
+# 看 Redis 里的真实结构
+curl -s 'http://localhost:9004/api/redis/ratelimit/sliding_log/state?key=user-1'</code></pre>
+        </div>
+        <p class="small muted">三个接口的实测返回（2026-10-28，已省略重复字段）：</p>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · compare / burst / state</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># compare：六种算法结果一致，前 5 次放行，第 6 次在 542ms 被拒（节选 3 个）
+[{"algorithm":"fixed_window","limit":5,"allowed":5,"denied":10,"firstDeniedAtMillis":542},
+ {"algorithm":"sliding_log","limit":5,"allowed":5,"denied":10,"firstDeniedAtMillis":542},
+ {"algorithm":"token_bucket","limit":5,"allowed":5,"denied":10,"firstDeniedAtMillis":542}]
+
+# burst：连打 12 次 → 5 放行 / 7 拒绝，retryAfterMs 约 9.9s 且逐次递减
+{"algorithm":"sliding_log","requested":12,"allowed":5,"denied":7,"elapsedMillis":94,
+ "decisions":[{"allowed":true,"remaining":4},{"allowed":true,"remaining":3},
+              {"allowed":true,"remaining":2},{"allowed":true,"remaining":1},
+              {"allowed":true,"remaining":0},{"allowed":false,"retryAfterMs":9924},
+              {"allowed":false,"retryAfterMs":9919},{"allowed":false,"retryAfterMs":9916}]}
+
+# state：ZSET 里每条记录就是一次请求，score 是毫秒时间戳
+{"redisKey":"demo:rl:sliding_log:user-1","type":"zset","ttlMs":5968,
+ "value":[{"value":"1793190089666:4e607908-dfb1-4c90-a415-a46c2e21f97e",
+           "score":1.793190089666E12}]}</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>算法</th><th>Redis 结构</th><th>适合</th><th>代价</th></tr></thead>
+            <tbody>
+              <tr><td>fixed_window</td><td>Hash：窗口编号 → 计数</td><td>粗粒度保护、成本敏感</td><td>边界双倍流量</td></tr>
+              <tr><td>sliding_log</td><td>ZSet：每次请求一条</td><td>精确限制、调用量不大</td><td>内存随请求量增长</td></tr>
+              <tr><td>sliding_counter</td><td>Hash：当前 + 上一窗口</td><td>通用 API 限流</td><td>临界处是估算</td></tr>
+              <tr><td>sliding_bucket</td><td>Hash：N 个桶</td><td>想调精度/内存</td><td>桶越细成本越高</td></tr>
+              <tr><td>token_bucket</td><td>Hash：tokens + ts</td><td>允许突发的入口限流</td><td>速率不均匀</td></tr>
+              <tr><td>leaky_bucket</td><td>Hash：level + ts</td><td>削峰、保护慢下游</td><td>不允许突发</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>为什么必须用 Lua</h3>
+        <p>
+          如果先 <code>GET</code> 计数、在 Java 里判断、再 <code>INCR</code>，两个并发请求可能同时看到
+          「还剩 1 个名额」，然后都放行。Lua 脚本在 Redis 里一次执行完「读 → 判断 → 写」，
+          中间不会插入其他命令，才真正具备原子性。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../ratelimit/AbstractLuaRateLimiter.java</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>protected String run(String redisKey, Object... args) {
+    // StringRedisTemplate 用 StringRedisSerializer 序列化参数，数字必须先转字符串
+    Object[] stringArgs = new Object[args.length];
+    for (int i = 0; i &lt; args.length; i++) {
+        stringArgs[i] = String.valueOf(args[i]);
+    }
+    return redis.execute(script, List.of(redisKey), stringArgs);
+}</code></pre>
+        </div>
+        <p class="small muted">
+          踩过的坑：直接把 <code>long</code> 传给 <code>StringRedisTemplate</code> 的脚本参数，
+          运行时会报 <code>Long cannot be cast to String</code>。统一转成字符串最稳。
+        </p>
+
+        <div class="callout tip">
+          <span class="ico">✓</span>
+          <div>
+            <p><span class="title">生产里还差什么</span>
+             key 要按用户/租户/IP 分片；要处理 Redis 不可用时的降级（放行还是拒绝）；
+             多实例时钟要同步；限流结果要打点，否则你只知道拒绝了，不知道为什么。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <section id="lock">
+        <h2><span class="no">04</span>分布式锁：从 SETNX 到看门狗</h2>
+        <p class="lead">
+          锁要同时满足三件事：<strong>互斥</strong>（同一时刻只有一个持有者）、
+          <strong>不会死锁</strong>（持有者崩溃后能自动释放）、
+          <strong>不会误删</strong>（A 不能释放 B 的锁）。缺一个，线上就会出事故。
+        </p>
+
+        <h3 id="lock-naive">先看一个错误实现</h3>
+        <p>
+          最直觉的写法是两步：<code>SETNX lock 1</code> 占位，成功后再 <code>EXPIRE lock 30</code>。
+          问题在于这两步不是原子的：如果进程在两者之间崩溃，锁就永远没有过期时间。
+        </p>
+        <div class="compare">
+          <div class="box bad">
+            <h4>错误：两条命令</h4>
+            <ul>
+              <li><code>SETNX</code> 成功</li>
+              <li>进程崩溃 → 没执行 <code>EXPIRE</code></li>
+              <li>锁永不过期，所有实例永久阻塞</li>
+            </ul>
+          </div>
+          <div class="box good">
+            <h4>正确：一条命令</h4>
+            <ul>
+              <li><code>SET key holder NX PX 30000</code></li>
+              <li>占位和过期时间一次完成</li>
+              <li>Spring Data：<code>setIfAbsent(key, holder, Duration)</code></li>
+            </ul>
+          </div>
+        </div>
+
+        <p>
+          第二件事是「只删自己的锁」。如果直接 <code>DEL</code>，会出现这样的时间线：
+          A 的业务超时、锁自动过期、B 拿到锁，然后 A 执行完把 B 的锁删了。
+          正确做法是把持有者标识写进 value，用 Lua 比较后再删。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../lock/SimpleRedisLock.java</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>public boolean tryLock(String key, String holder, long ttlMillis) {
+    // SET key holder NX PX ttl：占位和过期时间一条命令完成
+    return Boolean.TRUE.equals(redis.opsForValue()
+            .setIfAbsent(key, holder, Duration.ofMillis(ttlMillis)));
+}
+
+/** 只有仍是自己持有时才删除，避免误删别人的锁。 */
+public boolean unlock(String key, String holder) {
+    // GET 比较 + DEL 必须在同一段 Lua 里原子完成
+    Long result = redis.execute(releaseScript, List.of(key), holder);
+    return result != null &amp;&amp; result == 1L;
+}</code></pre>
+        </div>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../support/LuaScripts.java · LOCK_RELEASE</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>-- value 不等于自己的 holder，说明锁已过期并被别人拿走，直接返回 0
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    -- 只有确认是自己的锁才删，返回 1 表示释放成功
+    return redis.call('DEL', KEYS[1])
+end
+return 0</code></pre>
+        </div>
+
+        <h3 id="lock-watchdog">锁的过期时间，到底设多长？</h3>
+        <p>
+          设短了，业务没跑完锁就过期，互斥失效；设长了，进程崩溃后别人要等很久。
+          这个矛盾没有静态答案，于是有了<strong>看门狗</strong>：
+          业务还在跑，就定期把锁的过期时间续回去；业务结束或进程崩溃，续期停止，锁自然过期。
+        </p>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 320" role="img" aria-label="看门狗时间线：A 持锁期间定期续期，B 无法获取，A 释放后 B 才成功">
+              <line class="dg-line" x1="60" y1="250" x2="850" y2="250"></line>
+              <text class="dg-muted" x="60" y="272">0s</text>
+              <text class="dg-muted" x="190" y="272">2s</text>
+              <text class="dg-muted" x="320" y="272">4s</text>
+              <text class="dg-muted" x="450" y="272">6s</text>
+              <text class="dg-muted" x="580" y="272">8s</text>
+              <text class="dg-muted" x="710" y="272">10s</text>
+              <text class="dg-muted" x="830" y="272">12s</text>
+
+              <rect class="dg-box-accent" x="60" y="78" width="770" height="36" rx="8"></rect>
+              <text class="dg-text-sm" x="420" y="101" text-anchor="middle">A 持有锁，业务执行 12s</text>
+
+              <line class="dg-line-ok" x1="710" y1="150" x2="710" y2="118"></line>
+              <text class="dg-ok-text" x="650" y="166" text-anchor="middle">10s 续期 → 30s</text>
+
+              <line class="dg-line-danger" x1="716" y1="196" x2="716" y2="228"></line>
+              <text class="dg-danger-text" x="750" y="196" text-anchor="start">B 尝试 → 失败</text>
+
+              <rect class="dg-box-ok" x="830" y="78" width="60" height="36" rx="8"></rect>
+              <text class="dg-text-sm" x="860" y="101" text-anchor="middle">unlock</text>
+              <text class="dg-muted" x="60" y="305">Redisson 默认 TTL 30s，后台每 10s 续一次；不传 leaseTime 才会启动看门狗。</text>
+            </svg>
+          </div>
+          <figcaption>看门狗不是「让锁永不过期」，而是「只要业务活着就续期」</figcaption>
+        </figure>
+
+        <h4>手写看门狗</h4>
+        <p>
+          本仓库的 <code>SimpleLockService</code> 用一个定时任务模拟：每 <code>ttl/3</code> 调一次
+          <code>LOCK_RENEW</code>，Lua 先比较 holder，再 <code>PEXPIRE</code>。
+          实验参数 <code>ttl=1500ms、hold=4000ms</code>：
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../lock/SimpleLockService.java</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>// 续期间隔 = TTL / 3，留两次重试余量；下限 100ms 防止空转
+long interval = Math.max(ttlMillis / 3, 100);
+scheduler.scheduleAtFixedRate(() -&gt; {
+    // 业务已结束就不再续期，让锁自然过期
+    if (!aHolding.get()) {
+        return;
+    }
+    // LOCK_RENEW 内部先比较 holder 再 PEXPIRE，不会续别人的锁
+    boolean ok = lock.renew(key, holderA, ttlMillis);
+    if (ok) {
+        renewed.set(true);
+        events.add(new Event(elapsed(start), "A", "watchdog renew", true,
+                "每 " + interval + "ms 续期到 " + ttlMillis + "ms"));
+    }
+}, interval, interval, TimeUnit.MILLISECONDS);</code></pre>
+        </div>
+        <div class="code">
+          <div class="code-head"><span class="path">终端</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># 不续期：ttl 1.5s，业务执行 3s
+curl -s 'http://localhost:9004/api/redis/lock/simple?key=demo&ttlMs=1500&holdMs=3000&watchdog=false'
+
+# 打开手写看门狗：ttl 1.5s，业务执行 4s
+curl -s 'http://localhost:9004/api/redis/lock/simple?key=demo&ttlMs=1500&holdMs=4000&watchdog=true'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · events 已省略重复的续期记录</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># watchdog=false → overlap=true：锁先过期，B 在 A 执行中途进入
+{"mode":"simple-no-watchdog","overlap":true,"renewed":false,
+ "events":[{"atMillis":7,"actor":"A","action":"tryLock","success":true,"note":"TTL=1500ms"},
+           {"atMillis":1817,"actor":"B","action":"tryLock","success":true,
+            "note":"A 还在执行，B 却拿到了锁：临界区重叠"},
+           {"atMillis":3012,"actor":"A","action":"unlock","success":false,
+            "note":"锁已不属于自己，Lua 校验失败"}]}
+
+# watchdog=true → overlap=false：每 500ms 续期，B 抢不到
+{"mode":"simple-watchdog","overlap":false,"renewed":true,
+ "events":[{"atMillis":7,"actor":"A","action":"tryLock","success":true,"note":"TTL=1500ms"},
+           {"atMillis":514,"actor":"A","action":"watchdog renew","success":true,"note":"每 500ms 续期到 1500ms"},
+           {"atMillis":1821,"actor":"B","action":"tryLock","success":false,"note":"A 的锁被续期，B 抢不到"},
+           {"atMillis":4013,"actor":"A","action":"unlock","success":true,"note":"释放成功"},
+           {"atMillis":4015,"actor":"B","action":"retryLock","success":true,"note":"A 释放后 B 获取成功"}]}</code></pre>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>场景</th><th>关键事件</th><th>结果</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>不续期：ttl 1.5s / 业务 3s</td>
+                <td>A 7ms 拿锁；B 1817ms 拿到；A 3012ms 释放失败</td>
+                <td><span class="pill bad">overlap=true</span> 临界区重叠</td>
+              </tr>
+              <tr>
+                <td>手写看门狗：ttl 1.5s / 业务 4s</td>
+                <td>每 500ms 续期；B 1821ms 抢锁失败；A 4013ms 释放；B 4015ms 重试成功</td>
+                <td><span class="pill ok">overlap=false</span> 互斥成立</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="lock-redisson">Redisson：可重入 + 看门狗</h3>
+        <p>
+          手写看门狗要自己管理调度、异常、续期失败。Redisson 把这些封装好了：
+          <code>tryLock(waitTime, unit)</code> 不传 leaseTime 时启用看门狗，
+          默认锁 30 秒、每 10 秒续期。它的锁 value 是 Hash，记录持有者和重入次数，
+          所以同一线程可以重复加锁。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../config/RedisConfig.java</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>Config config = new Config();
+config.useSingleServer()
+        .setAddress("redis://" + host + ":" + port)
+        .setDatabase(database)
+        .setConnectionMinimumIdleSize(2)
+        .setConnectionPoolSize(8);
+// 看门狗超时：锁默认 30s 过期，后台每 1/3（10s）续期一次
+config.setLockWatchdogTimeout(watchdogTimeoutMs);
+return Redisson.create(config);</code></pre>
+        </div>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../lock/RedissonLockService.java</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>// 不传 leaseTime：锁默认 30s 过期，看门狗每 10s 续期一次
+acquired = leaseSeconds == null
+        ? lockA.tryLock(5, TimeUnit.SECONDS)
+        // 传了 leaseTime：看门狗不启动，到点强制过期
+        : lockA.tryLock(5, leaseSeconds, TimeUnit.SECONDS);</code></pre>
+        </div>
+        <div class="code">
+          <div class="code-head"><span class="path">终端</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># 不传 leaseTime：业务跑 12s，看门狗在 10s 左右把 TTL 拉回 30s
+curl -s 'http://localhost:9004/api/redis/lock/redisson?key=demo&holdSeconds=12'
+
+# 传 leaseTime=3s：看门狗不启动，3s 后 B 进入临界区
+curl -s 'http://localhost:9004/api/redis/lock/redisson-lease?key=demo&leaseSeconds=3&holdSeconds=6'</code></pre>
+        </div>
+        <p>
+          两组实测（<code>holdSeconds=12</code> 与 <code>leaseSeconds=3 / holdSeconds=6</code>）：
+        </p>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · TTL 采样已截断</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># redisson：TTL 一路降到 19991ms，10.5s 时被看门狗拉回 29532ms
+{"mode":"redisson-watchdog","overlap":false,"watchdogRenewed":true,
+ "events":[{"atMillis":7,"actor":"A","action":"tryLock","success":true,"note":"未指定 leaseTime，看门狗生效"},
+           {"atMillis":10015,"actor":"B","action":"tryLock","success":false,"note":"锁仍被 A 持有"},
+           {"atMillis":12014,"actor":"A","action":"unlock","success":true,"note":"释放成功"},
+           {"atMillis":12017,"actor":"B","action":"retryLock","success":true,"note":"A 释放后 B 获取成功"}],
+ "ttlSamples":[{"atMillis":10,"ttlMillis":29994},{"atMillis":10013,"ttlMillis":19991},
+               {"atMillis":10514,"ttlMillis":29532}]}
+
+# redisson-lease：leaseTime=3s 到点过期，B 在 4008ms 进入
+{"mode":"redisson-lease","overlap":true,
+ "events":[{"atMillis":2,"actor":"A","action":"tryLock","success":true,"note":"leaseTime=3s"},
+           {"atMillis":4008,"actor":"B","action":"tryLock","success":true,"note":"B 进入临界区，A 仍在执行"},
+           {"atMillis":6008,"actor":"A","action":"unlock","success":false,"note":"锁已过期或被 B 持有，A 已经无权释放"}],
+ "ttlSamples":[{"atMillis":5,"ttlMillis":2998},{"atMillis":2509,"ttlMillis":494},
+               {"atMillis":3006,"ttlMillis":-2}]}</code></pre>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>接口</th><th>时间线</th><th>TTL 采样</th><th>结论</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>/lock/redisson</code></td>
+                <td>A 7ms 拿锁；B 10.015s 抢锁失败；A 12.014s 释放</td>
+                <td>29.9s → 19.9s → 拉回 29.5s</td>
+                <td>看门狗持续续期，业务跑多久锁就活多久</td>
+              </tr>
+              <tr>
+                <td><code>/lock/redisson-lease</code></td>
+                <td>A 2ms 拿锁；B 4.008s 进入；A 6.008s 释放失败</td>
+                <td>3s 后归零（-2）</td>
+                <td>显式 leaseTime 会关闭看门狗，业务超时即失去锁</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout danger">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">leaseTime 是最容易忽略的陷阱</span>
+             <code>tryLock(5, 3, TimeUnit.SECONDS)</code> 的意思是「最多等 5 秒，锁 3 秒后强制过期」。
+             如果业务可能超过 3 秒，就不要传 leaseTime；一旦传了，看门狗不会启动。
+            </p>
+          </div>
+        </div>
+
+        <h3 id="lock-counter">并发计数：锁到底防住了什么</h3>
+        <p>
+          这段代码模拟「读 → 处理 1ms → 写回」。20 个线程各 50 次，期望 1000：
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../lock/RedissonLockService.java</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>if (locked) {
+    // 读改写整段在锁内，其他线程无法插入
+    lock.lock();
+}
+try {
+    int current = value[0];
+    sleep(1);                      // 放大「读」和「写」之间的窗口
+    value[0] = current + 1;
+} finally {
+    // 只释放自己持有的锁
+    if (locked &amp;&amp; lock.isHeldByCurrentThread()) {
+        lock.unlock();
+    }
+}</code></pre>
+        </div>
+        <div class="code">
+          <div class="code-head"><span class="path">终端</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># 10 个线程各 20 次，期望 200
+curl -s 'http://localhost:9004/api/redis/lock/counter?locked=false&threads=10&iterations=20'
+curl -s 'http://localhost:9004/api/redis/lock/counter?locked=true&threads=10&iterations=20'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/redis/lock/counter?threads=10&amp;iterations=20</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># 不加锁：丢更新，只剩 20
+{"locked":false,"threads":10,"iterations":20,"expected":200,"actual":20,"lost":180,"elapsedMillis":28}
+
+# 加 Redisson 锁：一次不少，但慢了约 67 倍
+{"locked":true,"threads":10,"iterations":20,"expected":200,"actual":200,"lost":0,"elapsedMillis":1878}</code></pre>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>模式</th><th>期望</th><th>实际</th><th>耗时</th></tr></thead>
+            <tbody>
+              <tr><td>不加锁</td><td>200</td><td><strong>20</strong></td><td>28ms</td></tr>
+              <tr><td>加 Redisson 锁</td><td>200</td><td><strong>200</strong></td><td>1878ms</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted">
+          加锁后慢了一个数量级，因为每次 <code>+1</code> 都要两次 Redis 往返（加锁、解锁）。
+          这也是为什么锁的粒度要小、临界区要短：能不用锁就不用，必须用就别把慢操作放进去。
+        </p>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">单 Redis 锁的边界</span>
+             主从异步复制时，主节点刚返回加锁成功就宕机，从节点可能还没收到这把锁，新主上别人能再次加锁。
+             对一致性要求极高的场景，需要 RedLock（仍有争议）或带 <strong>fencing token</strong> 的方案：
+             每次加锁拿到递增编号，下游只接受更大的编号，从而丢弃过期持有者的写入。
+            </p>
+          </div>
+        </div>
+      </section>
+      <!-- ============================================================ -->
+      <section id="cache">
+        <h2><span class="no">05</span>缓存一致性：延迟双删到底删什么</h2>
+        <p class="lead">
+          缓存旁路（Cache Aside）只有两条规则：读的时候先查缓存、未命中回源并回填；
+          写的时候先改数据库、再删缓存。真正难的是<strong>删除和回填撞在一起</strong>的那几百毫秒。
+        </p>
+
+        <p>
+          把缓存想成贴在数据库旁边的一张便签。写操作把便签撕掉，下一次读会重新抄一张。
+          问题出在「读线程已经读到了旧值、还没抄完」的时候：写线程撕掉便签、更新数据库，
+          读线程随后把刚读到的旧值抄了上去。这张旧便签会一直留到 TTL 过期。
+        </p>
+
+        <h3>为什么是删除，而不是更新缓存</h3>
+        <div class="compare">
+          <div class="box bad">
+            <h4>更新缓存</h4>
+            <ul>
+              <li>两个写请求并发，后到的可能先算完，缓存留下旧值</li>
+              <li>缓存值可能需要复杂计算，每次都算很浪费</li>
+              <li>缓存里可能存的是聚合结果，更新逻辑难写</li>
+            </ul>
+          </div>
+          <div class="box good">
+            <h4>删除缓存</h4>
+            <ul>
+              <li>下一次读自然回源，拿到数据库当前值</li>
+              <li>逻辑简单，失败重试也容易</li>
+              <li>代价是短时间多一次回源</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>竞态时间线</h3>
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 900 400" role="img" aria-label="延迟双删竞态时间线：读线程旧值回填后，延迟队列再次删除缓存">
+              <line class="dg-line" x1="60" y1="330" x2="870" y2="330"></line>
+              <text class="dg-muted" x="60" y="352">t=0</text>
+              <text class="dg-muted" x="290" y="352">500ms</text>
+              <text class="dg-muted" x="510" y="352">1000ms</text>
+              <text class="dg-muted" x="730" y="352">1500ms</text>
+
+              <text class="dg-text-sm" x="30" y="90">读线程</text>
+              <line class="dg-life" x1="140" y1="70" x2="140" y2="330"></line>
+              <rect class="dg-box" x="60" y="96" width="160" height="34" rx="7"></rect>
+              <text class="dg-text-sm" x="140" y="118" text-anchor="middle">读到旧值，慢处理</text>
+              <path class="dg-line dg-line-dashed" d="M220 113 C260 113 285 250 298 268"></path>
+
+              <text class="dg-text-sm" x="30" y="190">写线程</text>
+              <line class="dg-life" x1="141" y1="170" x2="141" y2="330"></line>
+              <rect class="dg-box-warn" x="141" y="196" width="210" height="34" rx="7"></rect>
+              <text class="dg-text-sm" x="246" y="218" text-anchor="middle">改 DB → 删缓存 → 登记延迟删除</text>
+
+              <text class="dg-text-sm" x="30" y="270">缓存</text>
+              <line class="dg-life" x1="141" y1="250" x2="141" y2="330"></line>
+              <rect class="dg-box-danger" x="231" y="256" width="140" height="34" rx="7"></rect>
+              <text class="dg-text-sm" x="301" y="278" text-anchor="middle">旧值被回填</text>
+              <rect class="dg-box-ok" x="745" y="256" width="140" height="34" rx="7"></rect>
+              <text class="dg-text-sm" x="815" y="278" text-anchor="middle">延迟删除 → 清空</text>
+
+              <line class="dg-line-danger" x1="301" y1="245" x2="301" y2="290"></line>
+              <line class="dg-line-ok" x1="815" y1="245" x2="815" y2="290"></line>
+
+              <text class="dg-muted" x="60" y="385">实测：回填约 t≈515ms，延迟删除约 t≈1626ms；之后读取回源拿到新值。</text>
+            </svg>
+          </div>
+          <figcaption>第一次删除挡住「写后读」，第二次延迟删除挡住「读后回填」</figcaption>
+        </figure>
+
+        <p>
+          本仓库的 <code>POST /api/redis/cache/race?id=99</code> 用两个线程把这条时间线固定下来：
+          读线程先查库拿快照，再 <code>sleep(500)</code>；写线程在 100ms 后更新 DB、删缓存、
+          登记延迟删除；读线程醒来把旧快照回填；延迟队列到点执行第二次删除。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../cache/ProductCacheService.java</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>// 读线程：先查库拿快照，再故意慢 500ms 模拟「读到旧值还没回填」
+CompletableFuture&lt;Product&gt; slowRead = CompletableFuture.supplyAsync(() -&gt; {
+    Product snapshot = repository.findById(productId)
+            .orElseThrow(() -&gt; new IllegalStateException("商品不存在"));
+    sleep(500);
+    return snapshot;
+});
+
+// 写线程：等 100ms 后改库 → 删缓存 → 登记 1000ms 后的第二次删除
+sleep(100);
+repository.update(productId, "新名称", new BigDecimal("499.00"));
+redis.delete(cacheKey);
+long dueAt = delayQueue.schedule(cacheKey, delayedDeleteDelayMs);
+
+// 读线程醒来，把旧快照写回缓存 —— 脏值出现
+Product snapshot = slowRead.join();
+redis.opsForValue().set(cacheKey, serialize(snapshot), Duration.ofSeconds(ttlSeconds));</code></pre>
+        </div>
+        <div class="code">
+          <div class="code-head"><span class="path">终端</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># 一次跑完：更新 DB → 删缓存 → 1000ms 后延迟删除 → 验证最终值
+curl -s -X POST 'http://localhost:9004/api/redis/cache/race?id=99'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · POST /api/redis/cache/race?id=99（省略 updatedAt）</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>{"productId":99,
+ "events":[{"atMillis":0,"action":"准备","cacheValue":"DB 和缓存都是旧值: 旧名称"},
+           {"atMillis":122,"action":"写线程：更新 DB + 删除缓存","cacheValue":"延迟删除已登记，约 997ms 后执行"},
+           {"atMillis":515,"action":"读线程：把读到的旧值回填缓存",
+            "cacheValue":"{\"id\":99,\"name\":\"旧名称\",\"price\":399.00,\"version\":1}"},
+           {"atMillis":1626,"action":"延迟队列：第二次删除","cacheValue":"缓存已清空"},
+           {"atMillis":1633,"action":"再次读取","cacheValue":"DB → 新名称"}],
+ "cacheAfterStaleRefill":"{\"id\":99,\"name\":\"旧名称\",...}",
+ "cacheAfterDelayedDelete":null,
+ "finalProduct":{"id":99,"name":"新名称","price":499.00,"version":2},
+ "finalSource":"DB"}</code></pre>
+        </div>
+        <p>实测事件（2026-10-28）：</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>时间</th><th>事件</th><th>缓存内容</th></tr></thead>
+            <tbody>
+              <tr><td>0ms</td><td>准备：DB 和缓存都是「旧名称」</td><td>旧名称</td></tr>
+              <tr><td>122ms</td><td>写线程更新 DB、删除缓存、登记延迟删除</td><td>空</td></tr>
+              <tr><td>515ms</td><td>读线程把旧快照回填</td><td><strong>旧名称</strong>（脏）</td></tr>
+              <tr><td>1626ms</td><td>延迟队列执行第二次删除</td><td>空</td></tr>
+              <tr><td>1633ms</td><td>再次读取，回源 DB</td><td>新名称</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>延迟队列：ZSet 的 score 就是闹钟</h3>
+        <p>
+          <code>ZADD queue &lt;dueAt&gt; cacheKey</code> 把任务按到期时间排好。
+          后台线程每 200ms 取 <code>score &lt;= now</code> 的任务，先 <code>ZREM</code> 再删除缓存。
+          先移除再执行，保证多个实例同时轮询时只有一个能领到任务。
+        </p>
+        <div class="code">
+          <div class="code-head"><span class="path">demo-redis/.../cache/DelayTaskQueue.java</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>public long schedule(String cacheKey, long delayMillis) {
+    // score = 到期时间戳，ZSet 自动按到期先后排序
+    long dueAt = System.currentTimeMillis() + delayMillis;
+    redis.opsForZSet().add(QUEUE_KEY, cacheKey, dueAt);
+    return dueAt;
+}
+
+@Scheduled(fixedDelay = 200, initialDelay = 200)
+public void poll() {
+    long now = System.currentTimeMillis();
+    // 每轮最多领 20 个已到期任务，避免一次拉太多
+    Set&lt;String&gt; due = redis.opsForZSet().rangeByScore(QUEUE_KEY, 0, now, 0, 20);
+    for (String cacheKey : due) {
+        // 先 ZREM 抢任务：多实例同时轮询时，只有一个能删成功
+        Long removed = redis.opsForZSet().remove(QUEUE_KEY, cacheKey);
+        if (removed != null &amp;&amp; removed &gt; 0) {
+            redis.delete(cacheKey);
+        }
+    }
+}</code></pre>
+        </div>
+
+        <h3>延迟双删的边界</h3>
+        <ul>
+          <li><strong>不是强一致</strong>：延迟窗口内仍可能读到旧值，只是把窗口从「TTL」缩短到「延迟时间」。</li>
+          <li><strong>延迟时间靠猜</strong>：要大于「读线程回源 + 回填」的最长耗时；太长会让脏值活得更久，太短挡不住。</li>
+          <li><strong>删除可能失败</strong>：网络抖动、Redis 不可用都会让第二次删除落空，需要重试或补偿。</li>
+          <li><strong>主从延迟</strong>：写完主库立刻删缓存，读请求可能从从库读到旧值再回填。延迟双删也挡不住这种情况。</li>
+        </ul>
+        <p class="small muted">
+          对一致性要求更高时，常见方案是「订阅 binlog（Canal 等）异步删缓存」或「缓存版本号 + 短 TTL」；
+          延迟双删是成本低、易落地的折中，不是银弹。
+        </p>
+      </section>
+
+      <!-- ============================================================ -->
+      <section id="run">
+        <h2><span class="no">06</span>运行与速查</h2>
+
+        <h3>启动与配置</h3>
+        <div class="code">
+          <div class="code-head"><span class="path">终端</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>docker compose up -d redis mysql
+./mvnw -pl demo-redis spring-boot:run
+
+# 另起一个隔离实例（不碰默认库）
+SERVER_PORT=9014 REDIS_DB=5 \
+SPRING_DATASOURCE_URL='jdbc:mysql://localhost:3306/demo_redis_verify?createDatabaseIfNotExist=true' \
+./mvnw -pl demo-redis spring-boot:run -Dspring-boot.run.arguments=--server.port=9014</code></pre>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>变量</th><th>默认</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr><td><code>SERVER_PORT</code></td><td>9004</td><td>避开 9001~9003 的业务服务</td></tr>
+              <tr><td><code>REDIS_HOST</code> / <code>REDIS_PORT</code> / <code>REDIS_DB</code></td><td>localhost / 6379 / 0</td><td>Redis 连接</td></tr>
+              <tr><td><code>demo.redis.lock.watchdog-timeout-ms</code></td><td>30000</td><td>Redisson 看门狗超时</td></tr>
+              <tr><td><code>demo.redis.cache.ttl-seconds</code></td><td>30</td><td>商品缓存 TTL</td></tr>
+              <tr><td><code>demo.redis.cache.delayed-delete-delay-ms</code></td><td>1000</td><td>第二次删除延迟</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>接口速查</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>接口</th><th>作用</th></tr></thead>
+            <tbody>
+              <tr><td><code>GET /api/redis/types</code></td><td>九种类型目录</td></tr>
+              <tr><td><code>GET /api/redis/types/{type}</code></td><td>运行单个类型案例</td></tr>
+              <tr><td><code>GET /api/redis/types/all</code></td><td>一次跑完九种类型</td></tr>
+              <tr><td><code>GET /api/redis/ratelimit/algorithms</code></td><td>六种限流器清单</td></tr>
+              <tr><td><code>GET /api/redis/ratelimit/{algo}/hit</code></td><td>单次判定</td></tr>
+              <tr><td><code>GET /api/redis/ratelimit/{algo}/burst</code></td><td>连续请求，观察放行/拒绝</td></tr>
+              <tr><td><code>GET /api/redis/ratelimit/{algo}/state</code></td><td>查看底层结构与 TTL</td></tr>
+              <tr><td><code>DELETE /api/redis/ratelimit/{algo}/state</code></td><td>清理该限流 key</td></tr>
+              <tr><td><code>GET /api/redis/ratelimit/compare</code></td><td>六种算法同流量对比</td></tr>
+              <tr><td><code>GET /api/redis/ratelimit/boundary</code></td><td>窗口边界实验</td></tr>
+              <tr><td><code>GET /api/redis/lock/simple</code></td><td>手写锁（可切换看门狗）</td></tr>
+              <tr><td><code>GET /api/redis/lock/redisson</code></td><td>Redisson 看门狗</td></tr>
+              <tr><td><code>GET /api/redis/lock/redisson-lease</code></td><td>显式 leaseTime 陷阱</td></tr>
+              <tr><td><code>GET /api/redis/lock/counter</code></td><td>并发计数（加锁/不加锁）</td></tr>
+              <tr><td><code>GET /api/redis/lock/state</code> · <code>DELETE /api/redis/lock</code></td><td>查看 / 清理锁</td></tr>
+              <tr><td><code>GET /api/redis/cache/product/{id}</code></td><td>读缓存（可加 slowReadMs）</td></tr>
+              <tr><td><code>PUT /api/redis/cache/product/{id}</code></td><td>更新 + 延迟双删</td></tr>
+              <tr><td><code>GET /api/redis/cache/product/{id}/inspect</code></td><td>对比缓存与 DB</td></tr>
+              <tr><td><code>POST /api/redis/cache/race</code></td><td>确定性复现旧值回填</td></tr>
+              <tr><td><code>GET /api/redis/cache/delay/pending</code> · <code>executed</code></td><td>延迟队列状态</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>redis-cli 速查</h3>
+        <div class="code">
+          <div class="code-head"><span class="path">终端</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># 进入容器里的 redis-cli（-n 5 对应隔离实例的 REDIS_DB）
+docker compose exec redis redis-cli -n 5
+
+# 演示 key（生产不要用 KEYS，会阻塞）
+SCAN 0 MATCH demo:* COUNT 100
+TYPE demo:types:zset:leaderboard
+TTL  demo:rl:fixed_window:user-1
+ZRANGE demo:types:zset:leaderboard 0 -1 WITHSCORES
+ZRANGEBYSCORE demo:delay:cache-delete 0 +inf WITHSCORES
+HGETALL demo:types:hash:user:1001
+XLEN demo:types:stream:orders
+XPENDING demo:types:stream:orders order-group</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · redis-cli -n 5（2026-10-28）</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># SCAN 找到的 key（节选）
+demo:types:string:user:1:name
+demo:types:hash:user:1001
+demo:types:zset:leaderboard
+demo:types:bitmap:sign:user:1:2026-10
+demo:rl:fixed_window:user-1
+
+# TYPE / TTL / ZRANGE / HGETALL
+zset
+20
+王五
+60
+张三
+100
+李四
+110
+age
+29
+city
+杭州
+name
+张三
+
+# 延迟队列为空时 ZRANGEBYSCORE 返回空列表；XLEN 为已追加的消息数</code></pre>
+        </div>
+
+        <h3>测试</h3>
+        <div class="code">
+          <div class="code-head"><span class="path">终端</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code># 测试会自动起 Testcontainers Redis，不需要本地 Redis（Docker 必须可用）
+./mvnw -pl demo-redis test</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · ./mvnw -pl demo-redis test（2026-10-28）</span><button class="copy" type="button" data-copy>复制</button></div>
+          <pre><code>[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0
+       -- in com.example.demo.redis.RateLimiterIntegrationTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0
+       -- in com.example.demo.redis.SimpleRedisLockIntegrationTest
+[INFO] BUILD SUCCESS</code></pre>
+        </div>
+        <ul>
+          <li><code>RateLimiterIntegrationTest</code>：Testcontainers 起临时 Redis，逐个验证六种算法恰好放行 limit 次、拒绝时给出重试时间、state 暴露正确结构。</li>
+          <li><code>SimpleRedisLockIntegrationTest</code>：只有持有者能续期/释放；锁过期后可被接管；旧持有者不能误删新锁。</li>
+        </ul>
+
+        <h3>踩坑清单（Spring Boot 4 / Spring Data Redis 4）</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>现象</th><th>原因</th><th>处理</th></tr></thead>
+            <tbody>
+              <tr><td><code>RedisType</code> 找不到</td><td>Spring Data Redis 4 改名</td><td>用 <code>org.springframework.data.redis.connection.DataType</code></td></tr>
+              <tr><td><code>com.fasterxml.jackson</code> 找不到</td><td>Boot 4 默认 Jackson 3</td><td>用 <code>tools.jackson.databind.ObjectMapper</code></td></tr>
+              <tr><td><code>GeoLocation</code> 找不到</td><td>包路径变化</td><td><code>RedisGeoCommands.GeoLocation</code></td></tr>
+              <tr><td>Stream 泛型推断失败</td><td><code>opsForStream()</code> 是三泛型</td><td>显式声明 <code>StreamOperations&lt;String,String,String&gt;</code></td></tr>
+              <tr><td>Lua 参数 <code>Long cannot be cast to String</code></td><td>StringRedisTemplate 只接受字符串</td><td>执行前统一 <code>String.valueOf</code></td></tr>
+              <tr><td>Redisson <code>tryLock</code> 编译报未捕获异常</td><td>4.x 声明了 <code>InterruptedException</code></td><td>捕获并 <code>Thread.currentThread().interrupt()</code></td></tr>
+              <tr><td>Geo 查询 NPE</td><td>未请求坐标却调用 <code>getPoint()</code></td><td><code>includeCoordinates().includeDistance()</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout tip">
+          <span class="ico">✓</span>
+          <div>
+            <p><span class="title">建议的练习顺序</span>
+             先跑九种类型建立手感 → 用 <code>burst</code> 和 <code>boundary</code> 看限流差异 →
+             把锁的 <code>watchdog</code> 打开/关闭各跑一次 → 最后跑 <code>race</code>，
+             把延迟删除的时间改成 0 和 5000，观察脏值存活多久。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <section id="codemap">
+        <h2><span class="no">07</span>代码地图</h2>
+        <p class="lead">路径相对本页所在目录，点开即可对照实现。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>文件</th><th>职责</th></tr></thead>
+            <tbody>
+              <tr><td><a href="../demo-redis/src/main/java/com/example/demo/redis/types/DataTypeService.java">types/DataTypeService.java</a></td><td>九种数据类型的独立案例</td></tr>
+              <tr><td><a href="../demo-redis/src/main/java/com/example/demo/redis/support/LuaScripts.java">support/LuaScripts.java</a></td><td>六种限流、锁释放/续期、延迟队列出队</td></tr>
+              <tr><td><a href="../demo-redis/src/main/java/com/example/demo/redis/ratelimit/AbstractLuaRateLimiter.java">ratelimit/AbstractLuaRateLimiter.java</a></td><td>执行 Lua、解析结果、查看底层结构</td></tr>
+              <tr><td><a href="../demo-redis/src/main/java/com/example/demo/redis/ratelimit/RateLimiterRegistry.java">ratelimit/RateLimiterRegistry.java</a></td><td>按名字查找六种限流器</td></tr>
+              <tr><td><a href="../demo-redis/src/main/java/com/example/demo/redis/lock/SimpleRedisLock.java">lock/SimpleRedisLock.java</a></td><td>SET NX PX + Lua 校验持有者</td></tr>
+              <tr><td><a href="../demo-redis/src/main/java/com/example/demo/redis/lock/SimpleLockService.java">lock/SimpleLockService.java</a></td><td>不续期 / 手写看门狗两个时间线</td></tr>
+              <tr><td><a href="../demo-redis/src/main/java/com/example/demo/redis/lock/RedissonLockService.java">lock/RedissonLockService.java</a></td><td>Redisson 看门狗、leaseTime、并发计数</td></tr>
+              <tr><td><a href="../demo-redis/src/main/java/com/example/demo/redis/cache/ProductCacheService.java">cache/ProductCacheService.java</a></td><td>缓存旁路、更新、竞态复现</td></tr>
+              <tr><td><a href="../demo-redis/src/main/java/com/example/demo/redis/cache/DelayTaskQueue.java">cache/DelayTaskQueue.java</a></td><td>ZSet 延迟队列 + 每 200ms 轮询</td></tr>
+              <tr><td><a href="../demo-redis/src/main/java/com/example/demo/redis/controller/RateLimitController.java">controller/RateLimitController.java</a></td><td>单次、突发、对比、边界实验</td></tr>
+              <tr><td><a href="../demo-redis/src/main/java/com/example/demo/redis/controller/LockController.java">controller/LockController.java</a></td><td>四种锁实验与清理</td></tr>
+              <tr><td><a href="../demo-redis/src/main/java/com/example/demo/redis/controller/CacheController.java">controller/CacheController.java</a></td><td>缓存读写、竞态、延迟队列状态</td></tr>
+              <tr><td><a href="../demo-redis/src/main/resources/application.yaml">application.yaml</a></td><td>端口、Redis、MySQL、看门狗与缓存参数</td></tr>
+              <tr><td><a href="../demo-redis/src/test/java/com/example/demo/redis/RateLimiterIntegrationTest.java">RateLimiterIntegrationTest.java</a></td><td>六种限流算法的 Testcontainers 测试</td></tr>
+              <tr><td><a href="../demo-redis/src/test/java/com/example/demo/redis/SimpleRedisLockIntegrationTest.java">SimpleRedisLockIntegrationTest.java</a></td><td>手写锁的互斥与接管测试</td></tr>
+              <tr><td><a href="../demo-redis/README.md">demo-redis/README.md</a></td><td>全部接口、curl 与实测输出</td></tr>
+              <tr><td><a href="../docker-compose.yml">docker-compose.yml</a></td><td>Redis 7.4、MySQL 8.4 等基础设施</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <p><span class="title">生产清单</span>
+             容量与淘汰策略（<code>maxmemory-policy</code>）、持久化与备份、慢查询与热 key、
+             集群/哨兵、连接池、超时与降级、限流打点、锁的 fencing、缓存击穿/雪崩。
+              演示只覆盖「机制怎么工作」，这些才是上线前真正要逐项确认的。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        <p><strong>Redis 实战指南</strong> · 基于本仓库 <code>demo-redis</code> 当前代码与实测输出整理。</p>
+        <p>命令与预期结果以 <code>demo-redis/README.md</code> 为准；实验前请确认 Redis、MySQL 已启动，9004 端口未被占用。最后核对：2026-10-28。</p>
+      </footer>
+    </div>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var toggle = document.getElementById('themeToggle');
+
+    function syncToggleLabel() {
+      if (toggle) toggle.textContent = root.dataset.theme === 'dark' ? '浅色' : '深色';
+    }
+    syncToggleLabel();
+
+    if (toggle) {
+      toggle.addEventListener('click', function () {
+        var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        try { localStorage.setItem('redis-guide-theme', next); } catch (e) { /* ignore */ }
+        syncToggleLabel();
+      });
+    }
+
+    document.querySelectorAll('[data-copy]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var block = btn.closest('.code');
+        var code = block ? block.querySelector('code') : null;
+        if (!code) return;
+        var text = code.innerText;
+        var done = function () {
+          var old = btn.textContent;
+          btn.textContent = '已复制';
+          setTimeout(function () { btn.textContent = old; }, 1400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done).catch(function () { fallback(text, done); });
+        } else {
+          fallback(text, done);
+        }
+      });
+    });
+
+    function fallback(text, done) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+      document.body.removeChild(ta);
+      done();
+    }
+
+    var links = Array.prototype.slice.call(document.querySelectorAll('.toc a[href^="#"]'));
+    var byId = {};
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      byId[id] = a;
+    });
+    var targets = Object.keys(byId).map(function (id) { return document.getElementById(id); }).filter(Boolean);
+
+    function setActive(id) {
+      links.forEach(function (a) { a.classList.remove('active'); });
+      var link = byId[id];
+      if (link) link.classList.add('active');
+    }
+
+    function onScroll() {
+      var y = window.scrollY + 140;
+      var current = targets.length ? targets[0] : null;
+      for (var i = 0; i < targets.length; i++) {
+        var top = targets[i].getBoundingClientRect().top + window.scrollY;
+        if (top <= y) current = targets[i];
+      }
+      if (current) setActive(current.id);
+      var bar = document.querySelector('.progress span');
+      if (bar) {
+        var max = document.documentElement.scrollHeight - window.innerHeight;
+        bar.style.width = (max > 0 ? Math.min(100, Math.max(0, window.scrollY / max * 100)) : 0) + '%';
+      }
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    onScroll();
+  })();
+</script>
+</body>
+</html>

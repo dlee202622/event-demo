@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS product (
+    id         BIGINT        NOT NULL PRIMARY KEY,
+    name       VARCHAR(64)   NOT NULL,
+    price      DECIMAL(10, 2) NOT NULL,
+    version    INT           NOT NULL DEFAULT 0,
+    updated_at DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;

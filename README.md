@@ -17,7 +17,8 @@ demo
 ├── demo-inventory-service             库存服务（9002，订阅 OrderCreated / OrderCancelled）
 ├── demo-loyalty-service               积分服务（9003，订阅 OrderPaid）
 ├── demo-rabbitmq                      RabbitMQ 基础用法示例（[文档](demo-rabbitmq/README.md)）
-└── demo-rocketmq                      RocketMQ 基础用法示例（[文档](demo-rocketmq/README.md)）
+├── demo-rocketmq                      RocketMQ 基础用法示例（[文档](demo-rocketmq/README.md)）
+└── demo-redis                         Redis 数据类型 / 限流 / 分布式锁 / 缓存一致性（[文档](demo-redis/README.md)）
 ```
 
 服务之间只共享**事件契约**，不共享聚合、仓储或代码模块：每个服务各自定义它消费/发布的事件结构。
@@ -143,6 +144,24 @@ docker compose up -d rocketmq-namesrv rocketmq-broker rocketmq-dashboard
 `demo-rocketmq` 自身没有静态页面）。每个按钮对应的接口、预期日志和排障方法写在各自模块的 README 里。
 
 想把这两个模块的原理和故障处理串起来看，可以打开图文教程 [docs/messaging-guide.html](docs/messaging-guide.html)：结构图、流程图、逐段代码和实验记录都在里面，单个 HTML 文件，浏览器直接打开即可。
+
+### Redis Demo（数据类型 / 限流 / 分布式锁 / 缓存）
+
+独立模块 `demo-redis`（9004），用一组 HTTP 接口覆盖四类高频场景：
+
+| 分组 | 覆盖内容 |
+| --- | --- |
+| 数据类型 | String / Hash / List / Set / ZSet / Bitmap / HyperLogLog / Geo / Stream，9 个独立案例 |
+| 限流 | 固定窗口 / 滑动日志 / 双窗口计数 / 滑动分桶 / 令牌桶 / 漏桶，含突发、对比、窗口边界实验 |
+| 分布式锁 | 手写 SET NX PX + Lua、手写看门狗、Redisson 看门狗、leaseTime 陷阱、并发计数 |
+| 缓存一致性 | 缓存旁路、延迟双删、ZSet 延迟队列、旧值回填竞态复现（接 MySQL） |
+
+```bash
+docker compose up -d redis mysql
+./mvnw -pl demo-redis spring-boot:run
+```
+
+启动后从 `curl http://localhost:9004/api/redis/types/all` 开始；接口、curl 和实测输出见 [demo-redis/README.md](demo-redis/README.md)，原理图解见 [docs/redis-guide.html](docs/redis-guide.html)。
 
 ---
 

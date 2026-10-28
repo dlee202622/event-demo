@@ -5,6 +5,7 @@
 @orderHost = http://localhost:9001
 @inventoryHost = http://localhost:9002
 @loyaltyHost = http://localhost:9003
+@redisHost = http://localhost:9004
 @orderId = ORD-XXXXXXXX
 
 ### 1. 下单（总价 399 × 2 = 798）
@@ -75,3 +76,59 @@ Content-Type: application/json
     { "productId": "P-1003", "productName": "显示器", "unitPrice": 1299.00, "quantity": 25 }
   ]
 }
+
+### ---------------------------------------------------------------------------
+### Redis Demo（先启动 demo-redis，端口 9004）
+### ---------------------------------------------------------------------------
+
+### 16. 九种数据类型：目录 / 单个 / 一次跑完
+GET {{redisHost}}/api/redis/types
+GET {{redisHost}}/api/redis/types/zset
+GET {{redisHost}}/api/redis/types/all
+
+### 17. 限流：单次判定 / 突发 / 六种对比 / 窗口边界
+GET {{redisHost}}/api/redis/ratelimit/algorithms
+GET {{redisHost}}/api/redis/ratelimit/sliding_log/hit?key=user-1&limit=5&windowSeconds=10
+GET {{redisHost}}/api/redis/ratelimit/sliding_log/burst?limit=5&windowSeconds=10&requests=12
+GET {{redisHost}}/api/redis/ratelimit/compare?limit=5&windowSeconds=10&requests=15&intervalMillis=100
+GET {{redisHost}}/api/redis/ratelimit/boundary?limit=5&windowSeconds=4
+
+### 18. 限流：查看底层结构与清理
+GET {{redisHost}}/api/redis/ratelimit/fixed_window/state?key=user-1
+DELETE {{redisHost}}/api/redis/ratelimit/fixed_window/state?key=user-1
+
+### 19. 手写锁：不续期（B 会中途拿到锁）
+GET {{redisHost}}/api/redis/lock/simple?key=demo&ttlMs=1500&holdMs=3000&watchdog=false
+
+### 20. 手写锁：看门狗续期（B 抢不到）
+GET {{redisHost}}/api/redis/lock/simple?key=demo&ttlMs=1500&holdMs=4000&watchdog=true
+
+### 21. Redisson：看门狗 / leaseTime 陷阱
+GET {{redisHost}}/api/redis/lock/redisson?key=demo&holdSeconds=12
+GET {{redisHost}}/api/redis/lock/redisson-lease?key=demo&leaseSeconds=3&holdSeconds=6
+
+### 22. 并发计数：不加锁会丢更新
+GET {{redisHost}}/api/redis/lock/counter?locked=false&threads=10&iterations=20
+GET {{redisHost}}/api/redis/lock/counter?locked=true&threads=10&iterations=20
+
+### 23. 查看 / 清理锁
+GET {{redisHost}}/api/redis/lock/state?key=demo
+DELETE {{redisHost}}/api/redis/lock?key=demo
+
+### 24. 缓存：读 / 对照 / 更新（延迟双删）
+GET {{redisHost}}/api/redis/cache/product/1
+GET {{redisHost}}/api/redis/cache/product/1/inspect
+PUT {{redisHost}}/api/redis/cache/product/1
+Content-Type: application/json
+
+{
+  "name": "机械键盘 Pro",
+  "price": 399.00
+}
+
+### 25. 缓存：延迟队列状态
+GET {{redisHost}}/api/redis/cache/delay/pending
+GET {{redisHost}}/api/redis/cache/delay/executed
+
+### 26. 缓存：确定性复现旧值回填
+POST {{redisHost}}/api/redis/cache/race?id=99

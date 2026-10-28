@@ -26,6 +26,7 @@
         <module>demo-loyalty-service</module>
         <module>demo-rabbitmq</module>
         <module>demo-rocketmq</module>
+        <module>demo-redis</module>
     </modules>
 
     <build>

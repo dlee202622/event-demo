@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: demo-redis
+  datasource:
+    url: jdbc:mysql://localhost:3306/demo_redis?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&characterEncoding=utf8
+    username: root
+    password: ${MYSQL_PASSWORD:123456}
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DB:0}
+      timeout: 2s
+
+server:
+  port: 9004
+
+demo:
+  redis:
+    lock:
+      # Redisson 看门狗超时：锁默认 30 秒过期，每 10 秒续期一次
+      watchdog-timeout-ms: 30000
+    cache:
+      ttl-seconds: 30
+      delayed-delete-delay-ms: 1000
+      # 模拟慢查询，拉大「删缓存 → 旧值回填」的窗口
+      slow-read-ms: 0
+
+logging:
+  level:
+    root: INFO
+    com.example.demo: INFO
+    # 打开后能看到 Redisson 看门狗的续期日志（每 10 秒一条）
+    org.redisson: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"

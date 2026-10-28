@@ -25,6 +25,16 @@ services:
       - "5672:5672"
       - "15672:15672"
 
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   rocketmq-namesrv:
     image: apache/rocketmq:5.3.1
     command: sh mqnamesrv
