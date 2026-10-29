@@ -1,0 +1,1815 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>MySQL 原理与数据结构 · 技术实战指南</title>
+<script>
+  try {
+    var savedTheme = localStorage.getItem('tech-guide-theme');
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = savedTheme || (prefersDark ? 'dark' : 'light');
+  } catch (e) { /* 隐私模式下 localStorage 可能不可用，退回默认主题 */ }
+</script>
+<style>
+  :root {
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sidebar: 276px;
+    --maxw: 980px;
+
+    --bg: #f5f7fb;
+    --surface: #ffffff;
+    --surface-2: #eef2f8;
+    --text: #1b2433;
+    --muted: #5c6a7e;
+    --border: #dde4ef;
+    --accent: #4f46e5;
+    --accent-2: #0f766e;
+    --accent-weak: #eef0ff;
+    --ok: #047857;
+    --ok-bg: #ecfdf5;
+    --warn: #b45309;
+    --warn-bg: #fff7ed;
+    --danger: #b91c1c;
+    --danger-bg: #fef2f2;
+    --code-bg: #0c1424;
+    --code-head: #131f35;
+    --code-border: #22304c;
+    --code-text: #dbe4f5;
+    --shadow: 0 10px 30px -18px rgba(23, 37, 84, .35);
+  }
+  html[data-theme="dark"] {
+    --bg: #080d18;
+    --surface: #101829;
+    --surface-2: #0c1322;
+    --text: #e6ebf5;
+    --muted: #97a5bb;
+    --border: #22304a;
+    --accent: #8f9cff;
+    --accent-2: #2dd4bf;
+    --accent-weak: #1a2344;
+    --ok: #34d399;
+    --ok-bg: #08251d;
+    --warn: #fbbf24;
+    --warn-bg: #2a1e08;
+    --danger: #f87171;
+    --danger-bg: #2a1013;
+    --code-bg: #070c17;
+    --code-head: #0d1626;
+    --code-border: #1c2942;
+    --code-text: #dbe4f5;
+    --shadow: 0 12px 34px -18px rgba(0, 0, 0, .7);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.78;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  img, svg { max-width: 100%; }
+  ::selection { background: var(--accent); color: #fff; }
+
+  .progress {
+    position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 60;
+    background: transparent; pointer-events: none;
+  }
+  .progress span {
+    display: block; height: 100%; width: 0;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width .12s linear;
+  }
+  .theme-toggle {
+    position: fixed; top: 16px; right: 18px; z-index: 61;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font: 600 12px/1 var(--sans);
+    padding: 9px 13px; border-radius: 999px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+  }
+  .theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+  .shell {
+    display: grid;
+    grid-template-columns: var(--sidebar) minmax(0, 1fr);
+    max-width: 1520px;
+    margin: 0 auto;
+  }
+
+  /* ---------- 侧边目录 ---------- */
+  .sidebar {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    padding: 30px 18px 48px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    scrollbar-width: thin;
+  }
+  .brand { padding: 0 10px 18px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .brand .mark {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700; letter-spacing: .16em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  .brand .mark::before {
+    content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 4px var(--accent-weak);
+  }
+  .brand h1 { margin: 10px 0 2px; font-size: 18px; letter-spacing: -.01em; }
+  .brand p { margin: 0; font-size: 12px; color: var(--muted); }
+
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a {
+    display: block; padding: 6px 10px;
+    color: var(--muted); font-size: 13.5px; line-height: 1.5;
+    border-left: 2px solid transparent; border-radius: 0 8px 8px 0;
+  }
+  .toc a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }
+  .toc a.active {
+    color: var(--accent); background: var(--accent-weak);
+    border-left-color: var(--accent); font-weight: 600;
+  }
+  .toc .sub a { padding-left: 26px; font-size: 12.8px; }
+  .toc .group {
+    padding: 14px 10px 4px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .12em;
+    color: var(--muted); text-transform: uppercase;
+  }
+  .side-note {
+    margin-top: 22px; padding: 12px;
+    border-radius: 10px; background: var(--surface-2);
+    color: var(--muted); font-size: 11.5px; line-height: 1.65;
+  }
+
+  /* ---------- 主体 ---------- */
+  main { padding: 34px clamp(18px, 4vw, 58px) 96px; min-width: 0; }
+  .content { max-width: var(--maxw); margin: 0 auto; }
+
+  .hero {
+    position: relative; overflow: hidden;
+    border-radius: 22px;
+    padding: clamp(26px, 5vw, 48px);
+    color: #fff;
+    background:
+      radial-gradient(800px 320px at 88% -10%, rgba(45, 212, 191, .38), transparent 62%),
+      radial-gradient(620px 300px at 0% 110%, rgba(167, 139, 250, .35), transparent 60%),
+      linear-gradient(135deg, #1e1b4b 0%, #3730a3 52%, #115e59 100%);
+    box-shadow: 0 26px 60px -32px rgba(30, 27, 75, .75);
+  }
+  .hero::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(rgba(255,255,255,.16) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: linear-gradient(120deg, transparent 40%, #000 100%);
+  }
+  .hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase;
+    color: #c7d2fe;
+  }
+  .hero .eyebrow::before { content: ""; width: 26px; height: 1px; background: currentColor; }
+  .hero h2 { margin: 14px 0 12px; font-size: clamp(30px, 4.4vw, 46px); line-height: 1.18; letter-spacing: -.02em; }
+  .hero .sub { max-width: 720px; margin: 0; color: #dbe3ff; font-size: 15.5px; }
+  .hero .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  .hero .badges span {
+    font-size: 11.5px; padding: 5px 10px; border-radius: 999px;
+    background: rgba(255,255,255,.11); border: 1px solid rgba(255,255,255,.22);
+    color: #eef2ff;
+  }
+  .hero .stats {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px; margin-top: 28px;
+    border-radius: 14px; overflow: hidden;
+    background: rgba(255,255,255,.18);
+  }
+  .hero .stat { padding: 14px 16px; background: rgba(15, 23, 42, .28); }
+  .hero .stat b { display: block; font-size: 22px; line-height: 1.2; }
+  .hero .stat small { color: #cbd5ff; font-size: 11.5px; letter-spacing: .03em; }
+  .hero .jump { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+  .hero .jump a {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 10px 16px; border-radius: 10px;
+    font-size: 13px; font-weight: 600;
+    background: #fff; color: #312e81;
+  }
+  .hero .jump a.ghost {
+    background: transparent; color: #e0e7ff; border: 1px solid rgba(255,255,255,.35);
+  }
+  .hero .jump a:hover { text-decoration: none; transform: translateY(-1px); }
+
+  section { margin-top: 78px; scroll-margin-top: 24px; }
+  h2 {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    margin: 0 0 10px; font-size: clamp(24px, 2.7vw, 30px);
+    letter-spacing: -.02em; line-height: 1.3;
+  }
+  h2 .no {
+    font: 700 12px/1 var(--mono); color: var(--accent);
+    background: var(--accent-weak); border: 1px solid var(--border);
+    padding: 5px 9px; border-radius: 7px;
+  }
+  h3 { margin: 44px 0 10px; font-size: 21px; letter-spacing: -.01em; scroll-margin-top: 24px; }
+  h4 { margin: 26px 0 8px; font-size: 16px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  strong { font-weight: 650; }
+  .lead { color: var(--muted); font-size: 15.5px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .02em;
+    padding: 3px 9px; border-radius: 999px;
+    color: var(--accent); background: var(--accent-weak);
+    border: 1px solid var(--border); white-space: nowrap;
+  }
+  .pill.ok { color: var(--ok); background: var(--ok-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .pill.bad { color: var(--danger); background: var(--danger-bg); }
+  .pill.gray { color: var(--muted); background: var(--surface-2); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px 22px; margin: 18px 0;
+    box-shadow: var(--shadow);
+  }
+  .card > :first-child { margin-top: 0; }
+  .card > :last-child { margin-bottom: 0; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+
+  .callout {
+    display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px;
+    margin: 18px 0; padding: 14px 16px;
+    border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface-2); font-size: 14.5px;
+  }
+  .callout .ico {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: grid; place-items: center;
+    font: 700 12px/1 var(--sans);
+    background: var(--accent-weak); color: var(--accent);
+  }
+  .callout p { margin: 0; }
+  .callout p + p { margin-top: 6px; }
+  .callout .title { font-weight: 700; display: block; margin-bottom: 2px; }
+  .callout.tip { background: var(--ok-bg); border-color: var(--border); }
+  .callout.tip .ico { background: var(--ok); color: #fff; }
+  .callout.warn { background: var(--warn-bg); border-color: var(--border); }
+  .callout.warn .ico { background: var(--warn); color: #fff; }
+  .callout.danger { background: var(--danger-bg); border-color: var(--border); }
+  .callout.danger .ico { background: var(--danger); color: #fff; }
+
+  .compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 18px 0; }
+  .box { border: 1px solid var(--border); border-radius: 12px; padding: 15px 18px; background: var(--surface); }
+  .box.bad { border-left: 4px solid var(--danger); }
+  .box.good { border-left: 4px solid var(--ok); }
+  .box h4 { margin: 0 0 8px; font-size: 14px; letter-spacing: .03em; }
+  .box.bad h4 { color: var(--danger); }
+  .box.good h4 { color: var(--ok); }
+  .box ul { margin: 0; padding-left: 18px; font-size: 14px; }
+  .box li { margin: 5px 0; }
+
+  .code {
+    margin: 18px 0; border-radius: 12px; overflow: hidden;
+    background: var(--code-bg); border: 1px solid var(--code-border);
+    box-shadow: var(--shadow);
+  }
+  .code-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 8px 12px 8px 15px;
+    background: var(--code-head); border-bottom: 1px solid var(--code-border);
+    color: #93a4c3; font: 12px/1.4 var(--mono);
+  }
+  .code-head .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .copy {
+    flex: 0 0 auto; border: 1px solid var(--code-border); border-radius: 6px;
+    background: transparent; color: #a9b8d4; cursor: pointer;
+    font: 11px/1 var(--sans); padding: 5px 9px;
+  }
+  .copy:hover { color: #fff; border-color: #4c5f85; }
+  .code pre { margin: 0; padding: 15px 17px; overflow-x: auto; }
+  .code code { font: 12.6px/1.72 var(--mono); color: var(--code-text); white-space: pre; }
+  /* 执行结果：与代码块同尺寸，虚线边框 + 浅色底表示「这是跑出来的」 */
+  .code.out { background: var(--surface); border-style: dashed; box-shadow: none; }
+  .code.out .code-head { background: var(--surface-2); color: var(--muted); }
+  .code.out .code-head .path { font-weight: 700; letter-spacing: .02em; }
+  .code.out code { color: var(--text); }
+  :not(pre) > code {
+    font: .9em/1.5 var(--mono); color: var(--accent);
+    background: var(--surface-2); border: 1px solid var(--border);
+    padding: 1px 5px; border-radius: 5px;
+  }
+
+  .table-wrap {
+    margin: 18px 0; overflow-x: auto;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13.8px; min-width: 560px; }
+  th, td { padding: 10px 14px; text-align: left; vertical-align: top; }
+  th {
+    background: var(--surface-2); color: var(--muted);
+    font-size: 11.5px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td { border-top: 1px solid var(--border); }
+  tbody tr:first-child td { border-top: 0; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td code { white-space: nowrap; }
+
+  .diagram {
+    margin: 22px 0; padding: 18px 18px 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow);
+  }
+  .diagram-scroll { overflow-x: auto; }
+  .diagram svg { display: block; width: 100%; height: auto; min-width: 640px; }
+  .diagram figcaption {
+    margin-top: 10px; color: var(--muted); font-size: 12.5px; text-align: center;
+  }
+  .svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .dg text { font-family: var(--sans); }
+  .dg-box { fill: var(--surface); stroke: var(--border); stroke-width: 1.4; }
+  .dg-box-accent { fill: var(--accent-weak); stroke: var(--accent); stroke-width: 1.5; }
+  .dg-box-ok { fill: var(--ok-bg); stroke: var(--ok); stroke-width: 1.5; }
+  .dg-box-danger { fill: var(--danger-bg); stroke: var(--danger); stroke-width: 1.5; }
+  .dg-box-warn { fill: var(--warn-bg); stroke: var(--warn); stroke-width: 1.5; }
+  .dg-lane { fill: var(--surface-2); stroke: var(--border); stroke-width: 1; }
+  .dg-text { fill: var(--text); font-size: 13.5px; font-weight: 600; }
+  .dg-text-sm { fill: var(--text); font-size: 11.5px; }
+  .dg-muted { fill: var(--muted); font-size: 10.8px; }
+  .dg-accent-text { fill: var(--accent); font-size: 11.5px; font-weight: 700; }
+  .dg-ok-text { fill: var(--ok); font-size: 11.5px; font-weight: 700; }
+  .dg-danger-text { fill: var(--danger); font-size: 11.5px; font-weight: 700; }
+  .dg-line { stroke: var(--muted); stroke-width: 1.5; fill: none; marker-end: url(#ar); }
+  .dg-line-accent { stroke: var(--accent); stroke-width: 1.6; fill: none; marker-end: url(#ar-accent); }
+  .dg-line-ok { stroke: var(--ok); stroke-width: 1.6; fill: none; marker-end: url(#ar-ok); }
+  .dg-line-danger { stroke: var(--danger); stroke-width: 1.6; fill: none; marker-end: url(#ar-danger); }
+  .dg-line-dashed { stroke-dasharray: 5 5; }
+  .dg-life { stroke: var(--border); stroke-width: 1.2; stroke-dasharray: 3 5; }
+  .mk-muted { fill: var(--muted); }
+  .mk-accent { fill: var(--accent); }
+  .mk-ok { fill: var(--ok); }
+  .mk-danger { fill: var(--danger); }
+  .dg-flow { stroke-dasharray: 6 7; animation: flow 1.4s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -13; } }
+
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps > li {
+    position: relative; padding-left: 40px; margin: 12px 0;
+  }
+  .steps > li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 0; top: 2px;
+    width: 25px; height: 25px; border-radius: 50%;
+    display: grid; place-items: center;
+    font: 700 11.5px/1 var(--mono);
+    color: var(--accent); background: var(--accent-weak);
+    border: 1px solid var(--border);
+  }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li {
+    position: relative; padding-left: 30px; margin: 9px 0;
+  }
+  .checklist li::before {
+    content: ""; position: absolute; left: 4px; top: 7px;
+    width: 13px; height: 13px; border-radius: 4px;
+    border: 1.5px solid var(--accent);
+  }
+
+  .kbd {
+    font: 12px/1.6 var(--mono);
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px;
+    white-space: nowrap;
+  }
+
+  footer {
+    margin-top: 90px; padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 12.5px;
+  }
+  footer p { margin: 4px 0; }
+
+  @media (max-width: 1100px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar {
+      position: static; height: auto; overflow: visible;
+      border-right: 0; border-bottom: 1px solid var(--border);
+      padding: 22px 18px;
+    }
+    .toc { max-height: 250px; overflow-y: auto; }
+    .toc .sub { display: none; }
+    main { padding-top: 26px; }
+    /* 窄屏下固定按钮会压住内容，改为跟随页面流排布 */
+    .theme-toggle {
+      position: static; display: block; width: fit-content;
+      margin: 14px 14px 0 auto; box-shadow: none;
+    }
+  }
+  @media (max-width: 760px) {
+    .grid2, .grid3, .compare { grid-template-columns: 1fr; }
+    .hero .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .theme-toggle { margin: 10px 12px 0 auto; }
+    body { line-height: 1.72; }
+    table { font-size: 13px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+
+  @media print {
+    .sidebar, .theme-toggle, .progress, .copy, .hero .jump { display: none !important; }
+    .shell { display: block; }
+    main { padding: 0; }
+    body { background: #fff; color: #111; font-size: 11pt; }
+    .content { max-width: none; }
+    .hero { box-shadow: none; border-radius: 0; padding: 18pt; background: #eef2ff !important; color: #111 !important; }
+    .hero .sub, .hero .badges span, .hero .stat small, .hero .eyebrow { color: #333 !important; }
+    .hero .badges span { border-color: #bbb; background: #fff; }
+    .hero .stat { background: #fff; }
+    .card, .diagram, .code, .table-wrap, .compare, .callout { box-shadow: none; break-inside: avoid; }
+    section { margin-top: 28pt; break-inside: auto; }
+    h2, h3 { break-after: avoid; }
+    .diagram svg { min-width: 0; }
+    .code { background: #fff; border-color: #ccc; }
+    .code-head { background: #f1f5f9; color: #333; border-color: #ccc; }
+    .code code { color: #111; white-space: pre-wrap; word-break: break-word; }
+    .diagram { page-break-inside: avoid; }
+    a { color: #111; text-decoration: underline; }
+    @page { margin: 14mm; }
+  }
+</style>
+</head>
+<body>
+
+<svg class="svg-defs" aria-hidden="true" focusable="false">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-muted" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-accent" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-ok" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-danger" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-danger" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+  </defs>
+</svg>
+
+<div class="progress" aria-hidden="true"><span></span></div>
+<button class="theme-toggle" id="themeToggle" type="button" aria-label="切换深浅色主题">深色</button>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">MySQL · InnoDB</div>
+      <h1>MySQL 原理与数据结构</h1>
+      <p>页、B+ 树、MVCC、Buffer Pool 与锁 —— 全部结论来自本机 MySQL 8.4 实测</p>
+    </div>
+    <nav class="toc" aria-label="目录">
+      <a href="#start">0. 开始之前</a>
+      <a href="#model">1. 心智模型：一条 SQL 的旅程</a>
+      <a href="#page">2. 数据结构：页与 B+ 树</a>
+      <div class="sub">
+        <a href="#page-why">2.1 为什么是 B+ 树</a>
+        <a href="#page-split">2.2 实测：页分裂（递增 vs UUID）</a>
+      </div>
+      <a href="#index">3. 索引：回表、覆盖与最左前缀</a>
+      <div class="sub">
+        <a href="#index-cluster">3.1 聚簇索引与回表</a>
+        <a href="#index-cover">3.2 实测：覆盖索引省了什么</a>
+        <a href="#index-leftmost">3.3 实测：最左前缀</a>
+        <a href="#index-invalid">3.4 实测：索引失效四连</a>
+      </div>
+      <a href="#mvcc">4. 事务与 MVCC</a>
+      <div class="sub">
+        <a href="#mvcc-levels">4.1 隔离级别与版本链</a>
+        <a href="#mvcc-exp">4.2 实测：RR vs RC</a>
+      </div>
+      <a href="#bufferpool">5. Buffer Pool 与 redo log</a>
+      <div class="sub">
+        <a href="#bp-arch">5.1 一切读写都先经过内存</a>
+        <a href="#bp-exp">5.2 实测：缓存命中率</a>
+        <a href="#flush-exp">5.3 实测：redo 刷盘策略</a>
+      </div>
+      <a href="#locks">6. 锁与死锁</a>
+      <div class="sub">
+        <a href="#lock-types">6.1 行锁、间隙锁、临键锁</a>
+        <a href="#lock-deadlock">6.2 实测：死锁复现</a>
+        <a href="#lock-gap">6.3 实测：间隙锁阻塞插入</a>
+      </div>
+      <a href="#antipattern">7. 边界与反例</a>
+      <div class="sub">
+        <a href="#anti-deeppage">7.1 实测：深分页</a>
+        <a href="#anti-summary">7.2 反例汇总表</a>
+      </div>
+      <a href="#labs">8. 复现实验与速查</a>
+      <div class="sub">
+        <a href="#labs-run">8.1 复现全部实验</a>
+        <a href="#cheatsheet">8.2 命令速查</a>
+      </div>
+    </nav>
+    <div class="side-note">
+      所有实测数据来自本机 Docker <code>mysql:8.4.13</code>（InnoDB，页 16KB，Buffer Pool 128MB），
+      核对日期 2026-10-29。复现脚本在 <code>docs/mysql-guide-labs/</code>。
+      你的磁盘越慢，回表与刷盘类实验的差距会被放得越大。
+    </div>
+  </aside>
+
+  <main>
+    <div class="content">
+
+      <header class="hero" id="top">
+        <span class="eyebrow">MySQL 8.4 · InnoDB · 实测教学</span>
+        <h2>一条 SQL 落地之前：<br>页、树、版本与锁</h2>
+        <p class="sub">MySQL 快不是玄学，是三层确定性：数据按 16KB 的页组织成 B+ 树，
+          读写全部先经过内存里的 Buffer Pool，事务靠 undo 版本链做到「互不打扰」。
+          本教程的每个结论都配了一条可复制的命令和一段真实返回。</p>
+        <div class="badges">
+          <span>mysql 8.4.13</span>
+          <span>InnoDB · 页 16KB</span>
+          <span>实测日期 2026-10-29</span>
+          <span>单文件 · 离线可读</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><b>8 组</b><small>实测实验</small></div>
+          <div class="stat"><b>12043 → 31</b><small>覆盖索引省下的逻辑读</small></div>
+          <div class="stat"><b>2.1×</b><small>UUID 主键插入耗时（页分裂）</small></div>
+          <div class="stat"><b>99.96%</b><small>Buffer Pool 命中率</small></div>
+        </div>
+        <div class="jump">
+          <a href="#page">从数据结构开始 →</a>
+          <a class="ghost" href="#cheatsheet">直达命令速查</a>
+        </div>
+      </header>
+
+      <!-- ================= 0. 开始之前 ================= -->
+      <section id="start">
+        <h2><span class="no">0</span>开始之前</h2>
+        <p class="lead">本文面向「用过 MySQL 写过 CRUD，但没深挖过索引和事务实现」的读者。
+          全文只讲 InnoDB 引擎——你日常用的就是它。</p>
+
+        <div class="card">
+          <h4 style="margin-top:0">环境约定</h4>
+          <ul>
+            <li>MySQL <strong>8.4.13</strong>，来自仓库根目录 <code>docker-compose.yml</code> 的 <code>mysql</code> 服务（root / 123456，端口 3306）。</li>
+            <li>InnoDB 默认参数：页大小 <strong>16384 字节（16KB）</strong>、Buffer Pool <strong>128MB</strong>、redo log 容量 <strong>100MB</strong>、事务隔离级别 <strong>REPEATABLE-READ</strong>。</li>
+            <li>所有实验跑在独立的 <code>demo_mysql_principle</code> 库里，不碰业务库。</li>
+            <li>实验脚本已固化在 <a href="#labs"><code>docs/mysql-guide-labs/</code></a>，每段代码块右上角都有复制按钮。</li>
+          </ul>
+        </div>
+
+        <div class="code">
+          <div class="code-head"><span class="path">最短启动 + 版本确认</span><button data-copy type="button">复制</button></div>
+          <pre><code># 启动仓库自带的 MySQL（已启动可跳过）
+docker compose up -d mysql
+
+# 确认版本与三个关键参数
+docker exec -i $(docker compose ps -q mysql) mysql -uroot -p123456 \
+  -e "SELECT VERSION(), @@innodb_page_size, @@innodb_buffer_pool_size, @@transaction_isolation;"</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · 2026-10-29 实测</span><button data-copy type="button">复制</button></div>
+          <pre><code>VERSION()	@@innodb_page_size	@@innodb_buffer_pool_size	@@transaction_isolation
+8.4.13	16384	134217728	REPEATABLE-READ</code></pre>
+        </div>
+
+        <div class="callout">
+          <div class="ico">读</div>
+          <p>本文的阅读顺序就是依赖顺序：<strong>先懂页和树（第 2 章），索引（第 3 章）才讲得通；
+            索引懂了，事务（第 4 章）和锁（第 6 章）里的「记录」才有物理载体。</strong></p>
+        </div>
+      </section>
+
+      <!-- ================= 1. 心智模型 ================= -->
+      <section id="model">
+        <h2><span class="no">1</span>心智模型：一条 SQL 的旅程</h2>
+        <p class="lead">最常见的误解是「MySQL = 磁盘上的表」。
+        真相是：<strong>任何读写都要先经过内存里的 Buffer Pool，磁盘只是它的后备仓库。</strong></p>
+
+        <div class="diagram">
+          <figure style="margin:0">
+            <svg class="dg" viewBox="0 0 960 470" role="img" aria-label="InnoDB 架构总览">
+              <!-- 客户端 -->
+              <rect class="dg-box-accent" x="30" y="24" width="150" height="52" rx="10"/>
+              <text class="dg-text" x="105" y="46" text-anchor="middle">客户端</text>
+              <text class="dg-muted" x="105" y="64" text-anchor="middle">mysql CLI / 应用</text>
+              <path class="dg-line-accent" d="M180 50 H250"/>
+
+              <!-- Server 层 lane -->
+              <rect class="dg-lane" x="248" y="14" width="688" height="120" rx="12"/>
+              <text class="dg-accent-text" x="266" y="38">Server 层（跨引擎通用）</text>
+              <rect class="dg-box" x="266" y="52" width="128" height="56" rx="9"/>
+              <text class="dg-text-sm" x="330" y="76" text-anchor="middle">连接器</text>
+              <text class="dg-muted" x="330" y="94" text-anchor="middle">握手/权限</text>
+              <path class="dg-line" d="M394 80 H428"/>
+              <rect class="dg-box" x="430" y="52" width="128" height="56" rx="9"/>
+              <text class="dg-text-sm" x="494" y="76" text-anchor="middle">分析器</text>
+              <text class="dg-muted" x="494" y="94" text-anchor="middle">词法/语法</text>
+              <path class="dg-line" d="M558 80 H592"/>
+              <rect class="dg-box" x="594" y="52" width="128" height="56" rx="9"/>
+              <text class="dg-text-sm" x="658" y="76" text-anchor="middle">优化器</text>
+              <text class="dg-muted" x="658" y="94" text-anchor="middle">选索引/JOIN 顺序</text>
+              <path class="dg-line" d="M722 80 H756"/>
+              <rect class="dg-box" x="758" y="52" width="150" height="56" rx="9"/>
+              <text class="dg-text-sm" x="833" y="76" text-anchor="middle">执行器</text>
+              <text class="dg-muted" x="833" y="94" text-anchor="middle">调引擎接口读/写</text>
+              <path class="dg-line-accent" d="M833 108 V150"/>
+
+              <!-- InnoDB lane -->
+              <rect class="dg-lane" x="248" y="150" width="688" height="300" rx="12"/>
+              <text class="dg-accent-text" x="266" y="174">InnoDB 存储引擎层</text>
+
+              <!-- Buffer Pool -->
+              <rect class="dg-box-accent" x="270" y="190" width="290" height="150" rx="10"/>
+              <text class="dg-text" x="415" y="216" text-anchor="middle">Buffer Pool（内存，本机 128MB）</text>
+              <rect class="dg-box" x="290" y="234" width="115" height="44" rx="8"/>
+              <text class="dg-text-sm" x="347" y="252" text-anchor="middle">数据页 16KB</text>
+              <text class="dg-muted" x="347" y="268" text-anchor="middle">缓存命中免读盘</text>
+              <rect class="dg-box-warn" x="425" y="234" width="115" height="44" rx="8"/>
+              <text class="dg-text-sm" x="482" y="252" text-anchor="middle">脏页</text>
+              <text class="dg-muted" x="482" y="268" text-anchor="middle">改过未落盘</text>
+              <text class="dg-muted" x="415" y="312" text-anchor="middle">所有读写都发生在页上，</text>
+              <text class="dg-muted" x="415" y="328" text-anchor="middle">哪怕你只改 1 行也是整页进内存</text>
+
+              <!-- redo log -->
+              <rect class="dg-box-ok" x="580" y="190" width="330" height="70" rx="10"/>
+              <text class="dg-text" x="745" y="216" text-anchor="middle">redo log（顺序写，容量 100MB）</text>
+              <text class="dg-muted" x="745" y="238" text-anchor="middle">先记「哪个页改了什么」，崩溃后用它恢复</text>
+              <path class="dg-line-ok" d="M560 240 C 574 240 572 228 580 226"/>
+
+              <!-- undo -->
+              <rect class="dg-box" x="580" y="272" width="330" height="70" rx="10"/>
+              <text class="dg-text" x="745" y="298" text-anchor="middle">undo log（版本链）</text>
+              <text class="dg-muted" x="745" y="320" text-anchor="middle">旧值留底：回滚靠它，MVCC 读旧版本也靠它</text>
+              <path class="dg-line" d="M560 300 C 574 300 572 306 580 306"/>
+
+              <!-- 磁盘 -->
+              <rect class="dg-box" x="270" y="368" width="640" height="60" rx="10"/>
+              <text class="dg-text" x="590" y="394" text-anchor="middle">磁盘表空间 *.ibd（B+ 树，按页组织）</text>
+              <path class="dg-line-danger" d="M415 340 V368"/>
+              <text class="dg-danger-text" x="432" y="360">后台线程刷脏页（异步）</text>
+              <text class="dg-muted" x="700" y="360">提交 = 写 redo，≠ 刷数据页</text>
+            </svg>
+            <figcaption>图 1 · InnoDB 全景：Server 层负责「怎么执行」，InnoDB 负责「怎么存」。写入路径：改 Buffer Pool 页 + 顺序写 redo log，数据页由后台异步刷盘。</figcaption>
+          </figure>
+        </div>
+
+        <p>三个立刻能用的推论，后面每章都会反复出现：</p>
+        <ol>
+          <li><strong>IO 的最小单位是页，不是行。</strong> 读一行 = 读一页（16KB），所以「让一页里少装没用的数据」「让相关的行挨在一起」直接决定性能。</li>
+          <li><strong>提交很快，是因为它只写 redo log（顺序 IO），不刷数据页（随机 IO）。</strong> 这是第 5 章的主题。</li>
+          <li><strong>读得快，是因为页在内存。</strong> 第 2 章会看到：同样的数据，不同的主键设计会让页数差 20%。</li>
+        </ol>
+      </section>
+
+      <!-- ================= 2. 数据结构 ================= -->
+      <section id="page">
+        <h2><span class="no">2</span>数据结构：页与 B+ 树</h2>
+        <p class="lead">InnoDB 管理数据的最小单位是页（page）：固定 16KB。
+          一棵存数据的 B+ 树，树干是「索引页」，树叶是「数据页」——树本身就是索引，这个设计贯穿全文。</p>
+
+        <h3 id="page-why">2.1 为什么偏偏是 B+ 树</h3>
+        <p>给「按主键 O(log N) 找到一行、还要支持范围扫描」这个需求，候选数据结构有四个，逐一淘汰：</p>
+
+        <div class="diagram">
+          <figure style="margin:0">
+            <svg class="dg" viewBox="0 0 960 400" role="img" aria-label="B+ 树结构">
+              <!-- 根节点 -->
+              <rect class="dg-box-accent" x="330" y="20" width="300" height="56" rx="10"/>
+              <text class="dg-text" x="480" y="44" text-anchor="middle">根页（内节点）</text>
+              <text class="dg-text-sm" x="480" y="64" text-anchor="middle">只放键 + 子页指针，本机实测每页可放约 1170 个</text>
+              <path class="dg-line" d="M400 76 V118"/>
+              <path class="dg-line" d="M480 76 V118"/>
+              <path class="dg-line" d="M560 76 V118"/>
+
+              <!-- 内节点层 -->
+              <rect class="dg-box" x="280" y="120" width="120" height="48" rx="9"/>
+              <text class="dg-text-sm" x="340" y="148" text-anchor="middle">内节点页</text>
+              <rect class="dg-box" x="420" y="120" width="120" height="48" rx="9"/>
+              <text class="dg-text-sm" x="480" y="148" text-anchor="middle">内节点页</text>
+              <rect class="dg-box" x="560" y="120" width="120" height="48" rx="9"/>
+              <text class="dg-text-sm" x="620" y="148" text-anchor="middle">内节点页</text>
+              <path class="dg-line" d="M340 168 V210"/>
+              <path class="dg-line" d="M480 168 V210"/>
+              <path class="dg-line" d="M620 168 V210"/>
+
+              <!-- 叶子层 -->
+              <rect class="dg-box-ok" x="150" y="212" width="190" height="64" rx="9"/>
+              <text class="dg-text-sm" x="245" y="238" text-anchor="middle">叶子页 1</text>
+              <text class="dg-muted" x="245" y="258" text-anchor="middle">完整行数据，按主键有序</text>
+              <rect class="dg-box-ok" x="390" y="212" width="190" height="64" rx="9"/>
+              <text class="dg-text-sm" x="485" y="238" text-anchor="middle">叶子页 2</text>
+              <text class="dg-muted" x="485" y="258" text-anchor="middle">完整行数据，按主键有序</text>
+              <rect class="dg-box-ok" x="630" y="212" width="190" height="64" rx="9"/>
+              <text class="dg-text-sm" x="725" y="238" text-anchor="middle">叶子页 3</text>
+              <text class="dg-muted" x="725" y="258" text-anchor="middle">完整行数据，按主键有序</text>
+              <path class="dg-line-accent" d="M340 276 C 340 300 390 300 440 296"/>
+              <path class="dg-line-accent" d="M580 276 C 580 300 630 300 680 296"/>
+              <text class="dg-accent-text" x="485" y="316" text-anchor="middle">叶子页之间双向链表 —— 范围扫描沿链表走，不回头</text>
+
+              <!-- 高度估算 -->
+              <rect class="dg-lane" x="20" y="20" width="270" height="256" rx="12"/>
+              <text class="dg-accent-text" x="40" y="46">高度估算（本机 16KB 页）</text>
+              <text class="dg-text-sm" x="40" y="74">行 160B → 叶子页约 100 行</text>
+              <text class="dg-text-sm" x="40" y="100">内节点键 14B → 每页约 1170 个指针</text>
+              <text class="dg-text-sm" x="40" y="132">2 层 ≈ 1170 × 100 = 11.7 万行</text>
+              <text class="dg-text-sm" x="40" y="158">3 层 ≈ 2000 万行</text>
+              <text class="dg-ok-text" x="40" y="196">3 层 B+ 树装 2000 万行，</text>
+              <text class="dg-ok-text" x="40" y="218">一次查询最多 3 次页 IO</text>
+              <text class="dg-muted" x="40" y="252">根页几乎常驻 Buffer Pool，</text>
+              <text class="dg-muted" x="40" y="268">实际磁盘 IO 往往只有 1 次</text>
+            </svg>
+            <figcaption>图 2 · B+ 树：非叶子节点只存键（扇出极大），数据全部在叶子层且按主键有序、页间成链。</figcaption>
+          </figure>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>候选结构</th><th>等值查询</th><th>范围查询</th><th>被淘汰的原因</th></tr></thead>
+            <tbody>
+              <tr><td>哈希表</td><td>O(1)，很快</td><td><strong class="dg-danger-text" style="fill:var(--danger);font-size:13.8px">不行</strong>，键无序</td><td>业务里 <code>WHERE id BETWEEN</code>、<code>ORDER BY</code> 太常见；Memory 引擎才默认用它</td></tr>
+              <tr><td>二叉/红黑树</td><td>O(log N)</td><td>可以</td><td>二叉扇出 = 树高 = log₂N：2000 万行高约 25 层，就是 25 次页 IO</td></tr>
+              <tr><td>B 树</td><td>O(log N)</td><td>可以但要中序回溯</td><td>每个节点都存整行 → 单节点放不了几个键 → 扇出小树变高；范围查询要在树上爬上爬下</td></tr>
+              <tr><td><strong>B+ 树</strong></td><td>O(log N)</td><td><strong>叶子链表直出</strong></td><td>——入选：扇出上千 → 3 层装 2000 万行；叶子成链 → <code>BETWEEN</code>/<code>LIMIT</code> 顺链走</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout tip">
+          <div class="ico">答</div>
+          <p><strong>面试高频题的标准答案就一句话：</strong>B+ 树把「扇出」做到了上千（内节点不存数据），
+            让树高压到 3 层以内（3 次页 IO），同时叶子层双向链表让范围查询变成顺链遍历。
+            哈希赢在单点、输在范围；二叉树输在树高；B 树输在节点密度和范围回溯。</p>
+        </div>
+
+        <h3 id="page-split">2.2 实测：页分裂 —— 递增主键 vs UUID 主键</h3>
+        <p>往有序的叶子链表里插数据有两种姿势：</p>
+        <div class="diagram">
+          <figure style="margin:0">
+            <svg class="dg" viewBox="0 0 960 330" role="img" aria-label="页分裂对比">
+              <!-- 左：顺序 -->
+              <rect class="dg-lane" x="24" y="20" width="440" height="290" rx="12"/>
+              <text class="dg-ok-text" x="44" y="48" style="font-size:13.5px">顺序插入（自增主键）</text>
+              <rect class="dg-box-ok" x="48" y="70" width="180" height="52" rx="9"/>
+              <text class="dg-text-sm" x="138" y="92" text-anchor="middle">页1: 1..100</text>
+              <text class="dg-muted" x="138" y="110" text-anchor="middle">已满</text>
+              <rect class="dg-box-ok" x="252" y="70" width="180" height="52" rx="9"/>
+              <text class="dg-text-sm" x="342" y="92" text-anchor="middle">页2: 101..200</text>
+              <text class="dg-muted" x="342" y="110" text-anchor="middle">还有空位，直接追加</text>
+              <path class="dg-line-ok" d="M228 96 H252"/>
+              <rect class="dg-box" x="48" y="150" width="384" height="120" rx="9"/>
+              <text class="dg-text-sm" x="240" y="178" text-anchor="middle">新行主键 201，永远大于现有最大键</text>
+              <text class="dg-text-sm" x="240" y="202" text-anchor="middle">→ 挂到最后一个页的尾部，页满了就新开一页</text>
+              <text class="dg-ok-text" x="240" y="236" text-anchor="middle">零移动、零分裂，页 100% 利用</text>
+            </svg>
+          </figure>
+        </div>
+        <div class="diagram">
+          <figure style="margin:0">
+            <svg class="dg" viewBox="0 0 960 300" role="img" aria-label="随机主键页分裂">
+              <rect class="dg-lane" x="496" y="20" width="440" height="260" rx="12"/>
+              <text class="dg-danger-text" x="516" y="48" style="font-size:13.5px">随机插入（UUID 主键）</text>
+              <rect class="dg-box-ok" x="520" y="70" width="180" height="52" rx="9"/>
+              <text class="dg-text-sm" x="610" y="92" text-anchor="middle">页1: 1..100</text>
+              <text class="dg-muted" x="610" y="110" text-anchor="middle">已满</text>
+              <rect class="dg-box-warn" x="724" y="70" width="180" height="52" rx="9"/>
+              <text class="dg-text-sm" x="814" y="92" text-anchor="middle">新行主键 57</text>
+              <text class="dg-muted" x="814" y="110" text-anchor="middle">应该落在页1，但页1满了</text>
+              <path class="dg-line-danger" d="M724 96 H700"/>
+              <rect class="dg-box" x="520" y="150" width="384" height="110" rx="9"/>
+              <text class="dg-text-sm" x="712" y="178" text-anchor="middle">页分裂：页1 一分为二，各留一半数据</text>
+              <text class="dg-text-sm" x="712" y="202" text-anchor="middle">→ 两页利用率只剩 50%，还多维护一层键</text>
+              <text class="dg-danger-text" x="712" y="236" text-anchor="middle">大量随机插入 = 大量分裂 + 碎片</text>
+            </svg>
+            <figcaption>图 3 · 顺序插入是「追加」，随机插入是「插队」——插队就要把页劈开。</figcaption>
+          </figure>
+        </div>
+
+        <p>下面实测。建两张结构相同的表，各插 30 万行、行宽约 150 字节：
+          一张主键自增（按序到达），一张主键是 MD5 字符串（随机到达），
+          对比插入耗时和文件大小。完整脚本见 <code>docs/mysql-guide-labs/exp1-pagesplit.sql</code>。</p>
+
+        <div class="code">
+          <div class="code-head"><span class="path">exp1-pagesplit.sql（节选）</span><button data-copy type="button">复制</button></div>
+          <pre><code>-- 表 1：递增主键，数据按主键升序到达
+CREATE TABLE inc_pk (
+  id      BIGINT       NOT NULL,
+  name    VARCHAR(32)  NOT NULL,
+  padding VARCHAR(128) NOT NULL,        -- 撑宽行，让每页能装几行变得可观察
+  PRIMARY KEY (id)
+) ENGINE=InnoDB;
+
+SET @t = NOW(6);                          -- 记录起点（微秒精度）
+INSERT INTO inc_pk
+SELECT n, CONCAT('user-', n), RPAD('p', 128, 'x')
+FROM nums WHERE n &lt;= 300000 ORDER BY n;   -- 30 万行按主键升序插入
+SELECT TIMESTAMPDIFF(MICROSECOND, @t, NOW(6))/1e6 AS inc_insert_sec;
+
+-- 表 2：UUID 主键（MD5 模拟），数据按随机顺序到达
+CREATE TABLE uuid_pk (
+  id      CHAR(32)     NOT NULL,          -- MD5：下一个键落点完全随机
+  src     BIGINT       NOT NULL,
+  name    VARCHAR(32)  NOT NULL,
+  padding VARCHAR(128) NOT NULL,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB;
+
+SET @t = NOW(6);
+INSERT INTO uuid_pk
+SELECT MD5(n), n, CONCAT('user-', n), RPAD('p', 128, 'x')
+FROM nums WHERE n &lt;= 300000 ORDER BY MD5(n);  -- 关键：按 MD5 排序 = 随机到达
+SELECT TIMESTAMPDIFF(MICROSECOND, @t, NOW(6))/1e6 AS uuid_insert_sec;
+
+-- 结构对比：.ibd 文件大小 + 统计信息
+SELECT NAME, FILE_SIZE/1024/1024 AS file_mb
+FROM information_schema.INNODB_TABLESPACES
+WHERE NAME LIKE 'demo_mysql_principle/%pk';
+ANALYZE TABLE inc_pk, uuid_pk;            -- 刷新行数/平均行长统计</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · 2026-10-29 实测</span><button data-copy type="button">复制</button></div>
+          <pre><code>+----------------+
+| inc_insert_sec |
++----------------+
+|       6.248878 |
++----------------+
++-----------------+
+| uuid_insert_sec |
++-----------------+
+|        13.01103 |
++-----------------+
++------------------------------+-------------+
+| NAME                         | file_mb     |
++------------------------------+-------------+
+| demo_mysql_principle/inc_pk  | 60.00000000 |
+| demo_mysql_principle/uuid_pk | 72.00000000 |
++------------------------------+-------------+</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">ANALYZE 后的统计（节选）</span><button data-copy type="button">复制</button></div>
+          <pre><code>           Name: inc_pk
+           Rows: 296803
+ Avg_row_length: 185          -- 每行 185B
+    Data_length: 55148544     -- 数据 55.1MB
+      Data_free: 4194304      -- 碎片 4MB
+
+           Name: uuid_pk
+           Rows: 296074
+ Avg_row_length: 225          -- 每行多出 40B = 分裂页里浪费的半页空间摊到每行
+    Data_length: 66781184     -- 数据 66.8MB，比 inc 多 21%
+      Data_free: 5242880      -- 碎片 5MB</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>指标</th><th>递增主键</th><th>UUID 主键</th><th>差异</th></tr></thead>
+            <tbody>
+              <tr><td>插入 30 万行耗时</td><td>6.25 s</td><td>13.01 s</td><td><span class="pill warn">2.1× 慢</span></td></tr>
+              <tr><td>.ibd 文件大小</td><td>60 MB</td><td>72 MB</td><td><span class="pill warn">+20%</span></td></tr>
+              <tr><td>平均行长（含页内浪费）</td><td>185 B</td><td>225 B</td><td><span class="pill warn">+22%</span></td></tr>
+              <tr><td>插入期间缓冲压力</td><td>只碰最后一页</td><td>每行可能碰任意页</td><td>Buffer Pool 命中率下降</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn">
+          <div class="ico">坑</div>
+          <p><strong>主键尽量自增（AUTO_INCREMENT / 雪花 ID），别用 UUID、别用随机业务键。</strong>
+            32 位 UUID 作为主键还会让所有二级索引跟着膨胀——每个二级索引叶子都存主键值（见 3.1）。
+            实在要用分布式 ID，选趋势递增的方案（雪花算法）。</p>
+        </div>
+      </section>
+
+      <!-- ================= 3. 索引 ================= -->
+      <section id="index">
+        <h2><span class="no">3</span>索引：回表、覆盖与最左前缀</h2>
+        <p class="lead">InnoDB 里只有两类索引：聚簇索引（叶子=整行）和二级索引（叶子=索引列+主键）。
+          理解这句话，回表、覆盖、最左前缀全是推论。</p>
+
+        <h3 id="index-cluster">3.1 聚簇索引与回表</h3>
+        <div class="diagram">
+          <figure style="margin:0">
+            <svg class="dg" viewBox="0 0 960 400" role="img" aria-label="回表与覆盖索引">
+              <!-- 二级索引树 -->
+              <rect class="dg-lane" x="24" y="20" width="420" height="360" rx="12"/>
+              <text class="dg-accent-text" x="44" y="46" style="font-size:12.5px">二级索引 idx_dept (dept_id)：一棵独立的小 B+ 树</text>
+              <rect class="dg-box-accent" x="150" y="62" width="170" height="44" rx="9"/>
+              <text class="dg-text-sm" x="235" y="90" text-anchor="middle">根页：dept_id 索引</text>
+              <path class="dg-line" d="M235 106 V136"/>
+              <rect class="dg-box-ok" x="60" y="138" width="360" height="70" rx="9"/>
+              <text class="dg-text-sm" x="240" y="164" text-anchor="middle">叶子页：(dept_id=7, id=903) (7,907) (7,911) …</text>
+              <text class="dg-muted" x="240" y="188" text-anchor="middle">键是 dept_id，值只有主键 id —— 没有整行！</text>
+              <path class="dg-line-danger" d="M240 208 C 240 240 130 240 130 262"/>
+              <text class="dg-danger-text" x="255" y="246">SELECT * 需要整行 → 逐行「回表」</text>
+
+              <!-- 聚簇索引树 -->
+              <rect class="dg-lane" x="516" y="20" width="420" height="360" rx="12"/>
+              <text class="dg-accent-text" x="536" y="46" style="font-size:12.5px">聚簇索引（主键树）：叶子 = 整行</text>
+              <rect class="dg-box-accent" x="640" y="62" width="170" height="44" rx="9"/>
+              <text class="dg-text-sm" x="725" y="90" text-anchor="middle">根页：主键索引</text>
+              <path class="dg-line" d="M725 106 V136"/>
+              <rect class="dg-box-ok" x="556" y="138" width="340" height="70" rx="9"/>
+              <text class="dg-text-sm" x="726" y="164" text-anchor="middle">叶子页：id=903 → 整行(name/bio/phone…)</text>
+              <text class="dg-muted" x="726" y="188" text-anchor="middle">一张表 = 这棵树本身，表就是主键 B+ 树</text>
+              <text class="dg-text-sm" x="726" y="250" text-anchor="middle">30 万行宽表里找 3005 行，</text>
+              <text class="dg-text-sm" x="726" y="272" text-anchor="middle">这 3005 次回表要触碰约 1.2 万个数据页</text>
+
+              <!-- 覆盖 -->
+              <rect class="dg-box-ok" x="60" y="290" width="360" height="60" rx="9"/>
+              <text class="dg-ok-text" x="240" y="315" text-anchor="middle">只查 (dept_id, id)？叶子页里全都有</text>
+              <text class="dg-ok-text" x="240" y="337" text-anchor="middle">→ 覆盖索引：不用回表，EXPLAIN 显示 Using index</text>
+            </svg>
+            <figcaption>图 4 · 回表的代价：二级索引找到 3005 个主键，还要去聚簇索引逐行取整行。行越宽、命中越多，代价越大。</figcaption>
+          </figure>
+        </div>
+
+        <h3 id="index-cover">3.2 实测：覆盖索引到底省了什么</h3>
+        <p>用 <code>emp</code> 表（30 万行，bio 字段 600 字节，部门 100 个）做实验：
+          同样是 <code>WHERE dept_id = 7</code>（命中 3005 行），一条查询取整行（必须回表），
+          一条只算二级索引里已有的列（覆盖）。完整脚本见 <code>docs/mysql-guide-labs/exp2c-cover.sql</code>。</p>
+
+        <div class="code">
+          <div class="code-head"><span class="path">exp2c-cover.sql（节选）</span><button data-copy type="button">复制</button></div>
+          <pre><code>-- 路径 A（回表）：SUM(LENGTH(bio)) 必须读整行 → 3005 次回聚簇索引
+FLUSH STATUS;                             -- 把会话计数器清零，隔离本次查询
+SELECT SUM(LENGTH(bio)) AS total_bio_len FROM emp WHERE dept_id = 7;
+SHOW SESSION STATUS LIKE 'Innodb_buffer_pool_read_requests';  -- 逻辑读次数
+
+-- 路径 B（覆盖）：SUM(id) + SUM(dept_id) 只用二级索引 → 零回表
+FLUSH STATUS;
+SELECT SUM(id) + SUM(dept_id) AS cover_sum FROM emp WHERE dept_id = 7;
+SHOW SESSION STATUS LIKE 'Innodb_buffer_pool_read_requests';
+
+-- 用 EXPLAIN 看结构性证据：Extra 列
+EXPLAIN SELECT SUM(LENGTH(bio))    FROM emp WHERE dept_id = 7;  -- Extra: NULL
+EXPLAIN SELECT SUM(id) + SUM(dept_id) FROM emp WHERE dept_id = 7; -- Extra: Using index</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · 2026-10-29 实测</span><button data-copy type="button">复制</button></div>
+          <pre><code>+---------------+
+| total_bio_len |
++---------------+
+|       1803000 |
++---------------+
++----------------------------------+----------+
+| Variable_name                    | Value    |
++----------------------------------+----------+
+| Innodb_buffer_pool_read_requests | 31349415 |
++----------------------------------+----------+
++-----------+
+| cover_sum |
++-----------+
+| 452122519 |
++-----------+
++----------------------------------+----------+
+| Variable_name                    | Value    |
++----------------------------------+----------+
+| Innodb_buffer_pool_read_requests | 31349446 |
++----------------------------------+----------+</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">EXPLAIN · 两者的 Extra 差异</span><button data-copy type="button">复制</button></div>
+          <pre><code>-- 回表路径（列已省略，仅 type/key/rows/Extra）
+| type | key      | rows | Extra |
+| ref  | idx_dept | 3005 | NULL        |
+
+-- 覆盖路径
+| type | key      | rows | Extra       |
+| ref  | idx_dept | 3005 | Using index |</code></pre>
+        </div>
+
+        <p>计数器是单调递增的，取两次查询的差值并重跑一遍验证稳定：</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>查询</th><th>第 1 次逻辑读</th><th>第 2 次逻辑读</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr><td><code>SUM(LENGTH(bio))</code>（回表）</td><td>+31 基线上再 <strong>12,043</strong> 次</td><td>同样量级</td><td>3005 行回表，触碰约 1.2 万个数据页</td></tr>
+              <tr><td><code>SUM(id)+SUM(dept_id)</code>（覆盖）</td><td><strong>31</strong> 次</td><td><strong>23</strong> 次</td><td>只扫 idx_dept 自己的十几个叶子页</td></tr>
+              <tr><td><strong>倍数</strong></td><td colspan="2"><strong>约 400~520 倍</strong></td><td>内存全热时是 CPU/页访问差；磁盘冷缓存下差距再放大一个量级</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout tip">
+          <div class="ico">用</div>
+          <p><strong>把「高频查询只摸索引」养成习惯：</strong>列表页先查 id（覆盖索引），再按 id 批量取整行；
+            或直接建 <code>(dept_id, name)</code> 这类联合索引把 SELECT 的列包进去。Extra 出现
+            <code>Using index</code> 就说明零回表。</p>
+        </div>
+
+        <h3 id="index-leftmost">3.3 实测：最左前缀 —— 联合索引是「排好序的电话本」</h3>
+        <p>联合索引 <code>idx_abc(a, b, c)</code> 的排序规则和字典一样：先按 a 排，a 相同按 b 排，b 相同按 c 排。
+          所以「跳过 a 直接查 b」就像在字典里按第二个字找词——只能整本翻。</p>
+
+        <div class="code">
+          <div class="code-head"><span class="path">最左前缀六连（exp2-index.sql 节选）</span><button data-copy type="button">复制</button></div>
+          <pre><code>CREATE TABLE idx_abc (
+  a INT NOT NULL, b INT NOT NULL, c INT NOT NULL, d VARCHAR(16) NOT NULL,
+  KEY idx_abc (a, b, c)              -- 列都是 NOT NULL，key_len 干净：a=4B, b=4B, c=4B
+) ENGINE=InnoDB;
+-- 插入 20 万行后 ANALYZE，然后依次执行：
+
+EXPLAIN SELECT * FROM idx_abc WHERE a = 5;
+EXPLAIN SELECT * FROM idx_abc WHERE a = 5 AND b = 50;
+EXPLAIN SELECT * FROM idx_abc WHERE a = 5 AND b = 50 AND c = 500;
+EXPLAIN SELECT * FROM idx_abc WHERE b = 50;              -- 跳过 a
+EXPLAIN SELECT * FROM idx_abc WHERE c = 500;             -- 跳过 a、b
+EXPLAIN SELECT * FROM idx_abc WHERE a = 5 AND c = 500;   -- 中间断层：只有 a 生效</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · 2026-10-29 实测（列已省略，仅 type/key/key_len/rows/Extra）</span><button data-copy type="button">复制</button></div>
+          <pre><code>-- a = 5
+| type | key     | key_len | ref   | rows  | Extra |
+| ref  | idx_abc | 4       | const | 38630 | NULL  |
+
+-- a = 5 AND b = 50
+| type | key     | key_len | ref         | rows | Extra |
+| ref  | idx_abc | 8       | const,const |    1 | NULL  |
+
+-- a = 5 AND b = 50 AND c = 500
+| type | key     | key_len | ref               | rows | Extra |
+| ref  | idx_abc | 12      | const,const,const |    1 | NULL  |
+
+-- b = 50（跳过 a）
+| type | key  | key_len | ref  | rows   | Extra       |
+| ALL  | NULL | NULL    | NULL | 196765 | Using where |
+
+-- c = 500（跳过 a、b）
+| type | key  | key_len | ref  | rows   | Extra       |
+| ALL  | NULL | NULL    | NULL | 196765 | Using where |
+
+-- a = 5 AND c = 500（中间断层，c 用不上排序但能做 ICP 过滤）
+| type | key     | key_len | ref   | rows  | filtered | Extra                |
+| ref  | idx_abc | 4       | const | 38630 |    10.00 | Using index condition |</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>WHERE 条件</th><th>type</th><th>key_len</th><th>扫描行数</th><th>结论</th></tr></thead>
+            <tbody>
+              <tr><td><code>a=5</code></td><td>ref</td><td>4（只用 a）</td><td>38,630</td><td>a 进入索引定位</td></tr>
+              <tr><td><code>a=5 AND b=50</code></td><td>ref</td><td>8（a+b）</td><td>1</td><td>两段都参与定位</td></tr>
+              <tr><td><code>a=5 AND b=50 AND c=500</code></td><td>ref</td><td>12（a+b+c 全用）</td><td>1</td><td>满血</td></tr>
+              <tr><td><code>b=50</code> / <code>c=500</code></td><td><span class="pill bad">ALL</span></td><td>NULL</td><td>196,765</td><td>缺了最左列，索引完全失效</td></tr>
+              <tr><td><code>a=5 AND c=500</code></td><td>ref</td><td>4（只有 a）</td><td>38,630</td><td>c 靠 ICP 在索引层过滤，不再参与定位</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <div class="ico">读</div>
+          <p><strong>key_len 是「索引被用了几成」的仪表盘：</strong>INT 每列 4 字节，
+            key_len=8 说明 a、b 都参与定位，=12 说明三列全用。中间断层（<code>a=? AND c=?</code>）
+            时 c 退化为 ICP（Index Condition Pushdown，索引条件下推）：仍会在索引层过滤，
+            但帮不上「定位缩小范围」。</p>
+        </div>
+
+        <h3 id="index-invalid">3.4 实测：索引失效四连</h3>
+        <p>列上明明有索引，优化器却弃用，最常见就四种姿势。都在 <code>emp</code>（30 万行）上实测：</p>
+
+        <div class="code">
+          <div class="code-head"><span class="path">索引失效四连（exp2-index.sql 节选）</span><button data-copy type="button">复制</button></div>
+          <pre><code>-- 基准与失效对照：phone VARCHAR(20)，每行唯一，先补索引再逐条 EXPLAIN
+ALTER TABLE emp ADD KEY idx_phone (phone);   -- phone VARCHAR(20)，每行唯一
+
+EXPLAIN SELECT * FROM emp WHERE phone = '13812345678';   -- 1) 基准：字符串等值
+EXPLAIN SELECT * FROM emp WHERE phone = 13812345678;     -- 2) 隐式类型转换：传了数字
+EXPLAIN SELECT * FROM emp WHERE LEFT(phone, 3) = '138';  -- 3) 函数包住列
+EXPLAIN SELECT * FROM emp WHERE name LIKE '%999';        -- 4a) 前导 %
+EXPLAIN SELECT * FROM emp WHERE name LIKE 'emp-999%';    -- 4b) 前缀匹配（对照）</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · 2026-10-29 实测（列已省略）</span><button data-copy type="button">复制</button></div>
+          <pre><code>-- 1) 基准：字符串等值 → ref，key_len=82（20×4字节 + 2字节长度前缀）
+| type | key       | key_len | ref   | rows |
+| ref  | idx_phone | 82      | const |    1 |
+
+-- 2) 隐式类型转换：phone 是 VARCHAR，和数字比较时每行的值被 CAST 成数字
+--    等价于对列套了函数 → 索引失效
+| type | key  | key_len | ref  | rows   | Extra       |
+| ALL  | NULL | NULL    | NULL | 286968 | Using where |
+
+-- 3) 函数包列：LEFT(phone,3) 对列做运算 → 失效
+| type | key  | key_len | ref  | rows   | Extra       |
+| ALL  | NULL | NULL    | NULL | 286968 | Using where |
+
+-- 4a) 前导 %：无法定位起点 → 失效
+| type | key  | key_len | ref  | rows   | Extra       |
+| ALL  | NULL | NULL    | NULL | 286968 | Using where |
+
+-- 4b) 前缀匹配：B+ 树按字典序排，'emp-999%' 是一个连续区间 → 可用
+| type  | key      | key_len | ref  | rows | Extra                 |
+| range | idx_name | 258     | NULL |  111 | Using index condition |</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>写法</th><th>type</th><th>rows</th><th>原因</th><th>改法</th></tr></thead>
+            <tbody>
+              <tr><td><code>phone='138…'</code></td><td><span class="pill ok">ref</span></td><td>1</td><td>正常</td><td>——</td></tr>
+              <tr><td><code>phone=138…</code></td><td><span class="pill bad">ALL</span></td><td>286,968</td><td>列被 CAST 成数字，等价于套函数</td><td>参数类型与列类型对齐</td></tr>
+              <tr><td><code>LEFT(phone,3)='138'</code></td><td><span class="pill bad">ALL</span></td><td>286,968</td><td>函数作用在列上</td><td>改成 <code>phone LIKE '138%'</code>（前缀可走索引）</td></tr>
+              <tr><td><code>name LIKE '%999'</code></td><td><span class="pill bad">ALL</span></td><td>286,968</td><td>前导 % 无定位起点</td><td>倒排表 / 全文索引 / ES</td></tr>
+              <tr><td><code>name LIKE 'emp-999%'</code></td><td><span class="pill ok">range</span></td><td>111</td><td>前缀是连续区间</td><td>——</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn">
+          <div class="ico">坑</div>
+          <p><strong>「区分度低就不走索引」是个流传过广的说法。</strong>
+            实测 <code>WHERE status=1</code>（表里只有 0/1 两种值）优化器仍然选了 <code>idx_status</code>（ref，rows=143,484）——
+            因为覆盖扫描成本低于回表。优化器按<strong>代价</strong>决策，不是按教条。
+            真正必失效的是上面三类：类型转换、函数包列、前导 %。</p>
+        </div>
+      </section>
+
+      <!-- ================= 4. MVCC ================= -->
+      <section id="mvcc">
+        <h2><span class="no">4</span>事务与 MVCC</h2>
+        <p class="lead">两个事务一个在读、一个在写同一行，互不阻塞还能互不看到对方的中间状态——
+          靠的不是锁，而是 <strong>MVCC（Multi-Version Concurrency Control，多版本并发控制）</strong>：每行数据留一条版本链，读的人按自己的「快照」挑版本。</p>
+
+        <h3 id="mvcc-levels">4.1 隔离级别与版本链</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>隔离级别</th><th>脏读</th><th>不可重复读</th><th>幻读</th><th>实现</th></tr></thead>
+            <tbody>
+              <tr><td>READ UNCOMMITTED</td><td><span class="pill bad">有</span></td><td>有</td><td>有</td><td>直接读最新值，几乎没人用</td></tr>
+              <tr><td>READ COMMITTED（RC）</td><td><span class="pill ok">无</span></td><td><span class="pill warn">有</span></td><td>有</td><td><strong>每条</strong> SELECT 都生成新快照</td></tr>
+              <tr><td><strong>REPEATABLE-READ（默认）</strong></td><td><span class="pill ok">无</span></td><td><span class="pill ok">无</span></td><td>基本无*</td><td><strong>事务内第一条</strong>快照读生成快照，全程复用</td></tr>
+              <tr><td>SERIALIZABLE</td><td><span class="pill ok">无</span></td><td><span class="pill ok">无</span></td><td><span class="pill ok">无</span></td><td>读也加锁，并发退化为串行</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted">* InnoDB 的 RR 通过临键锁（6.1）把常见幻读场景也挡住了，这是它区别于 SQL 标准的地方。</p>
+
+        <div class="diagram">
+          <figure style="margin:0">
+            <svg class="dg" viewBox="0 0 960 380" role="img" aria-label="undo 版本链与快照读">
+              <!-- 当前行 -->
+              <rect class="dg-box-accent" x="330" y="24" width="300" height="60" rx="10"/>
+              <text class="dg-text" x="480" y="48" text-anchor="middle">聚簇索引当前记录</text>
+              <text class="dg-text-sm" x="480" y="70" text-anchor="middle">v=3, note='c'   trx_id=200   roll_ptr ●</text>
+              <path class="dg-line" d="M480 84 V120"/>
+
+              <!-- undo 版本链 -->
+              <rect class="dg-lane" x="120" y="120" width="720" height="150" rx="12"/>
+              <text class="dg-accent-text" x="140" y="146">undo log 版本链（旧值留底，从新到旧）</text>
+              <rect class="dg-box-ok" x="160" y="164" width="180" height="54" rx="9"/>
+              <text class="dg-text-sm" x="250" y="188" text-anchor="middle">v=2 'changed-by-B'</text>
+              <text class="dg-muted" x="250" y="206" text-anchor="middle">trx_id=150（已提交）</text>
+              <path class="dg-line" d="M340 191 H380"/>
+              <rect class="dg-box-ok" x="380" y="164" width="180" height="54" rx="9"/>
+              <text class="dg-text-sm" x="470" y="188" text-anchor="middle">v=1 'init'</text>
+              <text class="dg-muted" x="470" y="206" text-anchor="middle">trx_id=100（已提交）</text>
+              <path class="dg-line" d="M560 191 H600"/>
+              <rect class="dg-box" x="600" y="164" width="180" height="54" rx="9"/>
+              <text class="dg-text-sm" x="690" y="188" text-anchor="middle">更早的版本…</text>
+              <text class="dg-muted" x="690" y="206" text-anchor="middle">链尾由 purge 线程回收</text>
+
+              <!-- ReadView -->
+              <rect class="dg-box-accent" x="160" y="292" width="640" height="64" rx="10"/>
+              <text class="dg-text" x="480" y="316" text-anchor="middle">ReadView：拍快照那一刻的「活跃事务名单」</text>
+              <text class="dg-muted" x="480" y="340" text-anchor="middle">沿版本链找第一个 trx_id 不在活跃名单里（对自己可见）的版本 —— RR 全程用同一张，RC 每次读都重新拍</text>
+              <path class="dg-line-accent" d="M250 218 C 250 260 260 280 300 292"/>
+            </svg>
+            <figcaption>图 5 · MVCC 读旧版本：修改不覆盖旧值，而是把旧值压进 undo 版本链；读方按 ReadView 沿链回溯。</figcaption>
+          </figure>
+        </div>
+
+        <div class="callout">
+          <div class="ico">读</div>
+          <p><strong>快照读 vs 当前读，是本章最容易踩的坑：</strong></p>
+          <p>普通 <code>SELECT</code> 是快照读——走版本链，不加锁；
+            <code>SELECT … FOR UPDATE</code>、<code>UPDATE</code>、<code>DELETE</code> 是当前读——读最新已提交版本，必须拿锁。
+            同一个事务里，快照读可能读到旧值，紧接着的当前读却能看到新值（下面的实测正好演示了这一点）。</p>
+        </div>
+
+        <h3 id="mvcc-exp">4.2 实测：RR 看到旧值，RC 看到新值</h3>
+        <p>两个会话并发：会话 A 开事务读一行后停 4 秒，会话 B 在第 1 秒把这行改成 v=2 并提交。
+          脚本见 <code>docs/mysql-guide-labs/run-mvcc.sh</code>（自动编排双会话时序）。</p>
+
+        <div class="code">
+          <div class="code-head"><span class="path">sessA-rr.sql（会话 A · REPEATABLE-READ）</span><button data-copy type="button">复制</button></div>
+          <pre><code>-- 会话 A 全程：t0 拍快照 → 等 B 提交 → 快照读/当前读对比 → 提交后新快照
+SET SESSION transaction_isolation = 'REPEATABLE-READ';
+BEGIN;                                              -- 开事务
+SELECT v, note FROM mvcc_demo WHERE id = 1;         -- t0：第一次快照读，此刻拍快照
+SELECT SLEEP(4);                                    -- 停 4 秒，等 B 提交
+SELECT v, note FROM mvcc_demo WHERE id = 1;         -- t1：再读一次（快照读）
+SELECT v, note FROM mvcc_demo WHERE id = 1 FOR UPDATE;  -- t2：当前读，读最新已提交
+COMMIT;
+SELECT v, note FROM mvcc_demo WHERE id = 1;         -- t3：提交后新事务新快照</code></pre>
+        </div>
+        <div class="code">
+          <div class="code-head"><span class="path">sessB-rr.sql（会话 B · t=1s 提交更新）</span><button data-copy type="button">复制</button></div>
+          <pre><code>SELECT SLEEP(1);
+UPDATE mvcc_demo SET v = 2, note = 'changed-by-B' WHERE id = 1;   -- 提交后立刻生效</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · RR 会话 A · 2026-10-29 实测</span><button data-copy type="button">复制</button></div>
+          <pre><code>+---------------------------+---+--------------+
+| tag                       | v | note         |
++---------------------------+---+--------------+
+| A@t0(快照读)              | 1 | init         |   -- 开事务时的快照
+| A@t1(事务内快照读,B已提交)| 1 | init         |   -- 仍读旧版本！版本链生效
+| A@t2(当前读 FOR UPDATE)   | 2 | changed-by-B |   -- 当前读直取最新已提交
+| A@t3(提交后新快照)        | 2 | changed-by-B |   -- 新事务，重新拍快照
++---------------------------+---+--------------+</code></pre>
+        </div>
+
+        <p>同一时序换成 READ COMMITTED（B 这次把 v 改成 3）：</p>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · RC 会话 A · 2026-10-29 实测</span><button data-copy type="button">复制</button></div>
+          <pre><code>+---------------------------+---+--------------------+
+| tag                       | v | note               |
++---------------------------+---+--------------------+
+| A@t0(快照读)              | 2 | changed-by-B       |   -- 起点已是 v=2
+| A@t1(事务内快照读,B已提交)| 3 | changed-by-B-again |   -- 能看到 B 的新提交 = 不可重复读
++---------------------------+---+--------------------+</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>时刻</th><th>RR（默认）</th><th>RC</th><th>原因</th></tr></thead>
+            <tbody>
+              <tr><td>t0 开事务读</td><td>v=1（初值）</td><td>v=2（当时最新）</td><td>都按各自快照读</td></tr>
+              <tr><td>t1 B 提交后再读</td><td><strong>仍是 v=1</strong></td><td><strong>变 v=3</strong></td><td>RR 复用 t0 的 ReadView；RC 每次读重拍</td></tr>
+              <tr><td>t1 <code>FOR UPDATE</code>（RR）</td><td>v=2</td><td>——</td><td>当前读不走版本链，永远读最新已提交</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn">
+          <div class="ico">坑</div>
+          <p><strong>RR 的「一致性读」是事务级的，不是语句级的，且有边界：</strong>
+            快照在第一条快照读时生成（不是 BEGIN 时）；长事务会拖住 undo 回收（版本链变长 → 表空间膨胀）。
+            生产排查「表没多大但磁盘暴涨」，先查 <code>information_schema.INNODB_TRX</code> 里有没有跑了几个小时的事务。</p>
+        </div>
+      </section>
+
+      <!-- ================= 5. Buffer Pool 与 redo ================= -->
+      <section id="bufferpool">
+        <h2><span class="no">5</span>Buffer Pool 与 redo log</h2>
+        <p class="lead">第 1 章说过「提交只写 redo，不刷数据页」。这一章用数字证明它：
+          <strong>顺序写的 redo log，是 MySQL 事务能做快的全部秘密。</strong></p>
+
+        <h3 id="bp-arch">5.1 一切读写都先经过内存</h3>
+        <div class="diagram">
+          <figure style="margin:0">
+            <svg class="dg" viewBox="0 0 960 360" role="img" aria-label="写路径与读路径">
+              <!-- 读路径 -->
+              <text class="dg-accent-text" x="60" y="40" style="font-size:12.5px">读路径（命中则免磁盘）</text>
+              <rect class="dg-box" x="60" y="56" width="130" height="44" rx="9"/>
+              <text class="dg-text-sm" x="125" y="84" text-anchor="middle">SELECT 请求</text>
+              <path class="dg-line" d="M190 78 H240"/>
+              <rect class="dg-box-accent" x="242" y="56" width="190" height="44" rx="9"/>
+              <text class="dg-text-sm" x="337" y="84" text-anchor="middle">Buffer Pool 有这页吗？</text>
+              <path class="dg-line-ok" d="M432 70 C 470 70 470 52 500 52"/>
+              <text class="dg-ok-text" x="508" y="44">命中 99.96%：直接返回（本机实测）</text>
+              <path class="dg-line-danger" d="M432 92 C 470 92 470 112 500 112"/>
+              <rect class="dg-box" x="502" y="96" width="150" height="40" rx="9"/>
+              <text class="dg-text-sm" x="577" y="122" text-anchor="middle">未命中：读磁盘页装入</text>
+              <text class="dg-danger-text" x="672" y="122">随机 IO，慢两个量级</text>
+
+              <!-- 写路径 -->
+              <text class="dg-accent-text" x="60" y="190" style="font-size:12.5px">写路径（WAL：先写日志，后写数据）</text>
+              <rect class="dg-box" x="60" y="206" width="130" height="44" rx="9"/>
+              <text class="dg-text-sm" x="125" y="234" text-anchor="middle">UPDATE 提交</text>
+              <path class="dg-line" d="M190 228 H240"/>
+              <rect class="dg-box-warn" x="242" y="206" width="190" height="44" rx="9"/>
+              <text class="dg-text-sm" x="337" y="228" text-anchor="middle">① 改 Buffer Pool 里的页</text>
+              <text class="dg-muted" x="337" y="246" text-anchor="middle">变脏页，先不落盘</text>
+              <path class="dg-line-accent" d="M432 228 H482"/>
+              <rect class="dg-box-ok" x="484" y="206" width="240" height="44" rx="9"/>
+              <text class="dg-text-sm" x="604" y="228" text-anchor="middle">② 顺序写 redo log 并 fsync</text>
+              <text class="dg-muted" x="604" y="246" text-anchor="middle">1MB 顺序写 ≈ 几百次随机写</text>
+              <path class="dg-line-ok" d="M724 228 H770"/>
+              <rect class="dg-box-ok" x="772" y="206" width="150" height="44" rx="9"/>
+              <text class="dg-text-sm" x="847" y="228" text-anchor="middle">提交返回 ✓</text>
+              <path class="dg-line-danger" d="M437 250 C 480 290 560 300 640 296"/>
+              <rect class="dg-box" x="642" y="276" width="280" height="44" rx="9"/>
+              <text class="dg-text-sm" x="782" y="296" text-anchor="middle">③ 后台线程找空闲时刷脏页</text>
+              <text class="dg-muted" x="782" y="314" text-anchor="middle">崩溃恢复：重放 redo，把脏页补齐</text>
+            </svg>
+            <figcaption>图 6 · WAL（Write-Ahead Logging）：提交只付「顺序写 redo」的钱，随机刷盘交给后台慢慢还。</figcaption>
+          </figure>
+        </div>
+
+        <h3 id="bp-exp">5.2 实测：缓存命中率</h3>
+        <p>本机跑完全部实验后（orders_big 100 万行已被反复查询），Buffer Pool 统计如下：</p>
+        <div class="code">
+          <div class="code-head"><span class="path">Buffer Pool 体检</span><button data-copy type="button">复制</button></div>
+          <pre><code>SELECT @@innodb_buffer_pool_size/1024/1024 AS buffer_pool_mb,
+       @@innodb_redo_log_capacity/1024/1024 AS redo_capacity_mb;
+
+SHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_pages_data';   -- 正在放数据的页
+SHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_pages_total';  -- 总页数
+SHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_read_requests';-- 逻辑读（内存页访问）
+SHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_reads';        -- 物理读（真去磁盘了）
+
+-- 命中率 = 1 - 物理读 / 逻辑读
+SELECT ROUND(100 * (1 - (SELECT VARIABLE_VALUE FROM performance_schema.global_status
+                         WHERE VARIABLE_NAME='Innodb_buffer_pool_reads')
+                     / (SELECT VARIABLE_VALUE FROM performance_schema.global_status
+                         WHERE VARIABLE_NAME='Innodb_buffer_pool_read_requests')), 4)
+       AS buffer_pool_hit_pct;</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · 2026-10-29 实测</span><button data-copy type="button">复制</button></div>
+          <pre><code>+----------------+------------------+
+| buffer_pool_mb | redo_capacity_mb |
++----------------+------------------+
+|   128.00000000 |     100.00000000 |
++----------------+------------------+
+Innodb_buffer_pool_pages_data    7172
+Innodb_buffer_pool_pages_total   8192      -- 8192 × 16KB = 128MB，账目对上了
+Innodb_buffer_pool_read_requests 31427253  -- 3143 万次逻辑读
+Innodb_buffer_pool_reads         12982     -- 只有 1.3 万次穿透到磁盘
+
++---------------------+
+| buffer_pool_hit_pct |
++---------------------+
+|             99.9587 |
++---------------------+</code></pre>
+        </div>
+
+        <div class="callout tip">
+          <div class="ico">用</div>
+          <p><strong>命中率长期低于 99% 就该扩 Buffer Pool 了</strong>（生产常见 50%~75% 物理内存）。
+            每一次「穿透」都是一次随机磁盘 IO，代价是内存访问的成千上万倍。</p>
+        </div>
+
+        <h3 id="flush-exp">5.3 实测：innodb_flush_log_at_trx_commit = 1 vs 2</h3>
+        <p>这个参数控制「提交时 redo log 刷不刷盘」：<strong>=1 每次提交都 fsync（默认，最安全）</strong>；
+          =2 只写到操作系统的页缓存，由 OS 每秒落盘（进程崩溃不丢，机器断电丢最后 1 秒）。
+          各以「单行独立事务」提交 5000 次（完整脚本见 <code>docs/mysql-guide-labs/exp3-flush-bp.sql</code>）：</p>
+
+        <div class="code">
+          <div class="code-head"><span class="path">exp3-flush-bp.sql（节选）</span><button data-copy type="button">复制</button></div>
+          <pre><code>DROP PROCEDURE IF EXISTS burn_writes;
+DELIMITER //
+CREATE PROCEDURE burn_writes(IN n INT)
+BEGIN
+  DECLARE i INT DEFAULT 0;
+  SET @t = NOW(6);
+  WHILE i &lt; n DO
+    INSERT INTO flush_t (v) VALUES (i);   -- autocommit=1：每条 INSERT 都是独立提交
+    SET i = i + 1;
+  END WHILE;
+  SELECT TIMESTAMPDIFF(MICROSECOND, @t, NOW(6))/1e6 AS burn_sec, n AS commits;
+END//
+DELIMITER ;
+
+SET GLOBAL innodb_flush_log_at_trx_commit = 2;   -- 先测不刷盘
+CALL burn_writes(5000);
+TRUNCATE TABLE flush_t;
+SET GLOBAL innodb_flush_log_at_trx_commit = 1;   -- 再测每次 fsync（默认值）
+CALL burn_writes(5000);</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · 2026-10-29 实测</span><button data-copy type="button">复制</button></div>
+          <pre><code>+-----------------------+
+| current_flush_setting |
++-----------------------+
+|                     2 |
++-----------------------+
++----------+---------+
+| burn_sec | commits |
++----------+---------+
+| 9.472402 |    5000 |    -- =2：1.89ms / commit
++----------+---------+
++-----------+---------+
+| burn_sec  | commits |
++-----------+---------+
+| 10.737834 |    5000 |    -- =1：2.15ms / commit
++-----------+---------+</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>设置</th><th>5000 次提交</th><th>单次提交</th><th>宕机时丢失窗口</th></tr></thead>
+            <tbody>
+              <tr><td><code>=2</code>（不 fsync）</td><td>9.47 s</td><td>1.89 ms</td><td>机器断电丢最多 1 秒事务</td></tr>
+              <tr><td><code>=1</code>（默认，fsync）</td><td>10.74 s</td><td>2.15 ms</td><td><span class="pill ok">不丢已提交事务</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn">
+          <div class="ico">坑</div>
+          <p><strong>本机（Docker Desktop on macOS）fsync 便宜，差距只有 12%；别把数字当普适结论。</strong>
+            生产环境一次 fsync 0.5~2ms（云盘更贵），叠加 <code>sync_binlog=1</code> 的 binlog 刷盘后，
+            =1 与 =2 的差距常达 2~5 倍——所以大促前有人敢把 =1 调成 =2 换吞吐，
+            但要清楚这是<strong>用「断电丢 1 秒」换性能</strong>，金融类业务别碰。</p>
+        </div>
+      </section>
+
+      <!-- ================= 6. 锁与死锁 ================= -->
+      <section id="locks">
+        <h2><span class="no">6</span>锁与死锁</h2>
+        <p class="lead">MVCC 管「读不阻塞读」，锁管「写与写的秩序」。InnoDB 的行锁有三种粒度，
+          它们加锁的对象都不是「行」，而是<strong>「记录 + 它前面的间隙」</strong>。</p>
+
+        <h3 id="lock-types">6.1 行锁、间隙锁、临键锁</h3>
+        <div class="diagram">
+          <figure style="margin:0">
+            <svg class="dg" viewBox="0 0 960 330" role="img" aria-label="三种行锁">
+              <rect class="dg-lane" x="24" y="20" width="912" height="290" rx="12"/>
+              <!-- 数轴 -->
+              <line x1="80" y1="150" x2="880" y2="150" stroke="var(--muted)" stroke-width="2"/>
+              <circle cx="140" cy="150" r="6" class="mk-accent"/>
+              <circle cx="360" cy="150" r="6" class="mk-accent"/>
+              <circle cx="580" cy="150" r="6" class="mk-accent"/>
+              <circle cx="800" cy="150" r="6" class="mk-accent"/>
+              <text class="dg-text-sm" x="140" y="178" text-anchor="middle">id=1</text>
+              <text class="dg-text-sm" x="360" y="178" text-anchor="middle">id=5</text>
+              <text class="dg-text-sm" x="580" y="178" text-anchor="middle">id=10</text>
+              <text class="dg-text-sm" x="800" y="178" text-anchor="middle">id=20</text>
+              <text class="dg-accent-text" x="60" y="130" style="font-size:12.5px">gap_demo 现有主键：1, 5, 10, 20</text>
+
+              <!-- 行锁 -->
+              <rect class="dg-box-ok" x="110" y="60" width="60" height="26" rx="6"/>
+              <text class="dg-ok-text" x="140" y="78" text-anchor="middle">行锁</text>
+              <text class="dg-muted" x="180" y="78">只锁已存在的记录本身（等值命中唯一索引）</text>
+
+              <!-- 间隙锁 -->
+              <rect class="dg-box-warn" x="146" y="110" width="208" height="16" rx="8"/>
+              <rect class="dg-box-warn" x="366" y="110" width="208" height="16" rx="8"/>
+              <text class="dg-danger-text" x="470" y="104" text-anchor="middle">间隙锁：锁住 (1,5)、(5,10)…「不存在的区间」</text>
+
+              <!-- 临键锁 -->
+              <rect class="dg-box-danger" x="146" y="200" width="222" height="26" rx="8"/>
+              <rect class="dg-box-danger" x="368" y="200" width="222" height="26" rx="8"/>
+              <text class="dg-danger-text" x="480" y="248" text-anchor="middle">临键锁 Next-Key = 记录 + 前面的间隙 (1,5]、(5,10]…</text>
+              <text class="dg-text-sm" x="480" y="280" text-anchor="middle">RR 级别下范围当前读默认加的就是它 —— 幻读被挡住的物理原因</text>
+            </svg>
+            <figcaption>图 7 · 行锁锁记录，间隙锁锁空隙，临键锁 = 行锁 + 间隙锁。间隙锁彼此兼容（都锁也行），但和 INSERT 天然互斥。</figcaption>
+          </figure>
+        </div>
+
+        <h3 id="lock-deadlock">6.2 实测：死锁复现与自动解救</h3>
+        <p>经典互锁：A 先锁 id=1 再要 id=2，B 先锁 id=2 再要 id=1。脚本见
+          <code>docs/mysql-guide-labs/run-locks.sh</code>（编排两个会话的时序）。</p>
+
+        <div class="code">
+          <div class="code-head"><span class="path">sessA-dl.sql / sessB-dl.sql（会话 A 与 B）</span><button data-copy type="button">复制</button></div>
+          <pre><code>-- 会话 A                                -- 会话 B
+BEGIN;                                   BEGIN;
+UPDATE deadlock_demo SET v=v+1           UPDATE deadlock_demo SET v=v+1
+  WHERE id = 1;      -- A 拿到 1           WHERE id = 2;      -- B 拿到 2
+SELECT SLEEP(2);                         SELECT SLEEP(2.5);
+UPDATE deadlock_demo SET v=v+1           UPDATE deadlock_demo SET v=v+1
+  WHERE id = 2;      -- 等 B 放 2 …        WHERE id = 1;      -- 等 A 放 1 → 死锁！
+COMMIT;                                  ROLLBACK;</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · 会话 B 的报错 · 2026-10-29 实测</span><button data-copy type="button">复制</button></div>
+          <pre><code>+---------------------------+--------+
+| tag                       | waited |
++---------------------------+--------+
+| B: 持有 id=2 的行锁       |      0 |
++---------------------------+--------+
+ERROR 1213 (40001) at line 7:
+Deadlock found when trying to get lock; try restarting transaction</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · 会话 A 正常提交（B 被回滚后 A 放行）</span><button data-copy type="button">复制</button></div>
+          <pre><code>+--------------+----+---+
+| tag          | id | v |
++--------------+----+---+
+| A: 提交后    |  1 | 1 |
+| A: 提交后    |  2 | 1 |     -- A 的两次更新全部生效
++--------------+----+---+</code></pre>
+        </div>
+
+        <p>死锁发生后立刻查 InnoDB 状态，能看到完整的「环路证据」（节选，注释已省略）：</p>
+        <div class="code out">
+          <div class="code-head"><span class="path">SHOW ENGINE INNODB STATUS · LATEST DETECTED DEADLOCK（节选）</span><button data-copy type="button">复制</button></div>
+          <pre><code>*** (1) TRANSACTION:
+TRANSACTION 18373, ACTIVE 3 sec starting index read
+LOCK WAIT 3 lock struct(s), heap size 1128, 2 row lock(s), undo log entries 1
+MySQL thread id 124, query id 734 localhost root updating
+UPDATE deadlock_demo SET v = v + 1 WHERE id = 2
+*** (1) HOLDS THE LOCK(S):          -- 持有 id=1 的 X 记录锁
+RECORD LOCKS … index PRIMARY … lock_mode X locks rec but not gap
+Record lock, heap no 2 … 0: len 8; hex 8000000000000001;   -- id=1
+*** (1) WAITING FOR THIS LOCK TO BE GRANTED:
+Record lock, heap no 3 … 0: len 8; hex 8000000000000002;   -- 等 id=2
+
+*** (2) TRANSACTION:
+TRANSACTION 18372, ACTIVE 3 sec starting index read
+LOCK WAIT 3 lock struct(s), … 2 row lock(s), undo log entries 1
+MySQL thread id 125, query id 735 localhost root updating
+UPDATE deadlock_demo SET v = v + 1 WHERE id = 1
+*** (2) HOLDS THE LOCK(S):          -- 持有 id=2
+Record lock, heap no 3 … hex 8000000000000002;
+*** (2) WAITING FOR THIS LOCK TO BE GRANTED:
+Record lock, heap no 2 … hex 8000000000000001;   -- 等 id=1
+
+*** WE ROLL BACK TRANSACTION (2)    -- InnoDB 选代价小的一方回滚</code></pre>
+        </div>
+
+        <div class="callout tip">
+          <div class="ico">用</div>
+          <p><strong>死锁不是故障，是 InnoDB 的正常保护机制：</strong>检测到环路立刻回滚代价小的事务（错误码 1213），
+            应用收到后重试即可。预防思路只有一条：<strong>让所有事务按相同顺序拿锁</strong>（比如都按 id 升序更新），
+            环路就不存在。另一类「锁等待超时」是 ERROR 1205——那是没成环，单纯等太久（默认 50 秒）。</p>
+        </div>
+
+        <h3 id="lock-gap">6.3 实测：间隙锁阻塞插入</h3>
+        <p>会话 A 对 <code>[5,15]</code> 做范围当前读（<code>FOR UPDATE</code>），持有 3 秒；
+          会话 B 第 1 秒尝试插入 id=7——落在 (5,10) 的间隙里：</p>
+
+        <div class="code">
+          <div class="code-head"><span class="path">sessA-gap.sql / sessB-gap.sql</span><button data-copy type="button">复制</button></div>
+          <pre><code>-- 会话 A                                -- 会话 B
+BEGIN;                                   SET SESSION innodb_lock_wait_timeout = 20;
+SELECT id, note FROM gap_demo            SET @t = NOW(6);
+  WHERE id BETWEEN 5 AND 15              INSERT INTO gap_demo VALUES (7, '…');
+  FOR UPDATE;   -- 临键锁 (5,10]…         -- 阻塞中 … 直到 A 提交
+SELECT SLEEP(3); COMMIT;                 SELECT TIMESTAMPDIFF(MICROSECOND,@t,NOW(6))/1e6
+                                            AS insert_waited_sec;  -- 实际等了多久</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · 2026-10-29 实测</span><button data-copy type="button">复制</button></div>
+          <pre><code>-- 会话 A 持锁期间查到的区间数据
++----+------+
+| id | note |
++----+------+
+|  5 | r5   |
+| 10 | r10  |
++----+------+
+
+-- 会话 B：插入成功，但明显等了一会儿
++----------------------+-------------------+
+| tag                  | insert_waited_sec |
++----------------------+-------------------+
+| B: id=7 插入成功     |          1.99797  |   -- A 持锁 3s，B 在 t=1s 插入，等到 A 提交
++----------------------+-------------------+</code></pre>
+        </div>
+
+        <div class="callout warn">
+          <div class="ico">坑</div>
+          <p><strong>范围当前读会锁住整段间隙，等于冻结这段区间的所有写入。</strong>
+            业务里最常见的踩法：对「不存在的记录」先 <code>SELECT … FOR UPDATE</code> 判断再 INSERT（防重逻辑），
+            在 RR 下并发插入会被间隙锁连环阻塞甚至死锁。防重复请用唯一索引 + <code>INSERT … ON DUPLICATE KEY</code>，
+            锁冲突粒度从「区间」缩小到「一个键」。</p>
+        </div>
+      </section>
+
+      <!-- ================= 7. 边界与反例 ================= -->
+      <section id="antipattern">
+        <h2><span class="no">7</span>边界与反例</h2>
+        <p class="lead">原理的对立面是事故。这一章把全文最值得记住的三个「反例」放在一张表里。</p>
+
+        <h3 id="anti-deeppage">7.1 实测：深分页 —— LIMIT 900000, 10 的真实成本</h3>
+        <p><code>LIMIT 900000, 10</code> 的语义是：老老实实扫过前 90 万行、丢弃、再取 10 行。
+          100 万行的 <code>orders_big</code> 表上实测三种写法（各跑 5 次取平均，
+          脚本在 <code>docs/mysql-guide-labs/exp2-index.sql</code> 的 <code>time_page</code> 过程）：</p>
+
+        <div class="code">
+          <div class="code-head"><span class="path">深分页三种写法</span><button data-copy type="button">复制</button></div>
+          <pre><code>-- 写法 1：直接翻页（反例）
+SELECT * FROM orders_big ORDER BY id LIMIT 900000, 10;
+
+-- 写法 2：游标 / keyset 分页 —— 记住上一页最后的 id
+SELECT * FROM orders_big WHERE id &gt; 900000 ORDER BY id LIMIT 10;
+
+-- 写法 3：延迟关联 —— 子查询先用覆盖索引把 10 个 id 挑出来再取整行
+SELECT o.* FROM orders_big o
+JOIN (SELECT id FROM orders_big ORDER BY id LIMIT 900000, 10) t ON o.id = t.id;</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · 各跑 5 次 · 2026-10-29 实测</span><button data-copy type="button">复制</button></div>
+          <pre><code>+--------------------+------+
+| deep_offset_5x_sec | cnt  |
++--------------------+------+
+|           9.044033 |   50 |    -- 写法1：1.81 s / 次
++--------------------+------+
++---------------+------+
+| cursor_5x_sec | cnt  |
++---------------+------+
+|      0.003754 |   50 |    -- 写法2：0.00075 s / 次
++---------------+------+
++--------------------+------+
+| late_lookup_5x_sec | cnt  |
++--------------------+------+
+|           5.929223 |   50 |    -- 写法3：1.19 s / 次
++--------------------+------+</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>写法</th><th>单次耗时</th><th>相对游标法</th><th>为什么</th></tr></thead>
+            <tbody>
+              <tr><td><code>LIMIT 900000,10</code></td><td><span class="pill bad">1.81 s</span></td><td>2400× 慢</td><td>沿聚簇索引读完并丢弃 90 万行</td></tr>
+              <tr><td>延迟关联</td><td><span class="pill warn">1.19 s</span></td><td>1600× 慢</td><td>省了回表，但「扫过 90 万行」这一步还在</td></tr>
+              <tr><td>游标（<code>WHERE id &gt; 上一页末尾</code>）</td><td><span class="pill ok">0.75 ms</span></td><td>——</td><td>主键直接定位起点，只读 10 行</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <div class="ico">读</div>
+          <p><strong>延迟关联不是银弹：</strong>它的收益来自「用覆盖索引代替回表去翻 offset」。
+            本实验按主键排序，主键本身就是聚簇索引，翻 offset 的成本躲不掉，所以只快了 34%。
+            「按二级索引列排序 + 深翻页」才是它发挥全力（可达几十倍）的场景。
+            产品上能做「下一页」就别做「第 8 万页」——游标分页是唯一随 offset 不变慢的方案。</p>
+        </div>
+
+        <h3 id="anti-summary">7.2 反例汇总表</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>错误姿势</th><th>实测结果</th><th>正确姿势</th><th>出处</th></tr></thead>
+            <tbody>
+              <tr><td>UUID 做主键</td><td>插入 2.1× 慢、文件 +20%</td><td>自增 / 雪花 ID</td><td><a href="#page-split">2.2</a></td></tr>
+              <tr><td><code>SELECT *</code> 后只用两列</td><td>逻辑读 12,043 vs 31（400×）</td><td>覆盖索引 / 只查需要的列</td><td><a href="#index-cover">3.2</a></td></tr>
+              <tr><td>联合索引跳过最左列</td><td>type=ALL，全表 19.7 万行</td><td>查询条件带上最左列，或改索引顺序</td><td><a href="#index-leftmost">3.3</a></td></tr>
+              <tr><td><code>phone=138…</code>（类型不匹配）</td><td>type=ALL，28.7 万行</td><td>参数类型与列类型对齐</td><td><a href="#index-invalid">3.4</a></td></tr>
+              <tr><td><code>LEFT(col)=…</code> 函数包列</td><td>type=ALL，28.7 万行</td><td>改写成前缀 <code>LIKE '…%'</code></td><td><a href="#index-invalid">3.4</a></td></tr>
+              <tr><td>RR 下「先查无再插入」防重</td><td>INSERT 被间隙锁阻塞 2s</td><td>唯一索引 + <code>ON DUPLICATE KEY</code></td><td><a href="#lock-gap">6.3</a></td></tr>
+              <tr><td>乱序拿锁更新多行</td><td>ERROR 1213，一方被回滚</td><td>全事务按同一顺序（如 id 升序）拿锁</td><td><a href="#lock-deadlock">6.2</a></td></tr>
+              <tr><td><code>LIMIT 900000,10</code> 翻页</td><td>1.81 s / 次</td><td>游标分页（记住上页末尾 id）</td><td><a href="#anti-deeppage">7.1</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================= 8. 复现与速查 ================= -->
+      <section id="labs">
+        <h2><span class="no">8</span>复现实验与速查</h2>
+        <h3 id="labs-run">8.1 复现全部实验</h3>
+        <p>所有脚本在 <code>docs/mysql-guide-labs/</code>，只需要仓库的 MySQL 在跑：</p>
+
+        <div class="code">
+          <div class="code-head"><span class="path">复现步骤</span><button data-copy type="button">复制</button></div>
+          <pre><code>docker compose up -d mysql          # 确认 MySQL 在跑
+
+# 单会话实验（exp1 页分裂 / exp2 索引与深分页 / exp3 刷盘与缓存）
+docker exec -i $(docker compose ps -q mysql) mysql -uroot -p123456 -t \
+  &lt; docs/mysql-guide-labs/exp1-pagesplit.sql
+
+# 双会话实验（MVCC / 死锁 / 间隙锁），脚本内部已编排好时序
+bash docs/mysql-guide-labs/run-mvcc.sh
+bash docs/mysql-guide-labs/run-locks.sh</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>脚本</th><th>验证的结论</th><th>关键观察点</th></tr></thead>
+            <tbody>
+              <tr><td><code>exp1-pagesplit.sql</code></td><td>页分裂：递增 vs UUID 主键</td><td>插入耗时、<code>INNODB_TABLESPACES.FILE_SIZE</code>、Data_free</td></tr>
+              <tr><td><code>exp2-index.sql</code></td><td>回表/最左前缀/失效/深分页</td><td>EXPLAIN 的 type/key_len/rows/Extra、计时过程</td></tr>
+              <tr><td><code>exp2c-cover.sql</code></td><td>覆盖索引的逻辑读对比</td><td><code>Innodb_buffer_pool_read_requests</code> 差值</td></tr>
+              <tr><td><code>exp3-flush-bp.sql</code></td><td>redo 刷盘成本 + Buffer Pool 命中率</td><td>burn_writes 计时、命中率公式</td></tr>
+              <tr><td><code>run-mvcc.sh</code>（4 个 sess*.sql）</td><td>RR vs RC 快照行为、当前读</td><td>t0/t1/t2 三个时刻读到的 v 值</td></tr>
+              <tr><td><code>run-locks.sh</code>（4 个 sess*.sql）</td><td>死锁复现 + 间隙锁阻塞</td><td>ERROR 1213、INNODB STATUS、insert_waited_sec</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn">
+          <div class="ico">注意</div>
+          <p>双会话脚本的时序靠 <code>SLEEP</code> 编排（A 先拿锁，B 延迟 1~2.5 秒再动），
+            机器极慢时可能偶发时序抖动，重跑即可。跑完实验建议把 <code>innodb_flush_log_at_trx_commit</code> 恢复为 1（脚本已自动恢复）。</p>
+        </div>
+
+        <h3 id="cheatsheet">8.2 命令速查</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>想看什么</th><th>命令</th></tr></thead>
+            <tbody>
+              <tr><td>执行计划</td><td><code>EXPLAIN SELECT …</code>（看 type / key / key_len / rows / Extra）</td></tr>
+              <tr><td>索引用了几列</td><td><code>key_len</code>：INT 4B/列，可空 +1B，VARCHAR 长度 2B + 字符集×宽</td></tr>
+              <tr><td>覆盖索引生效</td><td>Extra 出现 <code>Using index</code>；ICP 是 <code>Using index condition</code></td></tr>
+              <tr><td>查询实际逻辑读</td><td><code>FLUSH STATUS;</code> 查询; <code>SHOW SESSION STATUS LIKE 'Innodb_buffer_pool_read_requests';</code></td></tr>
+              <tr><td>缓存命中率</td><td><code>1 - Innodb_buffer_pool_reads / Innodb_buffer_pool_read_requests</code></td></tr>
+              <tr><td>表文件/碎片大小</td><td><code>SELECT … FROM information_schema.INNODB_TABLESPACES</code> / <code>SHOW TABLE STATUS</code></td></tr>
+              <tr><td>长事务（拖 undo 回收）</td><td><code>SELECT * FROM information_schema.INNODB_TRX</code></td></tr>
+              <tr><td>最近一次死锁现场</td><td><code>SHOW ENGINE INNODB STATUS\G</code> 搜 <code>LATEST DETECTED DEADLOCK</code></td></tr>
+              <tr><td>当前锁等待</td><td><code>SELECT * FROM performance_schema.data_lock_waits</code></td></tr>
+              <tr><td>锁等待超时上限</td><td><code>@@innodb_lock_wait_timeout</code>（默认 50s，超时报 1205）</td></tr>
+              <tr><td>redo 提交刷盘策略</td><td><code>@@innodb_flush_log_at_trx_commit</code>（1 安全 / 2 断电丢 1s）</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer>
+        <p><strong>MySQL 原理与数据结构</strong> · 数据来源：本机 Docker mysql:8.4.13（InnoDB，页 16KB，Buffer Pool 128MB，redo 100MB），实测核对日期 2026-10-29。</p>
+        <p>复现脚本 <code>docs/mysql-guide-labs/</code> · 同系列教程：<a href="redis-guide.html">Redis 原理与数据结构</a> · <a href="messaging-guide.html">消息中间件实战</a></p>
+      </footer>
+
+    </div>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var toggle = document.getElementById('themeToggle');
+
+    function syncToggleLabel() {
+      if (toggle) toggle.textContent = root.dataset.theme === 'dark' ? '浅色' : '深色';
+    }
+    syncToggleLabel();
+
+    if (toggle) {
+      toggle.addEventListener('click', function () {
+        var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        try { localStorage.setItem('tech-guide-theme', next); } catch (e) { /* ignore */ }
+        syncToggleLabel();
+      });
+    }
+
+    document.querySelectorAll('[data-copy]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var block = btn.closest('.code');
+        var code = block ? block.querySelector('code') : null;
+        if (!code) return;
+        var text = code.innerText;
+        var done = function () {
+          var old = btn.textContent;
+          btn.textContent = '已复制';
+          setTimeout(function () { btn.textContent = old; }, 1400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done).catch(function () { fallback(text, done); });
+        } else {
+          fallback(text, done);
+        }
+      });
+    });
+
+    function fallback(text, done) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+      document.body.removeChild(ta);
+      done();
+    }
+
+    var links = Array.prototype.slice.call(document.querySelectorAll('.toc a[href^="#"]'));
+    var byId = {};
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      byId[id] = a;
+    });
+    var targets = Object.keys(byId).map(function (id) { return document.getElementById(id); }).filter(Boolean);
+
+    function setActive(id) {
+      links.forEach(function (a) { a.classList.remove('active'); });
+      var link = byId[id];
+      if (link) link.classList.add('active');
+    }
+
+    function onScroll() {
+      var y = window.scrollY + 140;
+      var current = targets.length ? targets[0] : null;
+      for (var i = 0; i < targets.length; i++) {
+        var top = targets[i].getBoundingClientRect().top + window.scrollY;
+        if (top <= y) current = targets[i];
+      }
+      if (current) setActive(current.id);
+      var bar = document.querySelector('.progress span');
+      if (bar) {
+        var max = document.documentElement.scrollHeight - window.innerHeight;
+        bar.style.width = (max > 0 ? Math.min(100, Math.max(0, window.scrollY / max * 100)) : 0) + '%';
+      }
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    onScroll();
+  })();
+</script>
+</body>
+</html>
