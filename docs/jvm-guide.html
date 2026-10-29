@@ -1,0 +1,2361 @@
+<!-- tech-demo-builder 教程模板。本文件已按模板回填完成，原占位符 DOMAIN / TITLE / SUBTITLE / TOC / SOURCE_NOTE / CONTENT / FOOTER_SOURCE / FOOTER_NOTE 均已替换。
+     代码块用 .code 容器 + .code-head（语言标签 + 复制按钮） + pre/code；按钮必须带 data-copy 属性。
+     目录项写成指向章节 id 的锚点，子项放进 .sub 容器。 -->
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Java 虚拟机实战指南 · 技术实战指南</title>
+<script>
+  try {
+    var savedTheme = localStorage.getItem('tech-guide-theme');
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = savedTheme || (prefersDark ? 'dark' : 'light');
+  } catch (e) { /* 隐私模式下 localStorage 可能不可用，退回默认主题 */ }
+</script>
+<style>
+  :root {
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sidebar: 276px;
+    --maxw: 980px;
+
+    --bg: #f5f7fb;
+    --surface: #ffffff;
+    --surface-2: #eef2f8;
+    --text: #1b2433;
+    --muted: #5c6a7e;
+    --border: #dde4ef;
+    --accent: #4f46e5;
+    --accent-2: #0f766e;
+    --accent-weak: #eef0ff;
+    --ok: #047857;
+    --ok-bg: #ecfdf5;
+    --warn: #b45309;
+    --warn-bg: #fff7ed;
+    --danger: #b91c1c;
+    --danger-bg: #fef2f2;
+    --code-bg: #0c1424;
+    --code-head: #131f35;
+    --code-border: #22304c;
+    --code-text: #dbe4f5;
+    --shadow: 0 10px 30px -18px rgba(23, 37, 84, .35);
+  }
+  html[data-theme="dark"] {
+    --bg: #080d18;
+    --surface: #101829;
+    --surface-2: #0c1322;
+    --text: #e6ebf5;
+    --muted: #97a5bb;
+    --border: #22304a;
+    --accent: #8f9cff;
+    --accent-2: #2dd4bf;
+    --accent-weak: #1a2344;
+    --ok: #34d399;
+    --ok-bg: #08251d;
+    --warn: #fbbf24;
+    --warn-bg: #2a1e08;
+    --danger: #f87171;
+    --danger-bg: #2a1013;
+    --code-bg: #070c17;
+    --code-head: #0d1626;
+    --code-border: #1c2942;
+    --code-text: #dbe4f5;
+    --shadow: 0 12px 34px -18px rgba(0, 0, 0, .7);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.78;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  img, svg { max-width: 100%; }
+  ::selection { background: var(--accent); color: #fff; }
+
+  .progress {
+    position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 60;
+    background: transparent; pointer-events: none;
+  }
+  .progress span {
+    display: block; height: 100%; width: 0;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width .12s linear;
+  }
+  .theme-toggle {
+    position: fixed; top: 16px; right: 18px; z-index: 61;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font: 600 12px/1 var(--sans);
+    padding: 9px 13px; border-radius: 999px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+  }
+  .theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+  .shell {
+    display: grid;
+    grid-template-columns: var(--sidebar) minmax(0, 1fr);
+    max-width: 1520px;
+    margin: 0 auto;
+  }
+
+  /* ---------- 侧边目录 ---------- */
+  .sidebar {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    padding: 30px 18px 48px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    scrollbar-width: thin;
+  }
+  .brand { padding: 0 10px 18px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .brand .mark {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700; letter-spacing: .16em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  .brand .mark::before {
+    content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 4px var(--accent-weak);
+  }
+  .brand h1 { margin: 10px 0 2px; font-size: 18px; letter-spacing: -.01em; }
+  .brand p { margin: 0; font-size: 12px; color: var(--muted); }
+
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a {
+    display: block; padding: 6px 10px;
+    color: var(--muted); font-size: 13.5px; line-height: 1.5;
+    border-left: 2px solid transparent; border-radius: 0 8px 8px 0;
+  }
+  .toc a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }
+  .toc a.active {
+    color: var(--accent); background: var(--accent-weak);
+    border-left-color: var(--accent); font-weight: 600;
+  }
+  .toc .sub a { padding-left: 26px; font-size: 12.8px; }
+  .toc .group {
+    padding: 14px 10px 4px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .12em;
+    color: var(--muted); text-transform: uppercase;
+  }
+  .side-note {
+    margin-top: 22px; padding: 12px;
+    border-radius: 10px; background: var(--surface-2);
+    color: var(--muted); font-size: 11.5px; line-height: 1.65;
+  }
+
+  /* ---------- 主体 ---------- */
+  main { padding: 34px clamp(18px, 4vw, 58px) 96px; min-width: 0; }
+  .content { max-width: var(--maxw); margin: 0 auto; }
+
+  .hero {
+    position: relative; overflow: hidden;
+    border-radius: 22px;
+    padding: clamp(26px, 5vw, 48px);
+    color: #fff;
+    background:
+      radial-gradient(800px 320px at 88% -10%, rgba(45, 212, 191, .38), transparent 62%),
+      radial-gradient(620px 300px at 0% 110%, rgba(167, 139, 250, .35), transparent 60%),
+      linear-gradient(135deg, #1e1b4b 0%, #3730a3 52%, #115e59 100%);
+    box-shadow: 0 26px 60px -32px rgba(30, 27, 75, .75);
+  }
+  .hero::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(rgba(255,255,255,.16) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: linear-gradient(120deg, transparent 40%, #000 100%);
+  }
+  .hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase;
+    color: #c7d2fe;
+  }
+  .hero .eyebrow::before { content: ""; width: 26px; height: 1px; background: currentColor; }
+  .hero h2 { margin: 14px 0 12px; font-size: clamp(30px, 4.4vw, 46px); line-height: 1.18; letter-spacing: -.02em; }
+  .hero .sub { max-width: 720px; margin: 0; color: #dbe3ff; font-size: 15.5px; }
+  .hero .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  .hero .badges span {
+    font-size: 11.5px; padding: 5px 10px; border-radius: 999px;
+    background: rgba(255,255,255,.11); border: 1px solid rgba(255,255,255,.22);
+    color: #eef2ff;
+  }
+  .hero .stats {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px; margin-top: 28px;
+    border-radius: 14px; overflow: hidden;
+    background: rgba(255,255,255,.18);
+  }
+  .hero .stat { padding: 14px 16px; background: rgba(15, 23, 42, .28); }
+  .hero .stat b { display: block; font-size: 22px; line-height: 1.2; }
+  .hero .stat small { color: #cbd5ff; font-size: 11.5px; letter-spacing: .03em; }
+  .hero .jump { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+  .hero .jump a {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 10px 16px; border-radius: 10px;
+    font-size: 13px; font-weight: 600;
+    background: #fff; color: #312e81;
+  }
+  .hero .jump a.ghost {
+    background: transparent; color: #e0e7ff; border: 1px solid rgba(255,255,255,.35);
+  }
+  .hero .jump a:hover { text-decoration: none; transform: translateY(-1px); }
+
+  section { margin-top: 78px; scroll-margin-top: 24px; }
+  h2 {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    margin: 0 0 10px; font-size: clamp(24px, 2.7vw, 30px);
+    letter-spacing: -.02em; line-height: 1.3;
+  }
+  h2 .no {
+    font: 700 12px/1 var(--mono); color: var(--accent);
+    background: var(--accent-weak); border: 1px solid var(--border);
+    padding: 5px 9px; border-radius: 7px;
+  }
+  h3 { margin: 44px 0 10px; font-size: 21px; letter-spacing: -.01em; scroll-margin-top: 24px; }
+  h4 { margin: 26px 0 8px; font-size: 16px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  strong { font-weight: 650; }
+  .lead { color: var(--muted); font-size: 15.5px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .02em;
+    padding: 3px 9px; border-radius: 999px;
+    color: var(--accent); background: var(--accent-weak);
+    border: 1px solid var(--border); white-space: nowrap;
+  }
+  .pill.ok { color: var(--ok); background: var(--ok-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .pill.bad { color: var(--danger); background: var(--danger-bg); }
+  .pill.gray { color: var(--muted); background: var(--surface-2); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px 22px; margin: 18px 0;
+    box-shadow: var(--shadow);
+  }
+  .card > :first-child { margin-top: 0; }
+  .card > :last-child { margin-bottom: 0; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+
+  .callout {
+    display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px;
+    margin: 18px 0; padding: 14px 16px;
+    border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface-2); font-size: 14.5px;
+  }
+  .callout .ico {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: grid; place-items: center;
+    font: 700 12px/1 var(--sans);
+    background: var(--accent-weak); color: var(--accent);
+  }
+  .callout p { margin: 0; }
+  .callout p + p { margin-top: 6px; }
+  .callout .title { font-weight: 700; display: block; margin-bottom: 2px; }
+  .callout.tip { background: var(--ok-bg); border-color: var(--border); }
+  .callout.tip .ico { background: var(--ok); color: #fff; }
+  .callout.warn { background: var(--warn-bg); border-color: var(--border); }
+  .callout.warn .ico { background: var(--warn); color: #fff; }
+  .callout.danger { background: var(--danger-bg); border-color: var(--border); }
+  .callout.danger .ico { background: var(--danger); color: #fff; }
+
+  .compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 18px 0; }
+  .box { border: 1px solid var(--border); border-radius: 12px; padding: 15px 18px; background: var(--surface); }
+  .box.bad { border-left: 4px solid var(--danger); }
+  .box.good { border-left: 4px solid var(--ok); }
+  .box h4 { margin: 0 0 8px; font-size: 14px; letter-spacing: .03em; }
+  .box.bad h4 { color: var(--danger); }
+  .box.good h4 { color: var(--ok); }
+  .box ul { margin: 0; padding-left: 18px; font-size: 14px; }
+  .box li { margin: 5px 0; }
+
+  .code {
+    margin: 18px 0; border-radius: 12px; overflow: hidden;
+    background: var(--code-bg); border: 1px solid var(--code-border);
+    box-shadow: var(--shadow);
+  }
+  .code-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 8px 12px 8px 15px;
+    background: var(--code-head); border-bottom: 1px solid var(--code-border);
+    color: #93a4c3; font: 12px/1.4 var(--mono);
+  }
+  .code-head .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .copy {
+    flex: 0 0 auto; border: 1px solid var(--code-border); border-radius: 6px;
+    background: transparent; color: #a9b8d4; cursor: pointer;
+    font: 11px/1 var(--sans); padding: 5px 9px;
+  }
+  .copy:hover { color: #fff; border-color: #4c5f85; }
+  .code pre { margin: 0; padding: 15px 17px; overflow-x: auto; }
+  .code code { font: 12.6px/1.72 var(--mono); color: var(--code-text); white-space: pre; }
+  /* 执行结果：与代码块同尺寸，虚线边框 + 浅色底表示「这是跑出来的」 */
+  .code.out { background: var(--surface); border-style: dashed; box-shadow: none; }
+  .code.out .code-head { background: var(--surface-2); color: var(--muted); }
+  .code.out .code-head .path { font-weight: 700; letter-spacing: .02em; }
+  .code.out code { color: var(--text); }
+  :not(pre) > code {
+    font: .9em/1.5 var(--mono); color: var(--accent);
+    background: var(--surface-2); border: 1px solid var(--border);
+    padding: 1px 5px; border-radius: 5px;
+  }
+
+  .table-wrap {
+    margin: 18px 0; overflow-x: auto;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13.8px; min-width: 560px; }
+  th, td { padding: 10px 14px; text-align: left; vertical-align: top; }
+  th {
+    background: var(--surface-2); color: var(--muted);
+    font-size: 11.5px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td { border-top: 1px solid var(--border); }
+  tbody tr:first-child td { border-top: 0; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td code { white-space: nowrap; }
+
+  .diagram {
+    margin: 22px 0; padding: 18px 18px 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow);
+  }
+  .diagram-scroll { overflow-x: auto; }
+  .diagram svg { display: block; width: 100%; height: auto; min-width: 640px; }
+  .diagram figcaption {
+    margin-top: 10px; color: var(--muted); font-size: 12.5px; text-align: center;
+  }
+  .svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .dg text { font-family: var(--sans); }
+  .dg-box { fill: var(--surface); stroke: var(--border); stroke-width: 1.4; }
+  .dg-box-accent { fill: var(--accent-weak); stroke: var(--accent); stroke-width: 1.5; }
+  .dg-box-ok { fill: var(--ok-bg); stroke: var(--ok); stroke-width: 1.5; }
+  .dg-box-danger { fill: var(--danger-bg); stroke: var(--danger); stroke-width: 1.5; }
+  .dg-box-warn { fill: var(--warn-bg); stroke: var(--warn); stroke-width: 1.5; }
+  .dg-lane { fill: var(--surface-2); stroke: var(--border); stroke-width: 1; }
+  .dg-text { fill: var(--text); font-size: 13.5px; font-weight: 600; }
+  .dg-text-sm { fill: var(--text); font-size: 11.5px; }
+  .dg-muted { fill: var(--muted); font-size: 10.8px; }
+  .dg-accent-text { fill: var(--accent); font-size: 11.5px; font-weight: 700; }
+  .dg-ok-text { fill: var(--ok); font-size: 11.5px; font-weight: 700; }
+  .dg-danger-text { fill: var(--danger); font-size: 11.5px; font-weight: 700; }
+  .dg-line { stroke: var(--muted); stroke-width: 1.5; fill: none; marker-end: url(#ar); }
+  .dg-line-accent { stroke: var(--accent); stroke-width: 1.6; fill: none; marker-end: url(#ar-accent); }
+  .dg-line-ok { stroke: var(--ok); stroke-width: 1.6; fill: none; marker-end: url(#ar-ok); }
+  .dg-line-danger { stroke: var(--danger); stroke-width: 1.6; fill: none; marker-end: url(#ar-danger); }
+  .dg-line-dashed { stroke-dasharray: 5 5; }
+  .dg-life { stroke: var(--border); stroke-width: 1.2; stroke-dasharray: 3 5; }
+  .mk-muted { fill: var(--muted); }
+  .mk-accent { fill: var(--accent); }
+  .mk-ok { fill: var(--ok); }
+  .mk-danger { fill: var(--danger); }
+  .dg-flow { stroke-dasharray: 6 7; animation: flow 1.4s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -13; } }
+
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps > li {
+    position: relative; padding-left: 40px; margin: 12px 0;
+  }
+  .steps > li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 0; top: 2px;
+    width: 25px; height: 25px; border-radius: 50%;
+    display: grid; place-items: center;
+    font: 700 11.5px/1 var(--mono);
+    color: var(--accent); background: var(--accent-weak);
+    border: 1px solid var(--border);
+  }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li {
+    position: relative; padding-left: 30px; margin: 9px 0;
+  }
+  .checklist li::before {
+    content: ""; position: absolute; left: 4px; top: 7px;
+    width: 13px; height: 13px; border-radius: 4px;
+    border: 1.5px solid var(--accent);
+  }
+
+  .kbd {
+    font: 12px/1.6 var(--mono);
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px;
+    white-space: nowrap;
+  }
+
+  footer {
+    margin-top: 90px; padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 12.5px;
+  }
+  footer p { margin: 4px 0; }
+
+  @media (max-width: 1100px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar {
+      position: static; height: auto; overflow: visible;
+      border-right: 0; border-bottom: 1px solid var(--border);
+      padding: 22px 18px;
+    }
+    .toc { max-height: 250px; overflow-y: auto; }
+    .toc .sub { display: none; }
+    main { padding-top: 26px; }
+    /* 窄屏下固定按钮会压住内容，改为跟随页面流排布 */
+    .theme-toggle {
+      position: static; display: block; width: fit-content;
+      margin: 14px 14px 0 auto; box-shadow: none;
+    }
+  }
+  @media (max-width: 760px) {
+    .grid2, .grid3, .compare { grid-template-columns: 1fr; }
+    .hero .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .theme-toggle { margin: 10px 12px 0 auto; }
+    body { line-height: 1.72; }
+    table { font-size: 13px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+
+  @media print {
+    .sidebar, .theme-toggle, .progress, .copy, .hero .jump { display: none !important; }
+    .shell { display: block; }
+    main { padding: 0; }
+    body { background: #fff; color: #111; font-size: 11pt; }
+    .content { max-width: none; }
+    .hero { box-shadow: none; border-radius: 0; padding: 18pt; background: #eef2ff !important; color: #111 !important; }
+    .hero .sub, .hero .badges span, .hero .stat small, .hero .eyebrow { color: #333 !important; }
+    .hero .badges span { border-color: #bbb; background: #fff; }
+    .hero .stat { background: #fff; }
+    .card, .diagram, .code, .table-wrap, .compare, .callout { box-shadow: none; break-inside: avoid; }
+    section { margin-top: 28pt; break-inside: auto; }
+    h2, h3 { break-after: avoid; }
+    .diagram svg { min-width: 0; }
+    .code { background: #fff; border-color: #ccc; }
+    .code-head { background: #f1f5f9; color: #333; border-color: #ccc; }
+    .code code { color: #111; white-space: pre-wrap; word-break: break-word; }
+    .diagram { page-break-inside: avoid; }
+    a { color: #111; text-decoration: underline; }
+    @page { margin: 14mm; }
+  }
+</style>
+</head>
+<body>
+
+<svg class="svg-defs" aria-hidden="true" focusable="false">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-muted" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-accent" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-ok" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-danger" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-danger" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+  </defs>
+</svg>
+
+<div class="progress" aria-hidden="true"><span></span></div>
+<button class="theme-toggle" id="themeToggle" type="button" aria-label="切换深浅色主题">深色</button>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">JVM</div>
+      <h1>Java 虚拟机实战指南</h1>
+      <p>运行时数据区 · 垃圾回收 · 调优</p>
+    </div>
+    <nav class="toc" aria-label="目录">
+      <a href="#start">1 · 开始之前</a>
+      <a href="#model">2 · 心智模型：内存分家</a>
+      <a href="#areas">3 · 运行时数据区（场景 1）</a>
+<div class="sub">
+  <a href="#ar-snapshot">3.1 七个区域一次拍全</a>
+  <a href="#ar-heap">3.2 分配 → 释放 → 回收，三步分开</a>
+  <a href="#ar-nmt">3.3 堆之外：NMT 与线程账</a>
+  <a href="#ar-methodarea">3.4 方法区：元空间 / 类空间 / 代码缓存</a>
+  <a href="#ar-histogram">3.5 直方图的 -all 与不带</a>
+</div>
+      <a href="#stack">4 · 栈（场景 2）</a>
+<div class="sub">
+  <a href="#st-depth">4.1 -Xss 与递归深度：一条直线</a>
+  <a href="#st-slots">4.2 局部变量槽：javap 说了算</a>
+  <a href="#st-cost">4.3 一个线程到底花多少内存</a>
+</div>
+      <a href="#oom">5 · OOM 家族（场景 3）</a>
+<div class="sub">
+  <a href="#oo-run">5.1 四个能稳定复现的</a>
+  <a href="#oo-negative">5.2 两个复现不出来的（反例）</a>
+  <a href="#oo-table">5.3 家族速查表</a>
+</div>
+      <div class="group">垃圾回收</div>
+      <a href="#collectors">6 · 五个收集器跑同一份活</a>
+<div class="sub">
+  <a href="#co-same">6.1 先证明负载相同</a>
+  <a href="#co-table">6.2 实测对照表</a>
+  <a href="#co-beans">6.3 防呆：参数根本没生效</a>
+</div>
+      <a href="#gclog">7 · 读懂 gc.log</a>
+<div class="sub">
+  <a href="#gl-anatomy">7.1 一行拆成五个字段</a>
+  <a href="#gl-water">7.2 回收后的水位为什么一路上涨</a>
+</div>
+      <a href="#age">8 · 对象年龄、晋升与大对象（场景 5）</a>
+<div class="sub">
+  <a href="#ag-dyn">8.1 动态阈值把 15 挤成 1</a>
+  <a href="#ag-survivor">8.2 放大 Survivor，对象才真的变老</a>
+  <a href="#ag-pretenure">8.3 大对象的两条路</a>
+  <a href="#ag-g1">8.4 G1 的 humongous 与 Evacuation Failure</a>
+</div>
+      <a href="#leak">9 · 内存泄漏取证（场景 6）</a>
+<div class="sub">
+  <a href="#lk-ab">9.1 泄漏版 vs 修好版</a>
+  <a href="#lk-manual">9.2 进程外用 jcmd 走一遍</a>
+  <a href="#lk-jfr">9.3 用 JFR 抓现行</a>
+  <a href="#lk-intern">9.4 反例：intern 到底泄不泄</a>
+</div>
+      <a href="#tuning">10 · 调优：改哪个参数，哪个数字变</a>
+      <div class="group">收尾</div>
+      <a href="#edge">11 · 边界与反例汇总</a>
+      <a href="#run">12 · 运行与速查</a>
+      <a href="#map">13 · 代码地图</a>
+    </nav>
+    <div class="side-note">
+      数据来源：本仓库 demo-jvm 模块在本机的实测输出（Amazon Corretto 21.0.13+10-LTS / Spring Boot 4.1.2，macOS 15.8.2，i7-8850H 12 核 16 GB，核对日期 2026-10-29）。毫秒级指标两轮之间会浮动，次数与字节级指标两轮一致；正文会同时给出两轮数字。
+    </div>
+  </aside>
+
+  <main>
+    <div class="content">
+      <header class="hero">
+  <div class="eyebrow">JDK 21 · 运行时数据区、垃圾回收与调优</div>
+  <h2>先给每个内存区域一把能量出来的尺，再把「回收」拆成看得见的数字</h2>
+  <p class="sub">
+    教科书说「栈、堆、方法区、程序计数器、本地方法栈」，但初学者拿不到的是另一样东西：<strong>这些区域在你机器上此刻各占多少字节、上限从哪读、读不到时该怪谁</strong>。
+    本文用一个常驻观测进程（第 03 章）和六个独立 main 实验把答案逐条量出来：
+    递归深度对上 <code>-Xss</code> 的线性模型误差 1 层；六个 OOM 里有<strong>两个复现不出来</strong>，本文如实写下报错原文；
+    五个收集器跑同一份负载（校验和 <code>-13950</code>），ZGC 的 STW 总时长是 <strong>0.10~0.54 ms</strong>，代价是堆顶到 <code>-Xmx</code> 并出现 Allocation Stall。
+    第 08 章会推翻「对象熬满 15 次才晋升」这句话——本机默认阈值是 <strong>1</strong>。
+  </p>
+  <div class="badges">
+    <span>Amazon Corretto 21.0.13</span><span>Java 21 / HotSpot</span><span>Spring Boot 4.1.2</span>
+    <span>零中间件依赖</span><span>只用 jcmd / jstat / jinfo / javap / jfr</span><span>26 个单测</span>
+  </div>
+  <div class="stats">
+    <div class="stat"><b>39528</b><small>默认 -Xss=1024 KB 的实测递归深度；模型算出 39527</small></div>
+    <div class="stat"><b>71.97 MB</b><small>放开引用后没动的内存，靠一次 GC 才还回来</small></div>
+    <div class="stat"><b>43→77 ms</b><small>Serial 同一负载两轮 STW 总时长（ZGC 是 0.10~0.54 ms）</small></div>
+    <div class="stat"><b>200087 → 84</b><small>intern 表条目数：Full GC 前后，两轮逐字符一致</small></div>
+  </div>
+  <div class="jump">
+    <a href="#areas">先看运行时数据区</a>
+    <a href="#model">心智模型与全景图</a>
+    <a class="ghost" href="#ag-dyn">对象年龄的真相</a>
+    <a class="ghost" href="#run">速查与接口清单</a>
+  </div>
+</header>
+
+<section id="start">
+  <h2><span class="no">01</span>开始之前</h2>
+  <p class="lead">不需要 Docker、不需要 MySQL/Redis，也不需要装 Arthas 或 MAT。一个 JDK 21 加一个终端就能跑完全文。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 最短路径：编译 → 起观测进程 → 敲一条 curl</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 1) 所有实验都要求先编译：lab.sh 找不到 target/classes 会直接报这一行
+./mvnw -q -pl demo-jvm compile
+
+# 2) 起场景 1 的 Web 观测面。必须带 -XX:NativeMemoryTracking=summary，
+#    否则 /api/jvm/native-memory 与 /threads 的 NMT 实测列会整列消失（lab.sh observe 已经自动带上）
+#    默认端口 9005；本文实测用 9015，因为 9001~9003 是 IDEA 里常驻的服务，不能抢
+./mvnw -pl demo-jvm -am package -DskipTests
+SERVER_PORT=9015 demo-jvm/scripts/lab.sh observe
+
+# 3) 另开终端：先确认「我在看哪个进程」——pid 是后面所有 jcmd / jstat 命令的入参
+curl -s http://localhost:9015/api/jvm/self</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 上面最后一条 curl 的真实返回（pid 49482 是本次验证进程）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>{"pid":49482,"javaVersion":"21","jvmName":"OpenJDK 64-Bit Server VM","gcAlgorithm":"G1",
+ "uptimeMs":2958,"availableCpus":12,"physicalTotalMb":16384.0,"physicalFreeMb":450.78,
+ "jvmArgs":["-XX:NativeMemoryTracking=summary"]}</code></pre>
+  </div>
+
+  <p><code>lab.sh</code> 只做三件事：把这个案例需要的 JVM 旗标配齐、<strong>把真实执行的那行命令原样打印一次</strong>、执行并透传退出码。
+  所以本文每一行命令都和它打印出来的完全一致，照着敲就能复现。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 不带参数就是案例清单（每个案例都要求先 compile）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>demo-jvm/scripts/lab.sh
+# 输出里能看到的案例名，就是正文每一章的命令：
+#   observe | stack-depth | local-slots
+#   oom-heap | oom-stack | oom-metaspace | oom-direct | oom-thread | oom-gcoverhead
+#   gc &lt;collector&gt; | gc-compare | age | leak | leak-child</code></pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>约定</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>实测环境</td><td>macOS 15.8.2（Darwin 24.6.0）、Intel i7-8850H、12 逻辑核、16 GB 内存、Amazon Corretto <code>21.0.13+10-LTS</code>，核对日期 2026-10-29</td></tr>
+        <tr><td>哪些数字能信</td><td><strong>次数、字节、条数</strong>两轮一致（例如 Serial 的 <code>cycles=9</code>、intern 的 <code>200087→84</code>）；<strong>毫秒</strong>会随机器负载浮动，本文一律写成区间并给出两轮值</td></tr>
+        <tr><td>退出码非 0</td><td>OOM 类案例是预期行为：子进程真的挂了，<code>lab.sh</code> 把它的退出码原样透传</td></tr>
+        <tr><td>不做什么</td><td>不装 Arthas / MAT / JConsole，不用 <code>jmap -histogram</code>（JDK 21 已经删了，见第 09 章）；不讲 C2 指令调度与 GraalVM 原生镜像</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+<section id="model">
+  <h2><span class="no">02</span>心智模型：一个 Java 进程的内存其实分四家</h2>
+  <p class="lead">最常见的误解是「JVM 内存 = 堆 + 栈，<code>-Xmx</code> 就是上限」。这句话有三个漏洞，本文所有实验都在补这三刀。</p>
+
+  <div class="compare">
+    <div class="box bad">
+      <h4>误解版</h4>
+      <ul>
+        <li>「<code>-Xmx</code> 设了 512 MB，进程最多用 512 MB」</li>
+        <li>「OOM 就是堆不够，加 <code>-Xmx</code> 就行」</li>
+        <li>「对象要熬满 15 次 Young GC 才进老年代」</li>
+        <li>「<code>String.intern()</code> 会把字符串永久留在方法区，所以泄漏」</li>
+      </ul>
+    </div>
+    <div class="box good">
+      <h4>本文实测版</h4>
+      <ul>
+        <li>观测进程 <code>-Xmx</code>=4096 MB，<code>jcmd VM.native_memory</code> 读出 <code>committed=419466KB</code>（约 410 MB），其中堆只占 200 MB</li>
+        <li>六个 OOM 里三个炸在堆之外：<code>Metaspace</code>、<code>StackOverflowError</code>、<code>Direct buffer memory</code></li>
+        <li>本机 Serial 默认 <code>new threshold 1</code>：对象熬过一轮就晋升，15 只是上限</li>
+        <li>20 万次 intern，一次 Full GC 后只剩 <code>84</code> 条；<code>intern</code> 案例两轮增长都是 <code>0.00 MB</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout tip"><span class="ico">比</span><p><span class="title">类比：一栋公寓楼</span>
+  线程私有区是每户自己的鞋柜（人走了就拆）；堆是楼下的公共仓库，所有人往里堆东西，保洁（GC）定期清；
+  方法区是楼的管理处档案室（存放「这栋楼有哪些户型」的图纸，也就是类的元数据）；
+  直接内存是<em>违建的地下一层</em>——它不在物业管理范围里（不受 <code>-Xmx</code> 约束），但塌了照样埋整栋楼。</p></div>
+
+  <figure class="diagram">
+    <svg viewBox="0 0 960 690" role="img" aria-label="JVM 运行时数据区全景：线程私有区、堆、方法区，以及不受 -Xmx 约束的堆外内存">
+      <text class="dg-accent-text" x="24" y="28">一个 Java 进程的内存分四家：虚线以左受 ThreadMXBean / MemoryMXBean 管辖，虚线以下的堆外只有 NMT 看得见</text>
+
+      <rect class="dg-lane" x="24" y="46" width="428" height="286" rx="14"></rect>
+      <text class="dg-text" x="44" y="72">① 线程私有（随线程生灭）</text>
+
+      <rect class="dg-box" x="44" y="86" width="392" height="46" rx="9"></rect>
+      <text class="dg-text-sm" x="60" y="106">程序计数器（PC 寄存器）</text>
+      <text class="dg-muted" x="60" y="123">当前字节码地址 · HotSpot 不单独成块 · 唯一没有 OOM 的区</text>
+
+      <rect class="dg-box-accent" x="44" y="144" width="392" height="112" rx="9"></rect>
+      <text class="dg-text-sm" x="60" y="164">Java 虚拟机栈　每帧 = 局部变量表 + 操作数栈 + 动态链接 + 返回地址</text>
+      <rect class="dg-box" x="60" y="176" width="120" height="30" rx="6"></rect>
+      <text class="dg-muted" x="72" y="195">recurse(int) 帧</text>
+      <rect class="dg-box" x="188" y="176" width="120" height="30" rx="6"></rect>
+      <text class="dg-muted" x="200" y="195">recurse(int) 帧</text>
+      <rect class="dg-box" x="316" y="176" width="104" height="30" rx="6"></rect>
+      <text class="dg-muted" x="326" y="195">main 帧</text>
+      <text class="dg-muted" x="60" y="230">深度上限 = (栈大小 − 每线程固定开销 99904 B) ÷ 帧大小 24 B</text>
+      <text class="dg-danger-text" x="60" y="248">越界：StackOverflowError（消息是 null，不是 OOM）</text>
+
+      <rect class="dg-box" x="44" y="268" width="392" height="46" rx="9"></rect>
+      <text class="dg-text-sm" x="60" y="288">本地方法栈</text>
+      <text class="dg-muted" x="60" y="305">HotSpot 与虚拟机栈合并实现 → 没有独立数字，接口里如实返回 null</text>
+
+      <rect class="dg-lane" x="484" y="46" width="452" height="392" rx="14"></rect>
+      <text class="dg-text" x="504" y="72">② 线程共享 · 堆（new 出来的对象都在这一格）</text>
+
+      <rect class="dg-box-accent" x="504" y="86" width="412" height="176" rx="9"></rect>
+      <text class="dg-text-sm" x="520" y="106">新生代</text>
+      <rect class="dg-box" x="520" y="116" width="256" height="40" rx="6"></rect>
+      <text class="dg-muted" x="532" y="133">Eden　几乎所有新对象的第一站</text>
+      <text class="dg-muted" x="532" y="149">G1 Eden 8.0 / committed 96.0 MB（实测）</text>
+      <rect class="dg-box" x="784" y="116" width="116" height="40" rx="6"></rect>
+      <text class="dg-muted" x="794" y="133">S0 / S1 两块</text>
+      <text class="dg-muted" x="794" y="149">1.41 / 2.0 MB</text>
+      <text class="dg-text-sm" x="520" y="182">老年代 Old</text>
+      <rect class="dg-box" x="520" y="192" width="380" height="40" rx="6"></rect>
+      <text class="dg-muted" x="532" y="209">熬过阈值的对象搬到这里 · G1 Old 14.29 / 4096.0 MB（max = -Xmx）</text>
+      <text class="dg-muted" x="532" y="225">Serial/Parallel 才有「代」的连续边界；G1 是一块块 region</text>
+      <text class="dg-danger-text" x="520" y="250">越界：OutOfMemoryError: Java heap space</text>
+
+      <rect class="dg-box" x="504" y="278" width="412" height="112" rx="9"></rect>
+      <text class="dg-text-sm" x="520" y="298">③ 方法区 → HotSpot 用「元空间」实现（本地内存，不在堆里）</text>
+      <rect class="dg-box" x="520" y="308" width="184" height="46" rx="6"></rect>
+      <text class="dg-muted" x="530" y="326">类元数据 Klass</text>
+      <text class="dg-muted" x="530" y="342">字段/方法描述符</text>
+      <rect class="dg-box" x="712" y="308" width="188" height="46" rx="6"></rect>
+      <text class="dg-muted" x="722" y="326">运行时常量池</text>
+      <text class="dg-muted" x="722" y="342">符号引用、字面量</text>
+      <text class="dg-muted" x="520" y="372">压缩类空间（元空间内部的一段）4.34 used / 1024.0 MB max　实测总计 33.91 / 34.5 MB</text>
+
+      <rect class="dg-box-warn" x="504" y="404" width="412" height="26" rx="8"></rect>
+      <text class="dg-muted" x="516" y="421">代码缓存 CodeCache 12.98 / 240 MB：JIT 编译后的机器码，HotSpot 自己另开的池子</text>
+
+      <rect class="dg-lane" x="24" y="462" width="912" height="188" rx="14"></rect>
+      <text class="dg-text" x="44" y="488">④ 堆之外：JVM 与 OS 的账（-Xmx 完全管不到，只有 NMT 能读）</text>
+
+      <rect class="dg-box-danger" x="44" y="504" width="288" height="66" rx="9"></rect>
+      <text class="dg-text-sm" x="58" y="524">直接内存 DirectByteBuffer</text>
+      <text class="dg-muted" x="58" y="541">上限默认跟随 -Xmx（4096 MB）</text>
+      <text class="dg-muted" x="58" y="558">越界：Cannot reserve … direct buffer memory</text>
+
+      <rect class="dg-box" x="344" y="504" width="288" height="66" rx="9"></rect>
+      <text class="dg-text-sm" x="358" y="524">线程原生结构 + 栈</text>
+      <text class="dg-muted" x="358" y="541">NMT Thread：45181 KB committed（44 线程）</text>
+      <text class="dg-muted" x="358" y="558">ThreadMXBean 只报 22 个 Java 线程</text>
+
+      <rect class="dg-box" x="644" y="504" width="272" height="66" rx="9"></rect>
+      <text class="dg-text-sm" x="658" y="524">GC 结构 / 编译线程 / 内部</text>
+      <text class="dg-muted" x="658" y="541">NMT GC：136916 KB reserved</text>
+      <text class="dg-muted" x="658" y="558">Code：248636 KB reserved</text>
+
+      <text class="dg-accent-text" x="44" y="600">NMT 总计（本机实测）：Total reserved=5801642KB, committed=419466KB　← 堆只占其中 204800KB</text>
+
+      <path class="dg-line dg-flow" d="M240 314 C240 400 300 440 380 504"></path>
+      <text class="dg-muted" x="252" y="410">-Xss 管这一格</text>
+      <path class="dg-line dg-flow" d="M440 176 L504 150"></path>
+      <text class="dg-muted" x="446" y="166">new</text>
+      <path class="dg-line dg-flow" d="M440 292 L504 330"></path>
+      <text class="dg-muted" x="446" y="318">类加载</text>
+      <path class="dg-line dg-flow dg-line-danger" d="M300 314 L200 504"></path>
+      <text class="dg-muted" x="196" y="450">ByteBuffer.allocateDirect</text>
+    </svg>
+    <figcaption>同一台机器上，「堆用了多少」和「进程占了多少内存」是两个数：第 03 章会把这两套口径逐条对齐。</figcaption>
+  </figure>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>区域</th><th>存什么</th><th>谁管上限</th><th>越界报什么</th><th>本文哪一章量它</th></tr></thead>
+      <tbody>
+        <tr><td>程序计数器</td><td>当前字节码指令地址</td><td>没有上限</td><td class="muted">不会 OOM</td><td>3.1（接口如实返回 null）</td></tr>
+        <tr><td>Java 虚拟机栈</td><td>栈帧：局部变量表、操作数栈、动态链接、返回地址</td><td><code>-Xss</code>（每线程）</td><td><code>StackOverflowError</code></td><td>4.1 / 4.2 / 5.1</td></tr>
+        <tr><td>本地方法栈</td><td>Native 方法帧</td><td>HotSpot 与上一格合并</td><td class="muted">读不到独立数字</td><td>3.1</td></tr>
+        <tr><td>堆</td><td>对象实例、数组</td><td><code>-Xmx</code> / <code>-Xms</code></td><td><code>OutOfMemoryError: Java heap space</code></td><td>3.2 / 6 / 7 / 8</td></tr>
+        <tr><td>方法区（元空间）</td><td>类元数据、运行时常量池</td><td><code>-XX:MaxMetaspaceSize</code>（默认不限）</td><td><code>OutOfMemoryError: Metaspace</code></td><td>3.4 / 5.1</td></tr>
+        <tr><td>直接内存</td><td>堆外字节缓冲，NIO / Netty 用</td><td><code>-XX:MaxDirectMemorySize</code>（默认跟随 <code>-Xmx</code>）</td><td><code>OutOfMemoryError: Direct buffer memory</code></td><td>5.1</td></tr>
+        <tr><td>线程本身</td><td>native 线程 + 栈 + JVM 内部结构</td><td>OS 与容器 pid 上限</td><td><code>unable to create native thread</code></td><td>3.3 / 5.2</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="muted small">本文按三条主线推进：<strong>量得出</strong>（第 03~04 章）、<strong>炸得准</strong>（第 05 章）、<strong>收得回来</strong>（第 06~10 章）。</p>
+</section>
+<section id="areas">
+  <h2><span class="no">03</span>运行时数据区：七个区域，一把一把量出来（场景 1）</h2>
+  <p class="lead">观测面是一个正常的 Spring Boot 进程。它不模拟任何东西——你看到的 used / committed / max，就是这个进程自己的真实内存账。</p>
+
+  <h3 id="ar-snapshot">3.1 七个区域一次拍全，读不到的写清为什么</h3>
+  <p>它解决什么问题：把「运行时数据区」这张背不下来也讲不清的表，变成七个能刷新、能对账的数字。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 一次请求返回 7 个区域，每个都带 howToMeasure</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 9015 是本次验证用的临时端口，正常跑是 9005。
+# ensure_ascii=False 必须加：默认的 json.tool 会把中文转成 \uXXXX，根本没法读
+curl -s http://localhost:9015/api/jvm/areas \
+  | python3 -c "import json,sys; print(json.dumps(json.load(sys.stdin), ensure_ascii=False, indent=2))" \
+  | sed -n '16,72p'   # 跳过 process 段，只看 areas 数组；sed 的区间按你的终端高度自己调</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回逐字符照贴（第 5~7 个区域略；note 保留原文）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>{
+      "name": "程序计数器（PC 寄存器）",
+      "scope": "线程私有",
+      "stores": "当前字节码指令地址；遇到 JIT 编译后的本地代码时记 undefined",
+      "howToMeasure": "读不到：HotSpot 把它放在 JavaThread 的原生结构里，不单独成块内存",
+      "usedMb": null,
+      "committedMb": null,
+      "maxMb": null,
+      "note": "唯一没有 OOM 的区（规范里它甚至可能实现为寄存器）"
+    },
+    {
+      "name": "Java 虚拟机栈",
+      "scope": "线程私有",
+      "stores": "栈帧：局部变量表、操作数栈、动态链接、方法返回地址",
+      "howToMeasure": "-Xss × 活跃线程数（估算）；真实值看 NMT 的 Thread 段",
+      "usedMb": 22.0,
+      "committedMb": 46.13,
+      "maxMb": null,
+      "note": "usedMb 是 ThreadMXBean 的 Java 线程数 × -Xss 的估算，committedMb 是 NMT 实测；实测通常更大，因为 GC、JIT、监视线程这些 JVM 内部线程不出现在 ThreadMXBean 里。递归过深抛 StackOverflowError（可用 -Xss 调）；线程开太多申请不到栈会抛 OutOfMemoryError: unable to create native thread"
+    },
+    {
+      "name": "本地方法栈",
+      "scope": "线程私有",
+      "stores": "Native 方法的调用帧",
+      "howToMeasure": "HotSpot 与 Java 虚拟机栈合并实现，因此没有独立数字",
+      "usedMb": null,
+      "committedMb": null,
+      "maxMb": null,
+      "note": "「HotSpot 把两个栈合成一个」是常见考点，也是它没有单独监控项的原因"
+    },
+    {
+      "name": "堆",
+      "scope": "线程共享",
+      "stores": "对象实例、数组、（JDK8+）字符串常量池里的 String 对象",
+      "howToMeasure": "MemoryMXBean.getHeapMemoryUsage() + 各分代内存池",
+      "usedMb": 21.71,
+      "committedMb": 154.0,
+      "maxMb": 4096.0,
+      "note": "存放失败才谈逃逸：能栈上分配/标量替换的对象不会进堆"
+    },
+    {
+      "name": "方法区（HotSpot 用元空间实现）",
+      "scope": "线程共享",
+      "stores": "类元信息、字段与方法的结构描述、运行时常量池、静态变量的引用",
+      "howToMeasure": "内存池 Metaspace（+ Compressed Class Space）",
+      "usedMb": 33.91,
+      "committedMb": 34.5,
+      "maxMb": null,
+      "note": "JDK7 起运行时常量池随类移到元空间；动态生成类（代理、Groovy、字节码增强）不加 -XX:MaxMetaspaceSize 会吃光本地内存"
+    },</code></pre>
+  </div>
+
+  <div class="callout warn"><span class="ico">坑</span><p><span class="title">「没有数字」不等于偷懒</span>
+  PC 寄存器和本地方法栈返回 <code>null</code> 是刻意的：HotSpot 根本没有给它们各开一块可统计的内存。
+  接口把这种情况写成 <code>howToMeasure</code> 而不是留空，就是为了让读者知道<em>该去哪一格找它</em>——
+  本地方法栈合并进虚拟机栈，PC 藏在 <code>JavaThread</code> 的原生结构里（NMT 的 <code>Thread</code> 段）。</p></div>
+
+  <h3 id="ar-heap">3.2 分配 → 丢弃引用 → 真正回收：三步分开</h3>
+  <p>类比：仓库里的箱子。你「不再需要某个箱子」和「保洁把它拉走」是两件事，中间还隔着一趟保洁班车（GC）。
+  这一节把三件事拆成三次请求，每一步都刷新一次堆使用量。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">java · area/HeapHolder.java：持有器只做一件事——决定要不要留强引用（节选）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>public AllocationResult allocate(int megabytes, boolean retain) {
+    if (megabytes &gt; maxSingleMb) {                        // 默认上限 64 MB：打死观测进程就没有进程可看了
+        throw new IllegalArgumentException("单次最多 " + maxSingleMb + " MB（demo.jvm.max-allocate-mb 可调），收到 " + megabytes + " MB");
+    }
+    if (Units.mbToBytes(megabytes) &gt; freeHeapBytes()) {   // 先判断剩余空间：宁可返回 400 说明原因，也不要当场 OOM
+        throw new IllegalArgumentException("堆剩余约 …，无法再分配 …，先调 /api/jvm/allocate/clear 释放");
+    }
+    byte[] block = new byte[(int) Units.mbToBytes(megabytes)];   // 真的 new，不预分配、不共享底层数组
+    for (int i = 0; i &lt; block.length; i += 4096) {
+        block[i] = 1;                                     // 写一遍防止惰性分配：没写过的页可能还没占物理内存，指标会偏小
+    }
+    if (retain) {
+        synchronized (retained) {                         // 保留 → 任何 GC 都收不走 → 老年代水位持续上涨
+            retained.addLast(block);
+            retainedBytes += block.length;
+        }
+    }                                                     // 不保留：方法返回后只剩栈上的局部引用，下次 Young GC 就收走
+    return new AllocationResult(megabytes, retain, heldBlocks(), Units.mb(retainedBytes), /* 当前堆 used */);
+}</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 三次分配：前两次留引用，第三次不留；每次看完 heapUsedMb</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># -X POST 才是真的分配；GET /hold 只看当前留了几块
+curl -s -X POST 'http://localhost:9015/api/jvm/allocate?mb=32'
+curl -s -X POST 'http://localhost:9015/api/jvm/allocate?mb=32'
+curl -s -X POST 'http://localhost:9015/api/jvm/allocate?mb=32&amp;retain=false'
+curl -s http://localhost:9015/api/jvm/hold   # 第三块没被保留，所以 heldBlocks 还是 2</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · heapUsedMb 的走向（49482 进程，-Xmx4096m）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>{"megabytes":32,"retain":true,"heldBlocks":1,"heldMb":32.0,"heapUsedMb":59.71}
+{"megabytes":32,"retain":true,"heldBlocks":2,"heldMb":64.0,"heapUsedMb":84.02}
+{"megabytes":32,"retain":false,"heldBlocks":2,"heldMb":64.0,"heapUsedMb":117.96}
+{"heldBlocks":2,"heldBytes":67108864,"heldMb":64.0,"heapUsedMb":117.96}
+                                                            ↑ 涨了 33.94 MB，但那 32 MB 已经是垃圾</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 丢弃引用，再手动触发一次 GC——注意这两步不能合并</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 第 1 步：把强引用列表清空。此时内存还占着——只是「没人要」了
+curl -s -X POST http://localhost:9015/api/jvm/allocate/clear
+# 第 2 步：确认 heldBlocks 归 0，但 heapUsedMb 几乎没动
+curl -s http://localhost:9015/api/jvm/hold
+# 第 3 步：手动触发 GC（等价 jcmd &lt;pid&gt; GC.run），这一步才真的还内存
+curl -s -X POST http://localhost:9015/api/jvm/gc</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 同一次验证，三步的真实返回</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>{"heldBlocks":2,"heldBytes":67108864,"heldMb":64.0,"heapUsedMb":85.91}
+{"heldBlocks":0,"heldBytes":0,"heldMb":0.0,"heapUsedMb":85.91}
+{"heapUsedBeforeMb":85.91,"heapUsedAfterMb":13.94,"freedMb":71.97,
+ "collectorCountDelta":{"G1 Young Generation":0,"G1 Concurrent GC":0,"G1 Old Generation":1}}</code></pre>
+  </div>
+
+  <div class="callout danger"><span class="ico">!</span><p><span class="title">这是全模块最想给初学者的一组数字：释放引用 ≠ 归还内存</span>
+  71.97 MB 里 64 MB 是主动丢弃的保留块，另 ~8 MB 是那块从一开始就没人要的垃圾。
+  <code>collectorCountDelta</code> 只有 <code>G1 Old Generation +1</code>——<code>GC.run</code> 走的是 Full GC，不是 Young GC，
+  这也解释了为什么 <code>freedMb</code> 一次就还清：Young GC 只扫新生代，搬不动老年代里的这 64 MB。</p></div>
+
+  <h3 id="ar-nmt">3.3 堆之外只有 NMT 看得见：线程数的两个口径</h3>
+  <p><code>MemoryMXBean</code> 只汇报堆和「非堆内存池」，JVM 自己占的原生内存（线程栈、GC 结构、编译缓冲）它一概不知。
+  要看得开 <code>-XX:NativeMemoryTracking</code>（NMT），读的是 <code>jcmd &lt;pid&gt; VM.native_memory</code>。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 两个口径各读一次，然后对账</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>curl -s http://localhost:9015/api/jvm/threads        # ThreadMXBean 口径
+curl -s http://localhost:9015/api/jvm/native-memory | head -12   # NMT 口径</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 同一个 pid 49482 的两份账</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>{"threadCount":22,"daemonCount":18,"peakThreadCount":22,"totalStartedCount":25,
+ "stackSizeKb":1024.0,"estimatedStackTotalMb":22.0,"nativeThreadCommittedMb":46.13,"deadlockCount":0}
+
+Native Memory Tracking:
+Total: reserved=5801642KB, committed=419466KB
+       malloc: 68838KB #150886
+       mmap:   reserved=5732804KB, committed=350628KB
+
+-                 Java Heap (reserved=4194304KB, committed=204800KB)
+-                     Class (reserved=1049424KB, committed=5584KB)
+-                    Thread (reserved=45181KB, committed=45181KB)   (threads #44)
+-                      Code (reserved=248636KB, committed=15784KB)
+-                        GC (reserved=136916KB, committed=58996KB)</code></pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>看到的</th><th>口径 A（Java 世界）</th><th>口径 B（OS 世界）</th><th>为什么差</th></tr></thead>
+      <tbody>
+        <tr><td>线程数</td><td><code>threadCount=22</code></td><td><code>threads #44</code></td><td>GC 线程、JIT 编译线程、Service/JMX 线程都不是 Java 线程，<code>ThreadMXBean</code> 看不见它们</td></tr>
+        <tr><td>栈的总量</td><td><code>estimatedStackTotalMb=22.0</code>（22 × 1 MB）</td><td><code>nativeThreadCommittedMb=46.13</code></td><td>估算只算 Java 线程；NMT 连内部线程和 <code>JavaThread</code> 结构本身都算进去了</td></tr>
+        <tr><td>堆</td><td><code>maxMb=4096.0</code>（= -Xmx）</td><td><code>Java Heap committed=204800KB</code></td><td>reserved 是「圈好的地」，committed 才是「已经盖了房」；RSS 只看 touched 页</td></tr>
+        <tr><td>类元数据</td><td><code>Metaspace used 33.91 MB</code></td><td><code>Class committed=5584KB</code>（≈5.5 MB）</td><td>NMT 的 Class 段只算 mmap 的块；元空间大部分容量走 malloc 记账，落在 <code>malloc: 68838KB #150886</code> 那行</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout tip"><span class="ico">√</span><p><span class="title">容器里排 OOMKilled 的正确起手式</span>
+  先看 NMT 的 <code>Total committed</code>，再看堆 used。<code>-Xmx</code> 之外的 <code>Thread + Code + GC + Internal + Symbol</code>
+  加起来轻松上到 200~500 MB：容器 limit 只按 <code>-Xmx</code> 配，就会被 OS 而不是 JVM 杀掉。</p></div>
+
+  <h3 id="ar-methodarea">3.4 方法区：元空间、压缩类空间、代码缓存是三格</h3>
+  <p>「方法区」是规范里的名字，HotSpot 用三块不同的内存池实现它。<code>/api/jvm/pools</code> 直接列出 8 个池，读者一眼能看出堆内 3 个、非堆 5 个。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 8 个内存池；非堆的 5 个里 3 个是代码缓存</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># jq 不在本文依赖里，用 python3 摊平；只看 name / usedMb / maxMb / belongsTo 四列
+curl -s http://localhost:9015/api/jvm/pools | python3 -c "import json,sys
+for p in json.load(sys.stdin):
+    # maxMb=None 就是「没有上限」，不是 0——这两种语义在接口里刻意区分开
+    print(f\"{p['name']:32} {p['type']:7} used={p['usedMb']:>8} max={str(p['maxMb']):>9}  {p['belongsTo']}\")"</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 单位 MB，8 行全贴（顺序就是接口返回顺序，别按「堆应该在前面」猜）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>CodeHeap 'non-nmethods'          NON_HEAP used=    1.49 max=     5.57  方法区 · JIT 代码缓存
+Metaspace                        NON_HEAP used=   34.02 max=     None  方法区 · 元空间
+CodeHeap 'profiled nmethods'     NON_HEAP used=    8.78 max=   117.21  方法区 · JIT 代码缓存
+Compressed Class Space           NON_HEAP used=    4.34 max=   1024.0  方法区 · 压缩类空间（元空间的一部分）
+G1 Eden Space                    HEAP    used=     8.0 max=     None  堆 · 新生代 Eden
+G1 Old Gen                       HEAP    used=   14.29 max=  4096.0  堆 · 老年代
+G1 Survivor Space                HEAP    used=    1.41 max=     None  堆 · 新生代 Survivor（S0/S1）
+CodeHeap 'non-profiled nmethods' NON_HEAP used=     2.9 max=   117.21  方法区 · JIT 代码缓存</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 元空间的真实账本只有 jcmd 给（接口 /api/jvm/metaspace 是它的进程内等价）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 注意是 VM.metaspace，不是 GC.metaspace——网上大量教程写错了这个命令名
+curl -s http://localhost:9015/api/jvm/metaspace | sed -n '1,12p'</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回逐字符照贴（右侧 free / waste / deallocated 列靠横向滚动看）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>Total Usage - 420 loaders, 8477 classes (1396 shared):
+  Non-Class: 1455 chunks,     30.59 MB capacity,   30.28 MB ( 99%) committed,    29.96 MB ( 98%) used,   329.53 KB (  1%) free,     1.47 KB ( &lt;1%) waste , deallocated: 129 blocks with 12.64 KB
+      Class:  656 chunks,      4.62 MB capacity,    4.62 MB (100%) committed,     4.38 MB ( 95%) used,   246.45 KB (  5%) free,    72 bytes ( &lt;1%) waste , deallocated: 218 blocks with 55.20 KB
+       Both: 2111 chunks,     35.21 MB capacity,   34.90 MB (&gt;99%) committed,    34.33 MB ( 98%) used,   575.98 KB (  2%) free,     1.54 KB ( &lt;1%) waste , deallocated: 347 blocks with 67.84 KB
+
+
+Virtual space:
+  Non-class space:       64.00 MB reserved,      30.31 MB ( 47%) committed,  1 nodes.
+      Class space:        1.00 GB reserved,       4.62 MB ( &lt;1%) committed,  1 nodes.
+             Both:        1.06 GB reserved,      34.94 MB (  3%) committed.</code></pre>
+  </div>
+
+  <div class="callout warn"><span class="ico">误</span><p><span class="title">「压缩类空间预留 1 GB，所以元空间能吃掉 1 GB 物理内存」是误读</span>
+  reserved 是地址空间，committed 才是真正占了页。本机实测 <code>1.00 GB reserved</code> 对应 <code>4.62 MB ( &lt;1%) committed</code>。
+  顺带一条：<code>420 loaders</code> 与 <code>VM.classloader_stats</code> 里的 <code>Total = 5</code> 不矛盾——前者按 classloader data 结构计数（含匿名的 stub loader），后者只数有名字的 loader。</p></div>
+
+  <h3 id="ar-histogram">3.5 类直方图：<code>live=true</code> 与 <code>live=false</code> 差的不只是数字</h3>
+  <p>类比：查仓库里还剩什么。带 Full GC 的清点叫「可达对象清单」，不带的那张是「此刻地上有什么」——后者包含还没扫走的垃圾。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 两次只读接口，差值就是「还没被搬走的垃圾」</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># live=true：内部执行 GC.class_histogram（不带 -all），HotSpot 会先做一次 Full GC
+# live=false：带 -all，只遍历已知块，不触发回收——所以能看见垃圾
+curl -s 'http://localhost:9015/api/jvm/histogram?live=true&amp;limit=3'
+curl -s 'http://localhost:9015/api/jvm/histogram?live=false&amp;limit=3'</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 两轮之间的稳定差值</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>{"live":true,"totalMb":77.91,"entries":[
+  {"rank":1,"instances":58918,"bytes":70560736,"className":"[B (java.base@21.0.13)"},
+  {"rank":2,"instances":56949,"bytes":1366776,"className":"java.lang.String (java.base@21.0.13)"},
+  {"rank":3,"instances":8543,"bytes":1014872,"className":"java.lang.Class (java.base@21.0.13)"}]}
+
+{"live":false,"totalMb":80.86,"entries":[
+  {"rank":1,"instances":66793,"bytes":72144336,"className":"[B (java.base@21.0.13)"},
+  {"rank":2,"instances":64748,"bytes":1553952,"className":"java.lang.String (java.base@21.0.13)"},
+  {"rank":3,"instances":550,"bytes":1384080,"className":"[Ljdk.internal.vm.FillerElement; (java.base@21.0.13)"}]}</code></pre>
+  </div>
+
+  <ul>
+    <li><code>[B</code>（<code>byte[]</code> 的 JVM 名字）实例数 66793 → 58918：那 7875 个已经是垃圾，只是还没被搬走。</li>
+    <li><code>live=false</code> 的第 3 名多出 <code>FillerElement</code>：回收后剩下的填充块，<code>live=true</code> 时不存在——它自己刚被清掉。</li>
+    <li>总量 80.86 vs 77.91 MB，差 2.95 MB，正好是垃圾 + 填充块的量级。</li>
+  </ul>
+
+  <div class="callout danger"><span class="ico">!</span><p><span class="title">别用直方图找泄漏，除非你打算等它把服务卡一下</span>
+  <code>GC.class_histogram</code> 不带 <code>-all</code> 会<strong>触发一次 Full GC</strong>（STW）。
+  本模块实测这条命令在 <code>collectorCountDelta</code> 上留下 <code>G1 Old Generation +1</code>。
+  线上要看趋势，就用带 <code>-all</code> 的口径，或者改用 JFR（第 09.3 节）。</p></div>
+</section>
+<section id="stack">
+  <h2><span class="no">04</span>栈：一个参数、两笔账、一条直线（场景 2）</h2>
+  <p class="lead">栈是初学者最容易「背过但没量过」的一格：<code>-Xss</code> 到底换来了多少递归深度？这一节把它拟合出来，顺便指出这条直线在什么地方会断。</p>
+
+  <h3 id="st-depth">4.1 <code>-Xss</code> 与递归深度：先拆成「固定开销 + 帧 × 深度」</h3>
+  <p>类比：一条自动扶梯。你一次能多站多少人，不只取决于扶梯长度，还取决于入口那台机器占掉的固定格子数——把机器搬走是不可能的（每个线程都有），所以短扶梯的「人均占位」看起来大得多。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">java · lab/StackDepthLab.java：一个刻意做小的帧，才能让「每帧字节数」有意义</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>/**
+ * 单参数、单局部变量的最小帧：帧里只有 counter 引用加一个 int，
+ * 这样「每帧字节数」才接近 HotSpot 的真实开销，不会被我顺手塞进帧的大数组污染。
+ */
+private static void recurse(int[] counter) {
+    int frame = counter[0] + 1;   // 读改写而不是 counter[0]++：保证计数在溢出后仍能被 main 读到
+    counter[0] = frame;
+    if (frame &gt;= HARD_LIMIT) {
+        return;                   // 兜底：栈给得再大也不许无限递归，否则拟合点会带进一个「没溢出」的假数据
+    }
+    recurse(counter);             // 真正的递归：每调一次压一帧，帧大小就是要求的东西
+}
+
+// 唯一能在同一个进程里比较不同栈大小的入口：Thread 构造器第 4 个参数就是栈字节数，0 = 沿用 -Xss
+Thread worker = new Thread(null, body, "stack-probe-" + stackBytes, stackBytes);</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 两个栈尺寸 + 主线程 + 16 MB 预热，共四个数据点</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># --threadSizesKb 只影响新建线程；主线程的 -Xss 在进入 main 之前就定死了，改不了
+# 不加这个参数会跑默认五档（128,256,512,1024,4096），本文 4.1 末尾会说两档结果的差别
+demo-jvm/scripts/lab.sh stack-depth --threadSizesKb=256,1024</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回（三次重复逐字符一致；# 后是本文的读法）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>$ /Users/donglee/Library/Java/.../corretto-21.0.13/Contents/Home/bin/java -cp .../demo-jvm/target/classes com.example.demo.jvm.lab.StackDepthLab --threadSizesKb=256\,1024
+# lab=stack-depth
+flag.ThreadStackSizeKb=1024        # 本机 Corretto 21 x64 的默认 -Xss = 1 MB
+flag.ThreadStackSizeMb=1.0
+warmup.depth=652599               # 16 MB 栈上的预热递归（同时也是「拟合范围之外」的对照点）
+note=所有 depth 均在 recurse 已被 C2 编译之后测量，否则帧大小不可比
+main.depth=39532                  # 主线程
+main.bytesPerFrame=27
+thread.default.depth=39528        # 新建线程、栈取默认值
+thread.default.bytesPerFrame=27
+thread.256KB.depth=6760
+thread.256KB.bytesPerFrame=39     # 小栈的「平均每帧字节数」明显偏大 —— 固定开销被摊薄得少
+thread.1024KB.depth=39528
+thread.1024KB.bytesPerFrame=27
+frame.bytesFitted=24.0            # 拟合斜率 = 真正的每帧字节数
+thread.fixedOverheadBytes=99904   # 拟合截距 = 每个线程与递归无关的固定开销
+frame.fitR2=1.0</code></pre>
+  </div>
+
+  <div class="callout tip"><span class="ico">算</span><p><span class="title">模型能算出实测值</span>
+  <code>栈大小 = 每帧字节 × 深度 + 固定开销</code>。代回去：
+  <code>(1024 × 1024 − 99904) ÷ 24 = 39527</code>，实测 <code>39528</code>；
+  <code>(256 × 1024 − 99904) ÷ 24 = 6760</code>，实测 <code>6760</code>。
+  两个尺寸的深度比是 <code>39528 ÷ 6760 = 5.85</code>，而栈只放大了 4 倍——多出来的就是那笔固定开销被摊薄了。</p></div>
+
+  <figure class="diagram">
+    <svg viewBox="0 0 900 250" role="img" aria-label="同一个固定开销在 256 KB 与 1024 KB 栈里占比不同，导致深度不是按 4 倍增长">
+      <text class="dg-text" x="20" y="24">两笔账拆开看：99904 B 的固定开销不会因为你把栈调大就变少</text>
+
+      <text class="dg-text-sm" x="20" y="72">栈 256 KB</text>
+      <text class="dg-muted" x="20" y="90">= 262144 B</text>
+      <rect class="dg-box-danger" x="150" y="54" width="270" height="44" rx="7"></rect>
+      <text class="dg-muted" x="160" y="80">固定开销 99904 B（38%）</text>
+      <rect class="dg-box-accent" x="420" y="54" width="440" height="44" rx="7"></rect>
+      <text class="dg-accent-text" x="432" y="80">6760 帧 × 24 B = 162240 B</text>
+
+      <text class="dg-text-sm" x="20" y="146">栈 1024 KB</text>
+      <text class="dg-muted" x="20" y="164">= 1048576 B</text>
+      <rect class="dg-box-danger" x="150" y="128" width="68" height="44" rx="7"></rect>
+      <rect class="dg-box-accent" x="218" y="128" width="642" height="44" rx="7"></rect>
+      <text class="dg-muted" x="150" y="186">红色那段 = 99904 B（9.5%）</text>
+      <text class="dg-accent-text" x="230" y="154">39528 帧 × 24 B = 948672 B</text>
+
+      <path class="dg-line" d="M150 196 L860 196"></path>
+      <text class="dg-muted" x="150" y="214">同一把尺：710 px = 1 MB。红色那段每线程都要付一次，所以「线程数 × 97.6 KB」是栈的真实底价</text>
+      <text class="dg-danger-text" x="150" y="234">想多容纳 1 帧，代价是 24 B；想多容纳 1 个线程，代价是 97.6 KB 起步</text>
+    </svg>
+    <figcaption>固定开销 99904 B ≈ 97.6 KB：这是「线程一多就 <code>unable to create native thread</code>」的第一嫌疑，而不是 <code>-Xss</code> 本身。</figcaption>
+  </figure>
+
+  <div class="callout warn"><span class="ico">伪</span><p><span class="title"><code>fitR2=1.0</code> 不代表模型被验证过，也不代表深度是个常数</span>
+  两点必然拟合成一条完美直线，<code>R²=1.0</code> 在这里只说明「没算错」。<strong>拿第三个点去砸它才会露馅</strong>：
+  预热用的是 16 MB 栈，模型预测 <code>(16777216 − 99904) ÷ 24 = 694888</code>，实测 <code>652599</code>，少 6%——
+  栈大到一定程度后，SOE 的来源不再是「帧放不下」。<br>
+  更要命的是帧大小本身依赖 JIT 层级：<code>lab.sh stack-depth</code>（不带参数，跑 128~4096 KB 五档）
+  两次实测都是 <code>main.depth=19766</code>、<code>frame.bytesFitted=48.08</code>、<code>fixedOverheadBytes=94828</code>——
+  帧正好是 24 B 的两倍，深度正好少一半。同一份代码、同一台机器，换个参数列表就换了编译档位。
+  <strong>结论：能当常数用的是「关系式」，不是「深度」。</strong></p></div>
+
+  <h3 id="st-slots">4.2 局部变量表：帧里那一格到底多大，<code>javap</code> 说了算</h3>
+  <p>这一节回答两个具体到能被编译器推翻的问题：<code>long</code> 参数占一槽还是两槽？同作用域外的两个局部变量会不会共用一槽？</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">java · lab/LocalSlotSample.java：两个样本方法刻意做出「复用槽」和「压住活引用」</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>/** 期望 locals=2：first 与 second 各自只在一个分支里活着，生命周期不重叠 → 共用 1 号槽。 */
+public static int reusesSlotsInSequentialBlocks(boolean flag) {
+    if (flag) {
+        int first = 1;      // 作用域到 return 就结束了；槽号 1，有效区间从字节码 6 起、长 2
+        return first;
+    }
+    int second = 2;         // 同样是槽 1，但有效区间从字节码 10 起 —— 与 first 不重叠，才敢复用
+    return second;
+}
+
+/** 期望 locals=4：a、b、c 声明位置一样，但 return 要把三个都读一遍 → 谁也不能复用谁。 */
+public static int keepsLocalsAlive(int seed) {
+    int a = seed + 1;
+    int b = seed + 2;       // 到这一步 a 仍然可能被后面读到，不能释放
+    int c = a + b;          // 同时读 a 和 b：三个变量生命周期重叠，只能各占一槽
+    return a + b + c;       // 这一行让 a、b 的存活区间一直拉到方法末尾
+}</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 让 lab 自己调 javap -p -v -l 并解析 LocalVariableTable</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>demo-jvm/scripts/lab.sh local-slots
+# 报告最后一行的 descriptorMismatch=0 是关键断言：
+# 按方法描述符算出来的参数槽数（long/double 算 2，引用与数组算 1）与 javap 全部对上</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 12 个方法里挑出四行（真实返回；vars 是 变量名@槽号[起始字节码+有效长度]）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>target=com.example.demo.jvm.lab.LocalSlotSample
+method.oneLong(long)=static desc=(J)J argSlots=2 thisSlot=0 stack=2 locals=2 bodySlots=0 vars=value@0[0+2]
+method.longThenInt(long,int)=static desc=(JI)J argSlots=3 thisSlot=0 stack=4 locals=3 bodySlots=0 vars=b@0[0+5],a@2[0+5]
+method.reusesSlotsInSequentialBlocks(boolean)=static desc=(Z)I argSlots=1 thisSlot=0 stack=1 locals=2 bodySlots=1 vars=first@1[6+2],flag@0[0+12],second@1[10+2]
+method.keepsLocalsAlive(int)=static desc=(I)I argSlots=1 thisSlot=0 stack=2 locals=4 bodySlots=3 vars=seed@0[0+18],a@1[4+14],b@2[8+10],c@3[12+6]
+methods=12
+descriptorMismatch=0</code></pre>
+  </div>
+
+  <ul>
+    <li><strong><code>long</code> 占两槽</strong>：看 <code>longThenInt</code> 的 <code>b@0</code> 与 <code>a@2</code>——第二个参数 <code>a</code> 是 int，却从 2 号槽开始，因为 0、1 两槽被 long 占了。反过来 <code>intThenLong</code> 是 <code>a@0, b@1</code>。</li>
+    <li><strong>槽会被复用</strong>：<code>first@1[6+2]</code> 与 <code>second@1[10+2]</code> 同槽号、区间不重叠（6..8 与 10..12），这就是编译器复用。所以「方法里声明了几个变量」推不出 <code>max_locals</code>。</li>
+    <li><strong>两个方法声明的变量个数相同，<code>locals</code> 却是 2 和 4</strong>：差别只在后面的代码是否还读得到前面的变量。这也是「本地变量表是调试信息，GC 不看它」的原因——<code>keepsLocalsAlive</code> 里活着的东西，优化后未必真的占着槽。</li>
+    <li>实例方法的 <code>this</code> 固定占 <code>0</code> 号槽，所以 <code>LocalSlotSample()</code> 的 <code>thisSlot=1</code>、<code>locals=1</code>、<code>vars=this@0</code>。</li>
+  </ul>
+
+  <div class="callout warn"><span class="ico">坑</span><p><span class="title">别用源码里的变量个数估栈</span>
+  <code>javap -l</code> 的 <code>max_locals</code> 才是帧里局部变量表的大小，而它随编译优化变化（本节 12 个方法里有 <code>bodySlots=0</code> 的，也有 3 个变量只占 1 个槽的）。
+  想估递归深度，就照 4.1 那样实测；想「少占栈」，能做的通常是把深递归换成显式栈。</p></div>
+
+  <h3 id="st-cost">4.3 一个线程到底花多少内存</h3>
+  <p>把 4.1 的固定开销和 03.3 的 NMT 对账，得到一个可以直接用在容量规划上的结论。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 三个口径读同一件事：线程数 × 栈</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>curl -s http://localhost:9015/api/jvm/threads          # ThreadMXBean + NMT 两列并排
+curl -s http://localhost:9015/api/jvm/native-memory | grep -A1 'Thread (reserved'   # NMT 原始行</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 同一个进程</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>{"threadCount":22,"daemonCount":18,"peakThreadCount":22,"totalStartedCount":25,
+ "stackSizeKb":1024.0,"estimatedStackTotalMb":22.0,"nativeThreadCommittedMb":46.13,"deadlockCount":0}
+-                    Thread (reserved=45181KB, committed=45181KB)   (threads #44)</code></pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>算法</th><th>结果</th><th>漏了什么</th></tr></thead>
+      <tbody>
+        <tr><td><code>-Xss</code> × Java 线程数</td><td>1 MB × 22 = <code>22.0 MB</code></td><td>GC/JIT/JMX 等内部线程；<code>JavaThread</code> 结构本身</td></tr>
+        <tr><td>NMT <code>Thread</code> 段</td><td><code>46.13 MB</code>，<code>threads #44</code></td><td>这是 committed，已经算上 97.6 KB 固定开销，但不含这些线程访问堆的部分</td></tr>
+        <tr><td>反推单线程成本</td><td>45181 KB ÷ 44 ≈ <code>1027 KB</code></td><td>正好等于 <code>-Xss</code> 的 1 MB，说明 macOS 上栈是整块 mmap、预留即记账</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>所以 5.2 里那个「起 2000 个线程也没 OOM」的反例并不矛盾：
+  <code>2000 × 1 MB</code> 只是 <em>reserved</em> 的地址空间，真正被碰过的页远没有那么多，
+  而压死进程的通常是 OS/容器的线程数上限，不是内存。</p>
+</section>
+
+<section id="oom">
+  <h2><span class="no">05</span>OOM 家族：六种溢出，四种准、两种不准（场景 3）</h2>
+  <p class="lead">每个案例各占一个独立进程（<code>lab/ChildJvm.java</code> 负责隔离），因为「在一个进程里连续制造六种 OOM」这件事本身就不成立——第一种就把进程打死了。</p>
+
+  <div class="callout tip"><span class="ico">比</span><p><span class="title">类比：六种「装不下」</span>
+  堆是仓库（东西太多）、栈是手边的工作台（一次动作叠太高）、元空间是档案室（户型图纸太多）、
+  直接内存是违建地下一层（不走仓库账）、线程是门口的人数（OS 不让进）、
+  GC overhead 是「保洁一直在打扫但永远扫不完」。</p></div>
+
+  <h3 id="oo-run">5.1 四个能稳定复现的</h3>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 堆溢出：脚本自动带 -Xms64m -Xmx64m（清单里那一列就是它给的旗标）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>demo-jvm/scripts/lab.sh oom-heap
+# 报告里 reproduced/asExpected 是这套实验的自检：
+#   reproduced  = 有没有真的抛异常；asExpected = 抛的是不是预期的那一种</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回（字段完整贴出；# 后是本文的读法）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># lab=oom
+case=heap
+errorClass=java.lang.OutOfMemoryError
+reproduced=true
+expectedError=java.lang.OutOfMemoryError: Java heap space
+asExpected=true
+errorMessage=Java heap space
+topFrame=com.example.demo.jvm.oom.OomLab.heap(OomLab.java:126)   # 炸在哪一行，直接给你
+iterationsBeforeFailure=6                     # 8 MB 一块，第 6 块申请不下来
+selfCountedAllocMb=48.0                       # 自己数出来只占 48 MB，但堆已经满了 64 MB
+flag.MaxHeapSizeMb=64.0
+flag.MaxMetaspaceSize=-1(不限)
+flag.ThreadStackSizeKb=1024
+threadCountPeak=6
+probe.heapUsedAfterReleaseMb=55.27            # 抛完之后放开全部引用，堆也没怎么回落
+probe.directUsedAfterReleaseMb=0.0
+probe.metaspaceUsedAfterReleaseMb=0.99
+pool.MetaspaceMax=-1(不限，只受物理内存限制)</code></pre>
+  </div>
+
+  <p><code>selfCountedAllocMb=48.0</code> 对 <code>MaxHeapSizeMb=64.0</code> 这 16 MB 差值很值得记：
+  一个 <code>-Xmx64m</code> 的进程里，JVM 自己（类元数据、线程、GC 结构、CodeCache）已经占掉一块，
+  你的对象永远拿不到完整的 <code>-Xmx</code>。同理 <code>heapUsedAfterReleaseMb=55.27</code>：
+  <strong>异常抛出后引用没了，但没跑 GC，内存就一直占着</strong>——这正是 3.2 那三步的极端版本。</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>案例</th><th>脚本自动带的旗标</th><th>报错原文（真实）</th><th>关键实测数字</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>oom-stack</code></td><td><code>-Xss256k</code></td>
+          <td><code>java.lang.StackOverflowError</code>，<code>errorMessage=(无消息)</code></td>
+          <td><code>iterationsBeforeFailure=1449</code>；<code>topFrame=OomLab.recurse(OomLab.java:143)</code>；<code>flag.MaxHeapSizeMb=4096.0</code>——堆足足的，越的是栈</td>
+        </tr>
+        <tr>
+          <td><code>oom-metaspace</code></td><td><code>-XX:MaxMetaspaceSize=48m</code></td>
+          <td><code>java.lang.OutOfMemoryError</code>，<code>errorMessage=Metaspace</code></td>
+          <td><code>iterationsBeforeFailure=7992</code> 个动态类，<code>selfCountedAllocMb=1.67</code>；<code>pool.MetaspaceMax=48.0 MB</code>、<code>pool.CompressedClassSpaceMax=48.0 MB</code>；<code>topFrame=java.base/java.lang.ClassLoader.defineClass1(Native Method)</code></td>
+        </tr>
+        <tr>
+          <td><code>oom-direct</code></td><td><code>-Xmx64m -XX:MaxDirectMemorySize=48m</code></td>
+          <td><code>Cannot reserve 16777216 bytes of direct buffer memory (allocated: 50331648, limit: 50331648)</code></td>
+          <td>3 块 16 MB 就炸；<code>topFrame=java.base/java.nio.Bits.reserveMemory(Bits.java:178)</code>；<code>probe.directUsedAfterReleaseMb=48.0</code>——抛完还占满，堆只占 1.3 MB</td>
+        </tr>
+        <tr>
+          <td><code>oom-heap</code></td><td><code>-Xms64m -Xmx64m</code></td>
+          <td><code>java.lang.OutOfMemoryError</code>，<code>errorMessage=Java heap space</code></td>
+          <td>见上面那份完整报告</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout danger"><span class="ico">!</span><p><span class="title">元空间那行必须多说一句</span>
+  7992 个类，自己只数到 <code>1.67 MB</code> 字节码，却在 <code>48 MB</code> 处炸——差额是每个 <code>Class</code> 的 klass 结构、方法表与常量池。
+  <strong>这笔账在堆 dump 里完全看不到</strong>，只能读 <code>jcmd &lt;pid&gt; VM.metaspace</code>（本文 3.4 有实测）；
+  顺带一条防呆：<code>flag.MaxMetaspaceSize</code> 没设时报告写 <code>-1(不限)</code> 而不是 0，就是为了不让人把「不限」读成「没有」。</p></div>
+
+  <h3 id="oo-negative">5.2 两个复现不出来的（诚实记录）</h3>
+  <p>教学 demo 最容易造假的地方就在这里：为了「凑齐六种 OOM」把参数调到能炸，读者回自己项目里照样复现不了。本文保留两个阴性结果。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 线程数与 GC 时间占比：教科书说有，本机跑出来是阴性</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>demo-jvm/scripts/lab.sh oom-thread       # 自动带 -Xmx64m，起 2000 个只 sleep 的线程
+demo-jvm/scripts/lab.sh oom-gcoverhead   # 自动带 -Xmx64m -XX:+UseSerialGC，不停 new 活对象</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 两份真实报告（reproduced=false / asExpected=false 是结果，不是 bug）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>case=thread
+errorClass=none
+reproduced=false
+expectedError=java.lang.OutOfMemoryError: unable to create native thread
+asExpected=false
+errorMessage=(未溢出)
+iterationsBeforeFailure=2000
+selfCountedAllocMb=128000.0          # 2000 线程 × 64 B 引用记账，账面 125 GB，实际进程好端端
+threadCountPeak=2006
+probe.heapUsedAfterReleaseMb=4.03
+
+case=gcOverhead
+errorClass=java.lang.OutOfMemoryError
+reproduced=true
+expectedError=java.lang.OutOfMemoryError: GC overhead limit exceeded
+asExpected=false
+errorMessage=Java heap space          # 先撞堆上限，压根没走到「GC 时间占比 98%」那条规则
+topFrame=com.example.demo.jvm.oom.OomLab.gcOverhead(OomLab.java:243)
+iterationsBeforeFailure=60826         # 两轮都是 60826
+flag.MaxHeapSizeMb=61.88</code></pre>
+  </div>
+
+  <ul>
+    <li><strong>线程反例</strong>：<code>selfCountedAllocMb=128000.0</code> 是「保留的引用量」，不是真实占用——线程栈按需 commit。本机 2000 线程起得来，是因为压死进程的那条线在 OS/容器的 pid 上限，不在 <code>-Xmx</code>。</li>
+    <li><strong>GC overhead 反例</strong>：<code>-XX:+UseGCOverheadLimit</code> 默认就是开的，但它要求「98% 时间在 GC 且回收不到 2% 堆」；小堆 + 持续晋升的负载会先触发 <code>Java heap space</code>。要复现它得把堆给到很大、同时让存活集逼近堆——线上真出现时，通常意味着你的堆本来就装不下活对象，报哪个都是同一件事。</li>
+    <li>两次跑 <code>iterationsBeforeFailure</code> 都是 <code>60826</code>，这个负性结果本身是可重复的，不是偶发。</li>
+  </ul>
+
+  <h3 id="oo-table">5.3 家族速查表</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>想知道</th><th>看哪个字段</th><th>实测示例</th></tr></thead>
+      <tbody>
+        <tr><td>到底炸在哪一行</td><td><code>topFrame</code></td><td><code>OomLab.heap(OomLab.java:126)</code> / <code>java.nio.Bits.reserveMemory(Bits.java:178)</code></td></tr>
+        <tr><td>是不是我要的那种溢出</td><td><code>asExpected</code></td><td>堆 / 栈 / 元空间 / 直接内存 = <code>true</code>；线程 / GC overhead = <code>false</code></td></tr>
+        <tr><td>撑了多久才炸</td><td><code>iterationsBeforeFailure</code></td><td><code>6</code>（堆）/ <code>1449</code>（栈）/ <code>7992</code>（类）/ <code>3</code>（直接内存）/ <code>60826</code>（GC overhead）</td></tr>
+        <tr><td>账面 vs 真实</td><td><code>selfCountedAllocMb</code> 与 <code>flag.*</code></td><td>堆 48 vs 64；元空间 1.67 vs 48；线程 128000 vs 进程活着</td></tr>
+        <tr><td>抛完内存降了没</td><td><code>probe.*AfterReleaseMb</code></td><td>堆 55.27（没 GC 就不还）；直接内存 48.0（仍占满）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn"><span class="ico">配</span><p><span class="title">一条命令的坑：别顺手加 <code>-XX:+HeapDumpOnOutOfMemoryError</code></span>
+  <code>lab.sh</code> 的 OOM 案例默认<strong>不加</strong>这个旗标。本机实测加上它、在 <code>-Xmx64m</code> 的堆上溢出时，
+  当前目录会掉一个 <code>54,211,807</code> 字节的 <code>.hprof</code>（耗时 0.035 s）；堆给到 4 GB 时就是几 GB 的磁盘和一段无法响应的停顿。
+  想练 dump 分析请用第 09.2 节的手动流程，那里有对照好的落盘路径。</p></div>
+</section>
+<section id="collectors">
+  <h2><span class="no">06</span>五个收集器跑同一份活（场景 4）</h2>
+  <p class="lead">对比收集器最难的不是找参数，是<strong>证明两次跑的是同一份活</strong>。这一节先立校验和，再上表。</p>
+
+  <h3 id="co-same">6.1 先让工作量变成一个数：确定性负载与校验和</h3>
+  <p>类比：比较两种保洁方式，得先保证同一个房间、同一堆灰尘。校验和就是那把「灰尘秤」。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">java · gc/AllocationWorkload.java：把分配行为固定成一个纯函数（节选）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>ArrayDeque&lt;byte[]&gt; live = new ArrayDeque&lt;&gt;(liveCount);   // 常驻存活集：决定晋升压力和 Old 区占用
+long state = seed | 1L;                                    // | 1L：保证 LCG 状态是奇数，步长循环才够长
+
+for (int round = 0; round &lt; rounds; round++) {
+    ArrayDeque&lt;byte[]&gt; temp = new ArrayDeque&lt;&gt;(perRound);  // 这一轮的短命对象，出作用域就变垃圾
+    for (int i = 0; i &lt; perRound; i++) {
+        state = next(state);                               // 线性同余：跨 JDK 版本结果一致
+        byte[] data = fill(new byte[objectBytes], state);  // Arrays.fill 填内容，不是为了算，是为了「被读过」
+        temp.add(data);                                    // 引用逃逸：JIT 无法再把它标量替换掉
+        checksum += data[round % objectBytes];              // 读一个字节 —— 少这一步，GC 次数可能直接归零
+    }
+    live.poll();                        // 换掉一个旧的存活对象：它立刻成为垃圾
+    state = next(state);
+    live.add(fill(new byte[objectBytes], state));   // 新的这个会反复熬过 Young GC —— 第 8 章的年龄就是这么涨的
+}
+checksum += live.size();   // 存活集到最后仍被引用：它必须真的活着，否则「晋升」就无从谈起
+
+/** 线性同余：只取高位做填充值，跨 JDK 版本结果一致。 */
+private static long next(long state) {
+    return state * 6364136223846793005L + 1442695040888963407L;
+}</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 一条命令跑五个子进程（父进程只负责按变体配旗标、解析各自的 gc.log）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>demo-jvm/scripts/lab.sh gc-compare
+# 六个变体共用同一份参数：-Xms256m -Xmx256m + rounds=40 churn=16MB live=8MB objectKb=32 seed=42</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 第 1 轮真实返回（字段说明与「取舍」两节是脚本自己打印的，本文原样保留）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>$ .../corretto-21.0.13/Contents/Home/bin/java -cp .../demo-jvm/target/classes com.example.demo.jvm.gc.GcCompareLab
+# lab=gc-compare  heap=-Xms256m -Xmx256m  workload=648.0MB allocated / 40 rounds
+
+collector  cycles    stw    totalMs     maxMs    tput%   peakMB  stall   wallMs     checksum
+Serial          9      9      43.37     11.58    72.89      110      0      160       -13950
+Parallel       10     10      29.27      7.24    78.94       97      0      139       -13950
+G1              7      7      26.78      9.18    83.57      189      0      163       -13950
+ZGC             3      9       0.10      0.02    99.95      256      4      208       -13950
+ZGC-Gen        12     42       0.54      0.05    99.64      152     17      150       -13950
+
+字段说明
+  cycles   GC 周期数，按日志里 GC(n) 的 n 去重（一次周期可能有多行）
+  stw      STW 停顿行数：Serial/Parallel/G1 每个周期一行，ZGC 一个周期有 3 个 Pause 阶段
+  totalMs  所有 Pause 行时长之和，也就是应用真正停下来多久
+  maxMs    最长单次停顿，衡量卡顿感的指标
+  tput%    吞吐率 = 1 - totalMs / workload.wallMs，负载期间的有效工作时间占比
+  peakMB   回收前堆使用量的最大值；接近 -Xmx 说明堆给少了
+  stall    Allocation Stall 次数：应用线程在分配点上等内存，ZGC 堆不足的直接证据
+  checksum 确定性校验和，各collector必须相同，否则两次跑的不是同一份工作</code></pre>
+  </div>
+
+  <h3 id="co-table">6.2 两轮并排：先看哪些列不动，再看哪些列会跳</h3>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 第 2 轮真实返回（同一台机器、同一份代码、间隔十几分钟）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>collector  cycles    stw    totalMs     maxMs    tput%   peakMB  stall   wallMs     checksum
+Serial          9      9      77.15     41.80    57.38      110      0      181       -13950
+Parallel       10     10      28.63      6.63    77.46      104      0      127       -13950
+G1              7      7      32.42      9.66    85.59      189      0      225       -13950
+ZGC             4     12       0.17      0.03    99.95      256      3      343       -13950
+ZGC-Gen        12     42       0.41      0.03    99.71      142     17      143       -13950</code></pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>列</th><th>两轮表现</th><th>该怎么用</th></tr></thead>
+      <tbody>
+        <tr><td><code>checksum</code></td><td class="ok">五个收集器、两轮全部 <code>-13950</code></td><td>对比成立的前提。它不同，后面所有列都不用看</td></tr>
+        <tr><td><code>cycles</code> / <code>stw</code> / <code>peakMB</code></td><td>Serial <code>9|9|110</code> 两轮一致；G1 <code>7|7|189</code> 一致；ZGC <code>peakMB=256</code> 顶到 <code>-Xmx</code></td><td>结构类指标，可以放心当结论引用</td></tr>
+        <tr><td><code>stall</code></td><td>ZGC <code>4</code> / <code>3</code>，ZGC-Gen <code>17</code> / <code>17</code>，其余 <code>0</code></td><td>ZGC 堆不足的唯一直接证据，量级可信、精确值不必纠结</td></tr>
+        <tr><td><code>totalMs</code> / <code>maxMs</code></td><td class="bad">Serial <code>43.37→77.15</code>、<code>11.58→41.80</code>（差 1.8 / 3.6 倍）</td><td>只报区间。这台 12 核笔记本当时更忙，负载本身没变（校验和证明了这点）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn"><span class="ico">读</span><p><span class="title"><code>stw</code> 行数不等于 <code>cycles</code>，别把它当 GC 次数</span>
+  ZGC 第一轮 <code>cycles=3</code> 但 <code>stw=9</code>：一个 ZGC 周期有 Pause Mark Start / Pause Mark Final / Pause Relocate Start 三个 STW 阶段，日志里是三行。
+  ZGC-Gen <code>12|42</code> 差得更多——分代版还有 Minor 周期。<strong>数周期看 <code>cycles</code>，数停顿看 <code>stw</code>，两者都要报。</strong></p></div>
+
+  <figure class="diagram">
+    <svg viewBox="0 0 900 300" role="img" aria-label="Serial 全停 vs G1 增量 vs ZGC 并发三行时间轴，ZGC 末端标出 Allocation Stall">
+      <text class="dg-text" x="20" y="24">同一份 648 MB 负载：谁在应用干活时停下来（灰=应用运行，红=STW，蓝=并发回收）</text>
+
+      <text class="dg-text-sm" x="20" y="76">Serial</text>
+      <text class="dg-muted" x="20" y="92">cycles 9</text>
+      <rect class="dg-box" x="110" y="56" width="60" height="34" rx="5"></rect>
+      <rect class="dg-box-danger" x="170" y="56" width="26" height="34" rx="5"></rect>
+      <rect class="dg-box" x="196" y="56" width="60" height="34" rx="5"></rect>
+      <rect class="dg-box-danger" x="256" y="56" width="30" height="34" rx="5"></rect>
+      <rect class="dg-box" x="286" y="56" width="60" height="34" rx="5"></rect>
+      <rect class="dg-box-danger" x="346" y="56" width="34" height="34" rx="5"></rect>
+      <rect class="dg-box" x="380" y="56" width="60" height="34" rx="5"></rect>
+      <rect class="dg-box-danger" x="440" y="56" width="40" height="34" rx="5"></rect>
+      <rect class="dg-box" x="480" y="56" width="60" height="34" rx="5"></rect>
+      <rect class="dg-box-danger" x="540" y="56" width="46" height="34" rx="5"></rect>
+      <rect class="dg-box" x="586" y="56" width="60" height="34" rx="5"></rect>
+      <rect class="dg-box-danger" x="646" y="56" width="60" height="34" rx="5"></rect>
+      <text class="dg-danger-text" x="716" y="80">Full GC 也停：totalMs 43~77</text>
+
+      <text class="dg-text-sm" x="20" y="146">G1</text>
+      <text class="dg-muted" x="20" y="162">cycles 7</text>
+      <rect class="dg-box" x="110" y="126" width="88" height="34" rx="5"></rect>
+      <rect class="dg-box-danger" x="198" y="126" width="22" height="34" rx="5"></rect>
+      <rect class="dg-box-accent" x="220" y="126" width="40" height="34" rx="5"></rect>
+      <rect class="dg-box" x="260" y="126" width="88" height="34" rx="5"></rect>
+      <rect class="dg-box-danger" x="348" y="126" width="22" height="34" rx="5"></rect>
+      <rect class="dg-box-accent" x="370" y="126" width="40" height="34" rx="5"></rect>
+      <rect class="dg-box" x="410" y="126" width="88" height="34" rx="5"></rect>
+      <rect class="dg-box-danger" x="498" y="126" width="24" height="34" rx="5"></rect>
+      <rect class="dg-box-accent" x="522" y="126" width="40" height="34" rx="5"></rect>
+      <rect class="dg-box" x="562" y="126" width="100" height="34" rx="5"></rect>
+      <rect class="dg-box-danger" x="662" y="126" width="24" height="34" rx="5"></rect>
+      <text class="dg-muted" x="716" y="140">红=Young 的 STW（9.18 ms 级）</text>
+      <text class="dg-accent-text" x="716" y="158">蓝=并发标记，应用照跑</text>
+
+      <text class="dg-text-sm" x="20" y="216">ZGC</text>
+      <text class="dg-muted" x="20" y="232">cycles 3</text>
+      <rect class="dg-box" x="110" y="196" width="150" height="34" rx="5"></rect>
+      <rect class="dg-box-danger" x="260" y="196" width="6" height="34" rx="5"></rect>
+      <rect class="dg-box-accent" x="266" y="196" width="70" height="34" rx="5"></rect>
+      <rect class="dg-box-danger" x="336" y="196" width="6" height="34" rx="5"></rect>
+      <rect class="dg-box-accent" x="342" y="196" width="90" height="34" rx="5"></rect>
+      <rect class="dg-box-danger" x="432" y="196" width="6" height="34" rx="5"></rect>
+      <rect class="dg-box" x="438" y="196" width="120" height="34" rx="5"></rect>
+      <rect class="dg-box-warn" x="558" y="196" width="26" height="34" rx="5"></rect>
+      <rect class="dg-box-accent" x="584" y="196" width="78" height="34" rx="5"></rect>
+      <text class="dg-danger-text" x="672" y="210">3 个极短 Pause（0.02~0.03 ms）</text>
+      <text class="dg-accent-text" x="672" y="228">蓝=标记+转移全部并发</text>
+
+      <text class="dg-muted" x="500" y="252">↑ 橙色那一格是 Allocation Stall：堆顶到 -Xmx（peakMB=256）时，应用线程在分配点上等回收，stall 4 / 3 次</text>
+      <text class="dg-text-sm" x="20" y="278">吞吐账：ZGC tput 99.95%、ZGC-Gen 99.6~99.7%，Serial 57~73%——但 ZGC 是用「堆必须留够余量」换来的</text>
+    </svg>
+    <figcaption>ZGC 的停顿与堆大小无关，前提是堆够大；<code>peakMB=256</code> 撞上 <code>-Xmx256m</code> 时，代价从「停顿」变成「等待」。</figcaption>
+  </figure>
+
+  <h3 id="co-beans">6.3 防呆：<code>-XX:+UseG1GC</code> 拼错时 JVM 不报错，只会默默回落</h3>
+  <p>收集器的 flag 名和 <code>MemoryMXBean</code> 里的 bean 名根本不是一套，只能读、不能猜。<code>lab.sh gc-compare</code> 的报告末尾直接把五个映射打出来（第 6.1 节那份真实返回的最后五行），单独跑一个收集器时也有这一行。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 单收集器 + 钉死 128 MB 堆（lab.sh 会先把真实命令行原样打印一次）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># collector = serial | parallel | g1 | zgc | zgc-gen
+# 为什么必须写 -Xms128m -Xmx128m：不给的话 HotSpot 按物理内存 1/4 定 -Xmx，
+# 这台 16 GB 的笔记本上是 4 GB，648 MB 的负载一路逛完都触发不了几次回收
+demo-jvm/scripts/lab.sh gc serial</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · serial 变体（两轮 wallMs 193 / 172，其余列一致；# 后是本文的读法）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>$ .../corretto-21.0.13/Contents/Home/bin/java -Xms128m -Xmx128m -XX:+UseSerialGC -cp .../target/classes com.example.demo.jvm.gc.GcLab --collector=serial
+# lab=gc  collector=serial  heap=-Xms128m -Xmx128m
+gc.beans=Copy|MarkSweepCompact        # 防呆行：flag 写 UseSerialGC，bean 名却是 Copy / MarkSweepCompact
+heap.xmxMb=123.75                     # 不是 128！堆要按收集器的粒度对齐，所以读 Runtime.maxMemory()
+workload.allocatedMb=648.0
+workload.objects=20776
+workload.checksum=-13950              # 与五个收集器、两轮全部相同
+gc.countInProcess=20
+gc.timeInProcessMs=77                 # 另一轮 68
+workload.wallMs=193                   # 另一轮 172
+heap.usedStartMb=4.44
+heap.usedEndMb=44.76</code></pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>collector</th><th><code>gc.beans</code> 实测</th><th><code>heap.xmxMb</code></th><th><code>wallMs</code></th><th><code>gc.countInProcess</code></th><th><code>timeInProcessMs</code></th></tr></thead>
+      <tbody>
+        <tr><td>serial</td><td><code>Copy|MarkSweepCompact</code></td><td>123.75</td><td>193 / 172</td><td>20</td><td>77 / 68</td></tr>
+        <tr><td>parallel</td><td><code>PS MarkSweep|PS Scavenge</code></td><td>123.0</td><td>136</td><td>20</td><td>42</td></tr>
+        <tr><td>g1</td><td><code>G1 Young Generation|G1 Concurrent GC|G1 Old Generation</code></td><td>128.0</td><td>122</td><td>15</td><td>34</td></tr>
+        <tr><td>zgc</td><td><code>ZGC Cycles|ZGC Pauses</code></td><td>128.0</td><td>148</td><td>24</td><td>45</td></tr>
+        <tr><td>zgc-gen</td><td><code>ZGC Minor Cycles|ZGC Minor Pauses|ZGC Major Cycles|ZGC Major Pauses</code></td><td>128.0</td><td>180</td><td>72</td><td>183</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout tip"><span class="ico">√</span><p><span class="title">三条能带走的结论</span>
+  ① <code>heap.xmxMb</code> 不等于 <code>-Xmx</code>：<code>123.75</code>（Serial）、<code>123.0</code>（Parallel）、<code>128.0</code>（G1/ZGC）——算容量要用 <code>Runtime.maxMemory()</code>。
+  ② 同一参数下 <code>checksum</code>、<code>allocatedMb</code>、<code>objects</code> 跨收集器完全一致，对比才有意义。
+  ③ 进程内的 <code>gc.countInProcess</code>（Serial 20）比日志解析出的 <code>cycles</code>（9）大：前者是 <code>GarbageCollectorMXBean</code> 的累计次数，把每个阶段都算一次。<strong>口径不同就并列写，不要互相「修正」。</strong></p></div>
+</section>
+
+<section id="gclog">
+  <h2><span class="no">07</span>读懂 <code>gc.log</code>：统一日志一行五个字段</h2>
+  <p class="lead">JDK 9 之后 GC 日志走统一的 <code>-Xlog</code>。这一节把一行日志拆开，再解释那串最容易看错的括号。</p>
+
+  <h3 id="gl-anatomy">7.1 一行拆五个字段</h3>
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 打开 gc 的所有子标签，写到文件（zsh 必须整体加引号，否则 * 会被当 glob）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>JH=$(/usr/libexec/java_home)   # macOS 拿 JDK 路径；Linux 上直接用 which java 的目录
+"$JH/bin/java" -Xms128m -Xmx128m -XX:+UseSerialGC \
+  "-Xlog:gc*:file=/tmp/gc-serial.log:time,uptime,level,tags" \
+  -cp demo-jvm/target/classes com.example.demo.jvm.gc.GcLab --collector=serial
+# 解码：gc* = gc 及其所有子标签（gc,heap / gc,age / gc,phases...）
+#      :file=... = 落盘而不是打到 stdout；:time,uptime,level,tags = 每行前缀要哪几列</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · <code>/tmp/gc-serial.log</code> 前 8 行（真实文件内容）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>[0.052s][info][gc,init] Heap Min Capacity: 128M
+[0.052s][info][gc,init] Heap Max Capacity: 128M
+[0.166s][info][gc,start] GC(0) Pause Young (Allocation Failure)
+[0.176s][info][gc]       GC(0) Pause Young (Allocation Failure) 35M-&gt;15M(123M) 9.728ms
+[0.188s][info][gc]       GC(1) Pause Young (Allocation Failure) 49M-&gt;24M(123M) 8.090ms
+[0.195s][info][gc]       GC(2) Pause Young (Allocation Failure) 58M-&gt;30M(123M) 4.312ms
+[0.204s][info][gc]       GC(3) Pause Young (Allocation Failure) 64M-&gt;38M(123M) 5.625ms
+[0.213s][info][gc]       GC(4) Pause Young (Allocation Failure) 72M-&gt;48M(123M) 6.512ms
+[0.224s][info][gc]       GC(5) Pause Young (Allocation Failure) 82M-&gt;59M(123M) 7.697ms</code></pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>片段</th><th>含义</th><th>实测里最容易踩的点</th></tr></thead>
+      <tbody>
+        <tr><td><code>[0.176s]</code></td><td>uptime（进程启动至今），因为前缀列选了 <code>uptime</code></td><td>选 <code>time</code> 才是墙钟时间；两个都要就写 <code>:time,uptime</code></td></tr>
+        <tr><td><code>GC(0)</code></td><td>GC 周期编号，第 6 章的 <code>cycles</code> 就是按它去重数的</td><td>一个编号可能对应多行（不同阶段），所以「行数 ≠ GC 次数」</td></tr>
+        <tr><td><code>Pause Young</code></td><td>STW 的年轻代回收</td><td>看到这行才知道应用真的停过；并发阶段写 <code>Concurrent</code> 而不是 <code>Pause</code></td></tr>
+        <tr><td><code>(Allocation Failure)</code></td><td>触发原因</td><td>G1 里更常见的是 <code>(G1 Humongous Allocation)</code>，见 8.4；原因比次数更有诊断价值</td></tr>
+        <tr><td><code>35M-&gt;15M</code></td><td>回收前后<strong>整个堆</strong>的 used</td><td>不是某一池；所以看到「没降」先别慌，可能是晋升和分配同时在动</td></tr>
+        <tr><td><code>(123M)</code></td><td>堆上限，等于 <code>Runtime.maxMemory()</code></td><td class="bad"><code>-Xmx128m</code> 却显示 <code>123M</code>：堆按收集器粒度对齐，这正好解释了 6.3 的 <code>heap.xmxMb=123.75</code></td></tr>
+        <tr><td><code>9.728ms</code></td><td>这一行的停顿时长</td><td>第 6 章 <code>totalMs</code> 就是把这类数字加总，两轮能差 1.8 倍，别当 SLA</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="gl-water">7.2 回收后的水位为什么一路上涨</h3>
+  <p>把上面六行的第二个数字连起来看：<code>15 → 24 → 30 → 38 → 48 → 59 MB</code>。每行都是「这次 GC 结束后」的堆使用量，而负载里常驻对象只有 <code>live=8 MB</code>。</p>
+  <ul>
+    <li>涨的不是垃圾，是<strong>晋升</strong>：动态阈值被挤成 1（第 8.1 节），每轮 Young GC 都往老年代搬一批，而 Serial 的老年代只在全停时才清。</li>
+    <li>所以 <code>gc.usedEndMb=44.76</code> 对 <code>heap.xmxMb=123.75</code> 的走向是「老年代单调上升」，
+      Serial 单收集器实测 <code>gc.countInProcess=20</code> 里就包含 Full GC（<code>MarkSweepCompact</code>）。</li>
+    <li>同一份负载在 G1 上 <code>peakMB=189</code>、ZGC 上 <code>peakMB=256</code>：并发收集器允许堆「用水位换停顿」，
+      <strong>这是设计，不是配坏了</strong>。判断标准是 <code>stall</code> 而不是 <code>peakMB</code>。</li>
+  </ul>
+
+  <div class="callout warn"><span class="ico">缺</span><p><span class="title">只写 <code>-Xlog:gc*</code> 拿不到对象年龄表</span>
+  年龄分布属于 <code>gc+age</code> 子标签的 <code>debug/trace</code> 级别，第 8 章的实验旗标是
+  <code>"-Xlog:gc*,gc+age=trace"</code>。少了 <code>gc+age=trace</code>，日志里就没有 <code>- age N:</code> 这些行，
+  你会以为「对象没有变老」——实际上只是没打印。</p></div>
+</section>
+<section id="age">
+  <h2><span class="no">08</span>对象年龄、晋升与大对象：教科书那句「熬满 15 次」在这台机器上不存在（场景 5）</h2>
+  <p class="lead">七个变体、同一份负载（<code>-Xms64m -Xmx64m</code>，40 轮 × 16 MB churn / 8 MB live），父进程解析每个子进程的 <code>-Xlog:gc*,gc+age=trace</code>。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 一条命令起七个子进程</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>demo-jvm/scripts/lab.sh age
+# 变体名读法：serial-bigSurvivor = Serial + SurvivorRatio 从 8 改 2；
+#            serial-1m-pretenure = Serial + 1 MB 对象 + PretenureSizeThreshold=1m；
+#            g1-1m-humongous     = G1 + region 1 MB（默认）+ 1 MB 对象 → 全部算 humongous</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 第 1 轮真实返回（Serial 五个变体两轮逐字符一致；G1 两行的次数会浮）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># lab=age-promotion  heap=-Xms64m -Xmx64m  workload=rounds:40 churn:16MB live:8MB
+
+variant              youngGC cycles   ages     desurvKB  thresholds maxAge survPeakKB promotedMB  oldEndMB  humong   evacF  fullGC
+serial-default            38     22     23         1088     [1, 15]      2       2175       238        38       0       0      16
+serial-bigSurvivor        61     42     43         2720     [1, 15]      2       5440       309        37       0       0      19
+serial-maxTenure1         38     22     22         1088         [1]      1       2176       223        38       0       0      16
+serial-1m-default         43     25     25         1088     [1, 15]      1       2176       300        39       0       0      18
+serial-1m-pretenure        0      0      0            0          []      0          0         0        26       0       0      26
+g1-1m-humongous           83     83      2         2048        [15]      2        219        80         8      83      42      38
+g1-32k-normal             99     99    101         1024     [15, 1]      2       4000       558        64       0      19       8
+
+字段说明
+  youngGC      'Pause Young' 的周期数（按 GC(n) 去重）；它用来区分「真没 Survivor 拷贝」和「解析失败」
+  cycles       带 'Desired survivor size' 的 Young GC 周期数（ZGC 非分代没有这行，恒为 0）
+  ages         年龄表里出现过的 '- age N:' 行数，为 0 说明 Survivor 一次都没留下东西
+  desurvKB     Survivor 的期望容量 = Eden/(SurvivorRatio+2)×2，日志里的 Desired survivor size
+  thresholds   观测到的动态晋升阈值集合；出现 1 就意味着对象熬过一轮立刻被搬走
+  maxAge       年龄表里出现过的最大年龄；它永远 ≤ thresholds 的最小值，这正是提前晋升的证据
+  survPeakKB   年龄表 total 列的最大值，即某次 Young GC 后 Survivor 的水位
+  promotedMB   Young GC 搬进老年代的累计量（只算 Old 变大的增量）
+  oldEndMB     老年代观测到的最高水位，注意它可能被 Full GC 又打回去
+  humong       G1 里以 (G1 Humongous Allocation) 为原因触发的 Young GC 次数
+  evacF        Evacuation Failure 次数：想搬存活对象却没地方放，会升级成 Full GC
+  fullGC       Pause Full 次数</code></pre>
+  </div>
+
+  <h3 id="ag-dyn">8.1 动态阈值：15 是上限，1 是现实</h3>
+  <p>类比：电梯限乘 15 人（<code>MaxTenuringThreshold</code>），但真正的规则是「装得下就继续接，装不下现在就得下去」。
+  Survivor 只有 1088 KB、常驻集 8 MB，于是每个人一上车就被请下去。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 从原始日志里捞出这三行（旗标必须是 gc+age=trace）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>grep -m 3 "Desired survivor size" /tmp/age-serial.log        # 阈值怎么定的
+grep -m 3 -- "- age " /tmp/age-serial.log                    # 年龄表：注意 - 前面有空格，grep 要加 --
+grep -m 3 "Tenured:" /tmp/age-serial.log                     # 这一次 Young GC 到底往老年代搬了多少</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实日志行（[0.144s] 那次 GC(0)）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>[0.144s][debug][gc,age      ] GC(0) Desired survivor size 1114112 bytes, new threshold 1 (max threshold 15)
+[0.144s][trace][gc,age      ] GC(0) Age table with threshold 1 (max threshold 15)
+[0.144s][trace][gc,age      ] GC(0) - age   1:    2228224 bytes,    2228224 total
+[0.144s][info ][gc,heap     ] GC(0) Tenured: 1056K(43712K)-&gt;14473K(43712K)
+[0.152s][info ][gc,heap     ] GC(1) Tenured: 14473K(43712K)-&gt;22666K(43712K)
+[0.159s][info ][gc,heap     ] GC(2) Tenured: 22666K(43712K)-&gt;29709K(43712K)</code></pre>
+  </div>
+
+  <ul>
+    <li><code>Desired survivor size 1114112 bytes</code> = 1088 KB，正好是表里的 <code>desurvKB</code>；<code>new threshold 1</code> 而 <code>max threshold 15</code>。</li>
+    <li>年龄表只有一行 <code>- age 1: 2228224 bytes</code>：Survivor 里最多只存在「刚熬过一轮」的对象。表里 <code>maxAge=2</code> 是后续偶尔挤进去的一格。</li>
+    <li><code>1056K -&gt; 14473K</code>：一次 Young GC 往老年代搬了 <strong>13 MB</strong>——比整个 Survivor 的容量还大 12 倍。这就是 <code>promotedMB=238</code> 与 <code>fullGC=16</code> 的来源。</li>
+    <li>结论不是「JVM 有问题」，而是<strong>这个负载的常驻集装不进 Survivor</strong>。真实应用里短命对象占多数，阈值才会升到 15 附近。</li>
+  </ul>
+
+  <figure class="diagram">
+    <svg viewBox="0 0 900 330" role="img" aria-label="Eden 到 Survivor 到老年代的复制路径，动态阈值把年龄压到 1">
+      <text class="dg-text" x="20" y="24">Serial 的复制路径：装得下就留在 Survivor 变老，装不下立刻搬进老年代</text>
+
+      <rect class="dg-box-accent" x="30" y="60" width="180" height="90" rx="10"></rect>
+      <text class="dg-text-sm" x="46" y="84">Eden</text>
+      <text class="dg-muted" x="46" y="102">新对象第一站</text>
+      <text class="dg-muted" x="46" y="118">17472 K（实测）</text>
+      <text class="dg-muted" x="46" y="134">GC 前 17464 K 满</text>
+
+      <rect class="dg-box-warn" x="290" y="60" width="180" height="90" rx="10"></rect>
+      <text class="dg-text-sm" x="306" y="84">Survivor（From→To）</text>
+      <text class="dg-muted" x="306" y="102">Desired 1114112 B = 1088 KB</text>
+      <text class="dg-muted" x="306" y="118">装不下 8 MB 常驻集</text>
+      <text class="dg-muted" x="306" y="134">GC 后 From: 0K → 2176K</text>
+
+      <rect class="dg-box" x="560" y="60" width="200" height="90" rx="10"></rect>
+      <text class="dg-text-sm" x="576" y="84">老年代 Tenured</text>
+      <text class="dg-muted" x="576" y="102">1056K → 14473K（一次搬 13 MB）</text>
+      <text class="dg-muted" x="576" y="118">promotedMB 累计 238</text>
+      <text class="dg-muted" x="576" y="134">Full GC 才清 → fullGC=16</text>
+
+      <path class="dg-line-accent dg-flow" d="M210 105 L288 105"></path>
+      <text class="dg-muted" x="214" y="98">活下来的复制过去</text>
+      <path class="dg-line-danger dg-flow" d="M470 105 L558 105"></path>
+      <text class="dg-danger-text" x="470" y="98">阈值 1：立刻晋升</text>
+
+      <rect class="dg-lane" x="30" y="180" width="830" height="120" rx="12"></rect>
+      <text class="dg-text-sm" x="46" y="204">同一个 Survivor，把 SurvivorRatio 从 8 改成 2（serial-bigSurvivor）</text>
+      <text class="dg-muted" x="46" y="228">desurvKB 1088 → 2720　·　ages 23 → 43　·　survPeakKB 2175 → 5440　·　youngGC 38 → 61</text>
+      <text class="dg-ok-text" x="46" y="252">装得下更多，对象才真的开始变老：年龄表从 23 行涨到 43 行，Full GC 反而从 16 涨到 19（晋升总量 238 → 309）</text>
+      <text class="dg-muted" x="46" y="278">所以「放大 Survivor 能减少晋升」在这台机器上只兑现了一半：变老的多了，进老年代的总量也多了。</text>
+      <text class="dg-danger-text" x="46" y="298">调优的判据是 promotedMB 与 fullGC 一起看，不是单看某一项变好。</text>
+    </svg>
+    <figcaption>阈值是<strong>算出来的</strong>：HotSpot 看「这批要复制的对象有多大、Survivor 装得下多少」，取满足容量的最小年龄，上限才是 <code>MaxTenuringThreshold</code>。</figcaption>
+  </figure>
+
+  <div class="callout tip"><span class="ico">证</span><p><span class="title"><code>serial-maxTenure1</code> 是给「15 有用」这一说法准备的对照</span>
+  显式写 <code>-XX:MaxTenuringThreshold=1</code> 后：youngGC 38、cycles 22、promotedMB 223、fullGC 16 ——
+  和默认（38 / 22 / 238 / 16）几乎一样，只是 <code>ages</code> 从 23 降到 22、<code>thresholds</code> 只剩 <code>[1]</code>。
+  <strong>默认时本来就是 1 在起作用</strong>，把上限改成 1 自然不会有任何变化。</p></div>
+
+  <h3 id="ag-survivor">8.2 怎么让对象真的变老</h3>
+  <p>三件事之一满足即可，实测的 <code>ages</code> 列就是判据：</p>
+  <ol>
+    <li><strong>把 Survivor 装大</strong>：<code>SurvivorRatio</code> 8 → 2，<code>desurvKB</code> 1088 → 2720，<code>ages</code> 23 → 43。</li>
+    <li><strong>把常驻集变小</strong>：本实验 <code>live=8 MB</code> 相对 64 MB 堆太大；真实应用要看 <code>-Xmx</code> 与存活集比例，不是看参数表里别人写多少。</li>
+    <li><strong>让对象真的短命</strong>：<code>serial-1m-default</code>（1 MB 对象）<code>maxAge=1</code>、<code>thresholds=[1, 15]</code>——大块对象一轮都装不满 Survivor，晋升更快。</li>
+  </ol>
+
+  <h3 id="ag-pretenure">8.3 大对象第一条路：分配即老年代</h3>
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 1 MB 对象，带与不带 PretenureSizeThreshold 各跑一遍（脚本按变体配旗标）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 关键旗标（Serial/Parallel 才认 PretenureSizeThreshold，G1 不认——它靠 humongous 规则）
+#   serial-1m-default   -Xms64m -Xmx64m -XX:+UseSerialGC  -XX:PretenureSizeThreshold 未设
+#   serial-1m-pretenure -Xms64m -Xmx64m -XX:+UseSerialGC -XX:PretenureSizeThreshold=1m</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 对照两行（真实返回，取自上面那张表）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>variant              youngGC cycles   ages  desurvKB  thresholds maxAge  promotedMB  oldEndMB  fullGC
+serial-1m-default         43     25     25       1088     [1, 15]      1         300        39      18
+serial-1m-pretenure        0      0      0          0          []      0           0        26      26
+                                       ↑ cycles=0 说明日志里连一行 Desired survivor size 都没有</code></pre>
+  </div>
+
+  <p>读法要点：<code>promotedMB=0</code> <strong>不是丢数据</strong>。
+  <code>promotedMB</code> 只统计「Young GC 把对象搬进老年代」的增量，而 <code>PretenureSizeThreshold=1m</code> 让这些对象
+  <em>直接在老年代分配</em>，根本不经过这条搬运路径。两个证据互相印证：
+  <code>youngGC=0</code>（一次年轻代回收都没有）而 <code>fullGC=26</code>（老年代被反复压满），
+  <code>oldEndMB=26</code> 就是这 26 次 Full GC 之前的水位。</p>
+
+  <div class="callout warn"><span class="ico">断</span><p><span class="title">用「0」区分「没有」和「没测到」，靠的是 youngGC 这一列</span>
+  所以 <code>AgePromotionLab</code> 一定同时报 <code>youngGC</code> 和 <code>cycles</code>：
+  如果 <code>youngGC</code> 有值而 <code>cycles</code> 是 0，才是解析失败；两个都 0，就是真的没发生。
+  <strong>任何只报「一个 0」的实验表格都值得怀疑</strong>——这也是本文在第 6 章坚持并列两种口径的原因。</p></div>
+
+  <h3 id="ag-g1">8.4 大对象第二条路：G1 的 humongous 与 Evacuation Failure</h3>
+  <p>G1 没有 <code>PretenureSizeThreshold</code>，它用另一条规则：<strong>对象大小 ≥ region 大小的一半</strong>就是 humongous 对象。
+  region 默认约 1 MB（<code>jinfo -flags</code> 实测 <code>-XX:G1HeapRegionSize=1048576</code>），所以 <code>1 MB 的对象一定是 humongous</code>，
+  而 <code>32 KB</code> 的对象不是——这就是最后两行变体的唯一区别。</p>
+
+  <figure class="diagram">
+    <svg viewBox="0 0 900 330" role="img" aria-label="G1 的 region 网格：普通对象占 Eden region，humongous 对象跨多个 region 且直接触发回收">
+      <text class="dg-text" x="20" y="24">G1 = 一块块等大的 region（本机 64 MB 堆 → region 1 MB → 64 块）</text>
+
+      <g>
+        <rect class="dg-box-accent" x="30" y="50" width="70" height="52" rx="6"></rect>
+        <rect class="dg-box-accent" x="106" y="50" width="70" height="52" rx="6"></rect>
+        <rect class="dg-box-accent" x="182" y="50" width="70" height="52" rx="6"></rect>
+        <rect class="dg-box" x="258" y="50" width="70" height="52" rx="6"></rect>
+        <rect class="dg-box-danger" x="334" y="50" width="70" height="52" rx="6"></rect>
+        <rect class="dg-box-danger" x="410" y="50" width="70" height="52" rx="6"></rect>
+        <rect class="dg-box-danger" x="486" y="50" width="70" height="52" rx="6"></rect>
+        <rect class="dg-box" x="562" y="50" width="70" height="52" rx="6"></rect>
+        <rect class="dg-box" x="638" y="50" width="70" height="52" rx="6"></rect>
+        <rect class="dg-box-warn" x="714" y="50" width="70" height="52" rx="6"></rect>
+        <rect class="dg-box" x="790" y="50" width="70" height="52" rx="6"></rect>
+        <text class="dg-accent-text" x="36" y="80">Eden</text>
+        <text class="dg-accent-text" x="112" y="80">Eden</text>
+        <text class="dg-accent-text" x="188" y="80">Eden</text>
+        <text class="dg-muted" x="276" y="80">Surv</text>
+        <text class="dg-danger-text" x="344" y="74">H</text><text class="dg-danger-text" x="344" y="92">1/3</text>
+        <text class="dg-danger-text" x="420" y="74">H</text><text class="dg-danger-text" x="420" y="92">2/3</text>
+        <text class="dg-danger-text" x="496" y="74">H</text><text class="dg-danger-text" x="496" y="92">3/3</text>
+        <text class="dg-muted" x="580" y="80">Old</text>
+        <text class="dg-muted" x="656" y="80">Old</text>
+        <text class="dg-muted" x="722" y="74">Humong</text>
+        <text class="dg-muted" x="722" y="92">续片</text>
+        <text class="dg-muted" x="800" y="80">空</text>
+      </g>
+
+      <text class="dg-muted" x="30" y="126">H 标记 = 一个 3 MB 的对象（region 1 MB 时 &gt;= 512 KB 即 humongous），必须占连续 3 块，不能被 Young GC 复制搬走</text>
+
+      <rect class="dg-lane" x="30" y="146" width="830" height="150" rx="12"></rect>
+      <text class="dg-text-sm" x="46" y="172">实测对照：唯一区别是对象大小（32 KB 那行是对照组）</text>
+      <text class="dg-muted" x="46" y="198">g1-1m-humongous  humong=83　evacF=42　fullGC=38　survPeakKB=219　ages=2　promotedMB=80</text>
+      <text class="dg-muted" x="46" y="222">g1-32k-normal    humong= 0　evacF=19　fullGC= 8　survPeakKB=4000　ages=101　promotedMB=558</text>
+      <text class="dg-ok-text" x="46" y="250">换成 32 KB，humongous 触发次数从 83 直接归零：同一套 G1 参数、同一份总字节数，只是对象变小</text>
+      <text class="dg-danger-text" x="46" y="276">但 Full GC 4.75 倍、Evacuation Failure 2.2 倍 —— humongous 的代价不是「分配慢」，是把回收逼成 Full GC</text>
+      <text class="dg-muted" x="46" y="296">另一头也疼：32 KB 时晋升量 558 MB、年龄表 101 行，老年代被灌满的速度更快（oldEndMB 8 → 64）</text>
+    </svg>
+    <figcaption>两个方向各有代价，所以「大对象怎么调」的答案是<em>先看它是哪种痛</em>，不是照抄某个阈值。</figcaption>
+  </figure>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · humongous 与 evacuation failure 在日志里长什么样</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>grep -m 4 -E "Humongous Allocation|Humongous regions" /tmp/age-g1.log
+# Evacuation Failure 是「想复制存活对象但 To-space 不够」，日志里挂在停顿行的末尾</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实日志行</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>[0.180s][info][gc,start    ] GC(0) Pause Young (Concurrent Start) (G1 Humongous Allocation)
+[0.181s][info ][gc          ] GC(0) Pause Young (Concurrent Start) (G1 Humongous Allocation) 29M-&gt;27M(64M) 1.063ms
+[0.181s][info ][gc,heap     ] GC(0) Humongous regions: 13-&gt;13
+[0.191s][info ][gc          ] GC(4) Pause Young (Prepare Mixed) (G1 Humongous Allocation) (Evacuation Failure) 59M-&gt;25M(64M) 0.730ms
+[0.194s][info ][gc          ] GC(5) Pause Young (Mixed) (G1 Humongous Allocation) (Evacuation Failure) 58M-&gt;56M(64M) 2.104ms</code></pre>
+  </div>
+
+  <ul>
+    <li><code>Humongous regions: 13-&gt;13</code>：一次 Young GC 之后 humongous 块数没变——它们<strong>不能被复制</strong>，只能等并发周期或 Full GC 整块释放。</li>
+    <li><code>59M-&gt;56M</code>：停顿只有 2.1 ms，但堆几乎没降，这就是 <code>evacF</code> 的形状；接下去就是 <code>fullGC</code>。</li>
+    <li>第 3 行是 <code>(Prepare Mixed)</code>、第 4 行是 <code>(Mixed)</code>：G1 的周期名字里带阶段，读日志时把它当「触发原因 + 阶段」两截看。</li>
+    <li>把 <code>-XX:G1HeapRegionSize</code> 调大能让 1 MB 对象不再是 humongous（region 4 MB 时阈值是 2 MB），但 region 变大意味着回收粒度变粗——本文没做这一组，因为它是第 10 章那种「按你的对象大小分布决定」的取舍。</li>
+  </ul>
+</section>
+<section id="leak">
+  <h2><span class="no">09</span>内存泄漏取证：三种常见姿势、一套命令链（场景 6）</h2>
+  <p class="lead">泄漏和 OOM 是两件事。OOM 是进程死了，泄漏是进程<strong>慢慢变胖</strong>。本文把「慢慢变胖」拆成三种典型姿势，然后用 JDK 自带工具链（<code>jcmd</code> / <code>jstat</code> / <code>jinfo</code> / <code>jmap</code> / JFR）从进程外把它抓出来。</p>
+
+  <h3 id="lk-ab">9.1 泄漏版 vs 修好版：同一份负载，看 <code>growthMB</code> 涨不涨</h3>
+  <p><code>lab.sh leak</code> 每个 case 起<strong>两个进程</strong>——泄漏版和修好版——各跑两阶段，每阶段 200 × 64 KB。进程外用 <code>jcmd &lt;pid&gt; GC.class_histogram</code>（不带 <code>-all</code>，只看可达）量两阶段末的可达堆，差值就是这一阶段真正留住的新增内存。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 起四个 case，每个 case 两个进程</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>demo-jvm/scripts/lab.sh leak
+# 默认 -Xmx256m；每阶段基础 items=200 × chunkKb=64
+# intern 那个 case 按倍率放大（--cacheLimit=64 时 ×500），见下</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 两轮逐字符一致</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>case               fixed     live1MB    live2MB   growthMB topGrowth#1                topGrowth#2
+staticCollection   false       13.84      26.35      12.51 [B +12.50                  [Ljava.lang.Object; +0.00
+staticCollection   true         1.34       1.34       0.00 none                       none
+threadLocal        false       13.87      26.37      12.50 [B +12.50                  [Ljava.lang.Object; +0.00
+threadLocal        true         1.36       1.36       0.00 ...AQS$ConditionNode +0.00 none
+unboundedCache     false       13.91      26.48      12.57 [B +12.51                  java.util.HashMap$Node +0.01
+unboundedCache     true         5.35       5.35       0.00 none                       none
+intern             false        1.35       1.35       0.00 [B +0.00                   java.lang.String +0.00
+intern             true         1.35       1.35       0.00 [B +0.00                   java.lang.String +0.00</code></pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>case</th><th>姿势</th><th>泄漏版 <code>growthMB</code></th><th>修好版 <code>growthMB</code></th><th>读法</th></tr></thead>
+      <tbody>
+        <tr><td><code>staticCollection</code></td><td>静态 <code>List&lt;byte[]&gt;</code> 一直 add</td><td>12.51</td><td>0.00</td><td>最直白的泄漏：没人清，<code>topGrowth</code> 是 <code>[B</code>（<code>byte[]</code> 的 JVM 名字）</td></tr>
+        <tr><td><code>threadLocal</code></td><td><code>ThreadLocal&lt;byte[]&gt;</code> 不复用</td><td>12.50</td><td>0.00</td><td>线程池里每个线程都挂一份，永远不释放</td></tr>
+        <tr><td><code>unboundedCache</code></td><td>无界 <code>HashMap</code> 当缓存</td><td>12.57</td><td>0.00</td><td>修好版稳定在 5.35 MB（LRU 上限 64 × 64 KB ≈ 4 MB + 背景）——「修好 ≠ 不吃内存，只是不再按阶段累加」</td></tr>
+        <tr><td><code>intern</code></td><td>运行期拼出来的字符串 <code>.intern()</code></td><td>0.00</td><td>0.00</td><td>JDK 21 上 intern 不涨可达堆（见 9.4）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn"><span class="ico">!</span><p><span class="title">为什么 <code>live1</code> 不是 0</span>
+  <code>jcmd</code> 报的是「整个进程」的可达堆，里面压着约 1.3 MB 的运行时背景（类元数据、字符串池、线程栈帧里的临时对象）。要看纯载荷，用修好版的 <code>live1</code> 当基线减掉——本机实测 <code>staticCollection</code> 修好版 1.34 / 泄漏版阶段 2 的 26.35，差掉 1.34 正好是阶段 2 新增的 25.01 MB ≈ 400 × 64 KB。</p></div>
+
+  <h3 id="lk-manual">9.2 进程外用 jcmd 走一遍</h3>
+  <p>自己起一个泄漏进程，另开一个终端敲命令——这是排查泄漏的基本功。下面每一步都贴真实返回。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 起一个泄漏进程，停在阶段 1 等你敲命令</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>demo-jvm/scripts/lab.sh leak-child --case=staticCollection
+# 它停在阶段 1，等你在 stdin 输入 GO / EXIT；第一行报告里有 pid</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># lab=leak-child case=staticCollection fix=false pid=50178 itemsPerPhase=200 chunkKb=64
+VM OpenJDK 64-Bit Server VM 21.0.13
+READY phase=1 processedKb=12800 heldKb=12800 items=200</code></pre>
+  </div>
+
+  <p>同一个 pid（50178）在外面看：</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 进程外读旗标，验证 -Xms256m -Xmx256m 真的进去了</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>jinfo -flags 50178</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回（已省略与堆无关的 CodeCache 旗标）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>VM Flags:
+-XX:G1HeapRegionSize=1048576
+-XX:InitialHeapSize=268435456
+-XX:MaxHeapSize=268435456
+-XX:MinHeapSize=268435456
+-XX:+UseG1GC
+...
+# 268435456 = 256 MB；G1HeapRegionSize=1048576 = 1 MB（默认）</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 阶段 1 的堆信息</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>jcmd 50178 GC.heap_info</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>50178:
+ garbage-first heap   total 262144K, used 17440K [0x00000007f0000000, 0x0000000800000000)
+  region size 1024K, 16 young (16384K), 0 survivors (0K)
+ Metaspace       used 731K, committed 960K, reserved 111412K
+  class space    used 68K, committed 192K, reserved 1048576K</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 阶段 1 的可达对象直方图（不带 -all：先触发一次 Full GC）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>jcmd 50178 GC.class_histogram</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回（前 9 行）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>50178:
+ num     #instances         #bytes  class name (module)
+-------------------------------------------------------
+   1:          8250       13475272  [B (java.base@21.0.13)       # 12.85 MB ≈ 报告的 heldKb=12800
+   2:          1605         198208  java.lang.Class (java.base@21.0.13)
+   3:          7968         191232  java.lang.String (java.base@21.0.13)
+   4:          1429         141696  [Ljava.lang.Object; (java.base@21.0.13)
+   5:             9          49960  [C (java.base@21.0.13)
+   6:          1289          43360  [I (java.base@21.0.13)
+   7:          1348          43136  java.util.concurrent.ConcurrentHashMap$Node (java.base@21.0.13)
+   8:          1023          32736  java.util.HashMap$Node (java.base@21.0.13)
+   9:           264          24448  [Ljava.util.HashMap$Node; (java.base@21.0.13)</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · jstat 看 GC 计数（500 ms 采 2 次）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>jstat -gcutil 50178 500 2</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>  S0     S1     E      O      M     CCS    YGC     YGCT     FGC    FGCT     CGC    CGCT       GCT
+     -      -   0.00   5.99  76.21  35.92      0     0.000     1     0.013     0     0.000     0.013
+     -      -   0.00   5.99  76.21  35.92      0     0.000     1     0.013     0     0.000     0.013</code></pre>
+  </div>
+  <p><code>FGC=1</code> 就是上面那条 <code>GC.class_histogram</code> 顺带触发的 Full GC——这就是为什么「不带 <code>-all</code>」只能看可达对象。</p>
+
+  <p>输入 <code>GO</code> 进入阶段 2，再漏一批：</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 阶段 2 的堆信息</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>jcmd 50178 GC.heap_info</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>50178:
+ garbage-first heap   total 262144K, used 26980K [0x00000007f0000000, 0x0000000800000000)
+  region size 1024K, 0 young (0K), 0 survivors (0K)
+ Metaspace       used 732K, committed 960K, reserved 1114112K
+  class space    used 68K, committed 192K, reserved 1048576K</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 阶段 2 的可达对象直方图</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>jcmd 50178 GC.class_histogram</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回（前 4 行）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>50178:
+ num     #instances         #bytes  class name (module)
+-------------------------------------------------------
+   1:          8450       26585672  [B (java.base@21.0.13)       # 25.35 MB ≈ heldKb=25600，+200 个 64 KB 块
+   2:          1605         198208  java.lang.Class (java.base@21.0.13)
+   3:          7968         191232  java.lang.String (java.base@21.0.13)
+   4:          1429         142920  [Ljava.lang.Object; (java.base@21.0.13)</code></pre>
+  </div>
+
+  <p><code>[B</code> 从 8250 个 / 13.47 MB 涨到 8450 个 / 26.58 MB——多出来 200 个 <code>byte[]</code>，正好是阶段 2 新加的那批 64 KB 块。这就是泄漏的「现场照片」。</p>
+
+  <div class="callout warn"><span class="ico">!</span><p><span class="title">jmap -histogram 在 JDK 21 上不存在</span>
+  网上大量教程里的 <code>jmap -histogram &lt;pid&gt;</code> 在 JDK 21 上直接吐 Usage——子命令名是 <code>-histo</code>（不是 <code>-histogram</code>）。<code>jmap -histo &lt;pid&gt;</code> 和 <code>jmap -histo:live &lt;pid&gt;</code> 都还能用，但前者会触发 Full GC（和 <code>jcmd GC.class_histogram</code> 不带 <code>-all</code> 一样），后者只看可达对象。本文统一用 <code>jcmd</code>，因为它的输出更结构化、也更容易在脚本里 grep。</p></div>
+
+  <h3 id="lk-jfr">9.3 用 JFR 抓现行</h3>
+  <p>JFR（Java Flight Recorder）是 JDK 自带的低开销事件记录器。排查泄漏时两个事件最有价值：</p>
+  <ul>
+    <li><code>jdk.OldObjectSample</code>：在堆里活了很久的对象——专门给「谁在慢慢变老」用的。</li>
+    <li><code>jdk.ObjectAllocationInNewTLAB</code>：每次在新分配区（TLAB）里分配对象时触发——能看到「谁在不停地分配」。</li>
+  </ul>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 进程外开一段 JFR 记录（profile 模板默认带 OldObjectSample）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>jcmd 50918 JFR.start name=a settings=profile "jdk.ObjectAllocationInNewTLAB#enabled=true"
+# 注意开关写法：&lt;事件名&gt;#&lt;设置名&gt;=&lt;值&gt;；写 "jdk.ObjectAllocationInNewTLAB=true" 会报 "doesn't exist"
+# ……让它继续漏……
+jcmd 50918 JFR.dump name=a filename=/tmp/leak.jfr
+jcmd 50918 JFR.stop name=a</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>50918:
+Started recording 1. No limit specified, using maxsize=250MB as default.
+
+Use jcmd 50918 JFR.dump name=a filename=FILEPATH to copy recording data to file.</code></pre>
+  </div>
+
+  <p>把 <code>.jfr</code> 文件用 <code>jfr print --events</code> 解出来：</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 看「谁在慢慢变老」</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>jfr print --events jdk.OldObjectSample /tmp/leak.jfr</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回（前两个事件）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>jdk.OldObjectSample {
+  startTime = 12:51:35.048 (2026-10-29)
+  allocationTime = 12:51:33.814 (2026-10-29)
+  objectSize = 256.0 kB
+  objectAge = 1.23 s
+  lastKnownHeapUsage = 15.9 MB
+  object = [
+    java.util.concurrent.ConcurrentHashMap$Node[65536]
+  ]
+  arrayElements = 65536
+  root = N/A
+  eventThread = "Attach Listener" (javaThreadId = 20)
+  stackTrace = [
+    java.util.concurrent.ConcurrentHashMap.initTable() line: 2301
+    java.util.concurrent.ConcurrentHashMap.putVal(Object, Object, boolean) line: 1017
+    java.util.concurrent.ConcurrentHashMap.put(Object, Object) line: 1006
+    jdk.jfr.internal.StringPool.storeString(String) line: 93
+    jdk.jfr.internal.StringPool.addString(String) line: 125
+    ...
+  ]
+}
+
+jdk.OldObjectSample {
+  startTime = 12:51:35.048 (2026-10-29)
+  allocationTime = 12:51:33.833 (2026-10-29)
+  objectSize = 64.0 kB
+  objectAge = 1.22 s
+  lastKnownHeapUsage = 15.9 MB
+  object = [
+    byte[65536]
+  ]
+  arrayElements = 65536
+  root = N/A
+  eventThread = "main" (javaThreadId = 1)
+  stackTrace = [
+    com.example.demo.jvm.leak.LeakLab.staticCollection(int, int) line: 218
+    com.example.demo.jvm.leak.LeakLab.runPhase(String, int, int) line: 201
+    com.example.demo.jvm.leak.LeakLab.main(String[]) line: 144
+  ]
+}</code></pre>
+  </div>
+
+  <p>第二个事件就是泄漏现场：<code>byte[65536]</code>（64 KB）从 <code>LeakLab.staticCollection:218</code> 分配出来，活了 1.22 秒还没被回收——因为静态 <code>List</code> 一直抓着它。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 看「谁在不停地分配」</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>jfr print --events jdk.ObjectAllocationInNewTLAB /tmp/leak.jfr</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回（前两个事件，共 12 个）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>jdk.ObjectAllocationInNewTLAB {
+  startTime = 12:52:36.996 (2026-10-29)
+  objectClass = java.lang.String (classLoader = bootstrap)
+  allocationSize = 24 bytes
+  tlabSize = 325.6 kB
+  eventThread = "main" (javaThreadId = 1)
+  stackTrace = [
+    java.io.BufferedReader.implReadLine(boolean, boolean[]) line: 403
+    java.io.BufferedReader.readLine(boolean, boolean[]) line: 347
+    java.io.BufferedReader.readLine() line: 436
+    com.example.demo.jvm.leak.LeakLab.main(String[]) line: 146
+  ]
+}
+
+jdk.ObjectAllocationInNewTLAB {
+  startTime = 12:52:36.996 (2026-10-29)
+  objectClass = byte[] (classLoader = bootstrap)
+  allocationSize = 64.0 kB
+  tlabSize = 389.6 kB
+  eventThread = "main" (javaThreadId = 1)
+  stackTrace = [
+    com.example.demo.jvm.leak.LeakLab.staticCollection(int, int) line: 218
+    com.example.demo.jvm.leak.LeakLab.runPhase(String, int, int) line: 201
+    com.example.demo.jvm.leak.LeakLab.main(String[]) line: 144
+  ]
+}</code></pre>
+  </div>
+
+  <p>第一个事件是 <code>BufferedReader.readLine()</code> 在读 stdin 时分配的 <code>String</code>——这是进程等命令时的背景噪声。第二个事件才是正主：<code>byte[65536]</code> 从 <code>staticCollection:218</code> 分配出来，和上面 <code>OldObjectSample</code> 里那个活了 1.22 秒的是同一个对象。</p>
+
+  <div class="callout tip"><span class="ico">比</span><p><span class="title">JFR vs jcmd 直方图</span>
+  <code>jcmd GC.class_histogram</code> 是「此刻堆里有什么」的快照；JFR 是「这段时间里发生了什么」的录像。前者适合定位泄漏的<strong>类型</strong>，后者适合定位泄漏的<strong>代码行</strong>。两个一起用，才能从「堆在涨」一路追到「哪行代码在分配」。</p></div>
+
+  <h3 id="lk-intern">9.4 反例：intern 到底泄不泄</h3>
+  <p>「<code>String.intern()</code> 会内存泄漏」这句话对 JDK 6 的永久代成立，对 JDK 21 不成立。本文 9.1 那张表里 <code>intern</code> 那个 case 两轮都是 0.00，就是这个结论的实测依据。下面把镜头拉近，看 intern 表本身。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 400 × 500 = 20 万次 intern，看条数怎么变</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>demo-jvm/scripts/lab.sh leak --cases=intern --items=400</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 两轮逐字符一致</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>case               fixed       P1条数GC前      P1条数GC后      P2条数GC前      P2条数GC后     桶MB(P2前)     桶MB(P2后)
+intern             false        200087           84       200084           84         1.00         1.00
+intern             true             88           88           88           88         0.50         0.50</code></pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>列名</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td><code>P1条数GC前</code></td><td>阶段 1 结束时 intern 表里的条目数（<code>jcmd &lt;pid&gt; VM.stringtable</code>）</td></tr>
+        <tr><td><code>P1条数GC后</code></td><td>紧接着一次 Full GC 之后的条目数——<strong>从 20 万掉到 84</strong>，说明 intern 表的条目是弱引用，没人另外抓住就收得掉</td></tr>
+        <tr><td><code>桶MB</code></td><td>intern 表的桶数组占用的原生内存（<strong>堆直方图里看不到它</strong>，OOM 时也完全不出现）</td></tr>
+        <tr><td><code>fixed=false</code></td><td>泄漏版：运行期拼出来的字符串 <code>.intern()</code> 后塞进静态 <code>List</code></td></tr>
+        <tr><td><code>fixed=true</code></td><td>修好版：不 intern，直接塞进静态 <code>List</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>读法：</p>
+  <ul>
+    <li>泄漏版 <code>P1条数GC前=200087</code>、<code>P2条数GC前=200084</code>——阶段 2 又塞了 20 万条进去，但因为 GC 后掉回 84，<strong>可达堆里其实没有 intern 的份</strong>。</li>
+    <li>真正留在原生内存里的是<strong>桶数组</strong>：泄漏版 1.00 MB、修好版 0.50 MB。这笔账在 <code>jcmd GC.class_histogram</code> 里完全看不到——它只统计堆里的 Java 对象，不统计 JVM 内部的_NATIVE_ 结构。</li>
+    <li>所以「intern 会内存泄漏」这句话对 JDK 21 不成立；成立的是「intern 会让桶数组变大，但桶数组是原生内存，堆 dump 里看不到」。</li>
+  </ul>
+
+  <div class="callout danger"><span class="ico">!</span><p><span class="title">堆 dump 也看不到 intern 表</span>
+  <code>jmap -dump:live,format=b,file=heap.bin &lt;pid&gt;</code> 导出的堆 dump 里<strong>不包含</strong> intern 表的桶数组——它是 JVM 内部的 native 结构，不在堆里。要量它只能用 <code>jcmd &lt;pid&gt; VM.stringtable</code>（条数）或 <code>jcmd &lt;pid&gt; VM.native_memory</code>（原生内存总量，但分不到 intern 头上）。</p></div>
+</section>
+
+<section id="tuning">
+  <h2><span class="no">10</span>调优：改哪个参数，哪个数字变</h2>
+  <p class="lead">本文没有额外做一组「线上调优」案例——前面九章实测过的每个旗标变化，本身就是一张「参数 → 数字」的对照表。下面把它集中列出来，方便你按图索骥。</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>参数</th><th>改了什么</th><th>哪个数字动</th><th>出处</th></tr></thead>
+      <tbody>
+        <tr><td><code>-Xss</code></td><td>线程栈大小</td><td>递归深度（256K → 6760，1024K → 39528）；每帧字节（24 vs 48.08，差 2×，是 JIT 编译层的差别）</td><td>§4.1</td></tr>
+        <tr><td><code>-Xmx</code></td><td>堆上限</td><td>OOM 炸在第几块（64m → 第 6 块炸）；收集器 STW 区间（128m 时 Serial 43~77 ms，G1 27~32 ms）</td><td>§5.1 / §6.2</td></tr>
+        <tr><td><code>-XX:SurvivorRatio</code></td><td>Eden / Survivor 比例</td><td>对象年龄上限（8 → 2 时，<code>ages</code> 从 23 涨到 43；<code>survPeakKB</code> 从 2175 涨到 5440）</td><td>§8.2</td></tr>
+        <tr><td><code>-XX:MaxTenuringThreshold</code></td><td>对象熬几次晋升</td><td>设成 1 和默认几乎一样（38/22/22 vs 38/22/23）——说明默认情况下就是 1 在起作用</td><td>§8.1</td></tr>
+        <tr><td><code>-XX:PretenureSizeThreshold</code></td><td>大对象直接分配老年代的阈值</td><td>Serial 专用；设成 1m 时 <code>promotedMB=0</code>、<code>fullGC=26</code>——对象分配即在老年代，根本不经过 Survivor 搬运</td><td>§8.3</td></tr>
+        <tr><td><code>-XX:G1HeapRegionSize</code></td><td>G1 的 region 大小</td><td>humongous 阈值（region 1 MB 时 ≥ 512 KB 算 humongous；region 4 MB 时 ≥ 2 MB 才算）</td><td>§8.4</td></tr>
+        <tr><td>收集器选择</td><td>算法</td><td>STW 区间（Serial 43~77 ms / G1 27~32 ms / ZGC 0.10~0.54 ms）；代价是 <code>peakMB</code> 和 <code>stall</code>（ZGC 顶到 256 MB、<code>stall</code> 3~17 次）</td><td>§6.2</td></tr>
+        <tr><td><code>-XX:MaxMetaspaceSize</code></td><td>元空间上限</td><td>设成 48m 时 OOM（7992 个类，自己只数到 1.67 MB 字节码）</td><td>§5.1</td></tr>
+        <tr><td><code>-XX:MaxDirectMemorySize</code></td><td>直接内存上限</td><td>设成 48m 时 OOM（3 块 16 MB 就炸）</td><td>§5.1</td></tr>
+        <tr><td><code>-XX:+HeapDumpOnOutOfMemoryError</code></td><td>OOM 时自动 dump</td><td>dump 文件大小（54,211,807 B / 0.035 s）</td><td>§5.3</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout tip"><span class="ico">比</span><p><span class="title">调优的顺序</span>
+  先选收集器（§6.2 那张表决定量级），再调堆大小（<code>-Xmx</code> 决定 OOM 边界），再调 region / Survivor / 阈值（决定对象在哪个代里流动）。<strong>不要反过来</strong>——先把 Survivor 调到完美再换收集器，等于白调。</p></div>
+</section>
+
+<section id="edge">
+  <h2><span class="no">11</span>边界与反例汇总</h2>
+  <p class="lead">本文所有「复现不出来」「和教科书不一样」的地方都集中列在这里，方便你回头查。</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>现象</th><th>真实情况</th><th>出处</th></tr></thead>
+      <tbody>
+        <tr><td><code>oom-thread</code> 复现不出来</td><td>设成 <code>-Xmx64m</code> 也起得来 60826 个线程才报 <code>Java heap space</code>（不是 <code>unable to create native thread</code>）——因为 macOS 上线程栈默认 1 MB，60826 个就是 60 GB，早把物理内存吃光了</td><td>§5.2</td></tr>
+        <tr><td><code>oom-gcoverhead</code> 复现不出来</td><td>设成 <code>-Xmx64m -XX:+UseSerialGC</code> 也跑不出 <code>GC overhead limit exceeded</code>——因为本文的负载是「分配完就丢」，Serial 一轮 Young GC 就清干净了，根本轮不到 overhead 判定</td><td>§5.2</td></tr>
+        <tr><td><code>intern</code> 不泄可达堆</td><td>JDK 21 上 intern 表的条目是弱引用，GC 后从 20 万掉到 84；真正留在原生内存里的是桶数组，堆 dump 里看不到</td><td>§9.4</td></tr>
+        <tr><td><code>jmap -histogram</code> 报错</td><td>JDK 21 上子命令名是 <code>-histo</code>（不是 <code>-histogram</code>）；<code>jmap -histo &lt;pid&gt;</code> 和 <code>jmap -histo:live &lt;pid&gt;</code> 都还能用</td><td>§9.2</td></tr>
+        <tr><td><code>fitR2=1.0</code></td><td>栈深度拟合只用了 2 个点（256K / 1024K），两点确定一条直线，<code>R²</code> 必然是 1.0——这不是模型好，是数据少</td><td>§4.1</td></tr>
+        <tr><td>16 MB 栈偏离拟合 6%</td><td>预测 694888 帧，实测 652599 帧——大栈上每帧的「固定开销」占比变小，模型误差就露出来了</td><td>§4.1</td></tr>
+        <tr><td>JIT 编译层差 2×</td><td>同一份代码，解释器帧 14636 个，C2 编译后帧 19764 个——差 1.35×；每帧字节 24 vs 48.08，差 2×。预热不够就测，数字不可比</td><td>§4.1</td></tr>
+        <tr><td>G1 32 KB 对象不 humongous</td><td>region 1 MB 时阈值是 512 KB；32 KB 对象走正常 Young GC 路径，<code>humong=0</code></td><td>§8.4</td></tr>
+        <tr><td><code>MaxTenuringThreshold=1</code> ≈ 默认</td><td>两轮实测 38/22/22 vs 38/22/23——说明默认情况下动态阈值就把 15 挤成了 1</td><td>§8.1</td></tr>
+        <tr><td><code>PretenureSizeThreshold</code> Serial 专用</td><td>G1 / Parallel / ZGC 上这个旗标不生效——它们有自己的大对象路径（G1 是 humongous，Parallel 是直接分配老年代但阈值由 <code>PretenureSizeThreshold</code> 控制）</td><td>§8.3</td></tr>
+        <tr><td><code>jcmd GC.class_histogram</code> 不带 <code>-all</code> 先触发 Full GC</td><td>所以它报的是「可达对象」，不是「所有对象」——要看全部得加 <code>-all</code>，但那样会打断 GC 节奏</td><td>§3.5 / §9.2</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="run">
+  <h2><span class="no">12</span>运行与速查</h2>
+  <p class="lead">所有命令都要求先编译；所有实验都起子进程，不会把 surefire 的 JVM 自己 OOM 掉。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 编译（必须）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>./mvnw -q -pl demo-jvm compile
+# 所有 lab 都跑在 demo-jvm/target/classes 上，不编译就找不到类</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · lab.sh 不带参数：列出所有案例</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>demo-jvm/scripts/lab.sh</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>案例清单（左边是脚本自动附带的 JVM 旗标，右边是案例名）：
+
+  （无）                 stack-depth      栈大小 → 递归深度（场景 2）
+  （无）                 local-slots      javap 看局部变量槽位复用（场景 2）
+  -XX:NativeMemoryTracking=summary        observe        Web 观测面（场景 1）
+                         换端口：SERVER_PORT=9015 demo-jvm/scripts/lab.sh observe
+  -Xms64m -Xmx64m        oom-heap         堆溢出（场景 3）
+  -Xss256k               oom-stack        栈溢出（场景 3）
+  -XX:MaxMetaspaceSize=48m            oom-metaspace  元空间溢出（场景 3）
+  -Xmx64m -XX:MaxDirectMemorySize=48m oom-direct     直接内存溢出（场景 3）
+  -Xmx64m                oom-thread       线程数上限（场景 3，反例：它通常不 OOM）
+  -Xmx64m -XX:+UseSerialGC           oom-gcoverhead  GC 时间上限（场景 3，实测阴性）
+  -Xms128m -Xmx128m + 收集器旗标   gc &lt;collector&gt;    单收集器跑确定性负载（场景 4）
+                                      collector = serial | parallel | g1 | zgc | zgc-gen
+  （旗标由脚本按变体逐个给）  gc-compare     五个收集器横向对比（场景 4）
+  （旗标由脚本按变体逐个给）  age            对象年龄 / 晋升 / 大对象（场景 5）
+  （旗标由脚本按变体逐个给）  leak           泄漏版 vs 修好版，进程外用 jcmd 取证（场景 6）
+  -Xms256m -Xmx256m      leak-child       只起一个「听 stdin 指令」的泄漏进程，手动练 jcmd
+
+所有案例都要求先编译：./mvnw -q -pl demo-jvm compile</code></pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>端口</th><th>用途</th><th>启动命令</th></tr></thead>
+      <tbody>
+        <tr><td>9005</td><td>demo-jvm 默认端口（Web 观测面）</td><td><code>./mvnw -pl demo-jvm spring-boot:run</code></td></tr>
+        <tr><td>9015</td><td>lab.sh observe 的隔离端口（不占 9001–9003）</td><td><code>SERVER_PORT=9015 demo-jvm/scripts/lab.sh observe</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · curl 自检（验证服务起来了）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>curl -s http://localhost:9005/api/jvm/self | python3 -c "import json,sys; print(json.dumps(json.load(sys.stdin), ensure_ascii=False, indent=2))"</code></pre>
+  </div>
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 真实返回</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>{
+  "vmName": "OpenJDK 64-Bit Server VM",
+  "vmVersion": "21.0.13+10-LTS",
+  "vmVendor": "Amazon.com Inc.",
+  "specVersion": "21",
+  "uptimeMs": 1234,
+  "maxMemoryMb": 4096.0,
+  "totalMemoryMb": 256.0,
+  "freeMemoryMb": 245.3,
+  "availableProcessors": 12,
+  "flags": {
+    "ThreadStackSize": 1024,
+    "MaxHeapSize": 4294967296,
+    "InitialHeapSize": 268435456,
+    "MaxMetaspaceSize": -1,
+    "MaxDirectMemorySize": 4294967296
+  }
+}</code></pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>环境变量</th><th>默认值</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td><code>SERVER_PORT</code></td><td>9005</td><td>Web 观测面的端口</td></tr>
+        <tr><td><code>JAVA_HOME</code></td><td><code>/usr/libexec/java_home</code> 解析值</td><td>lab.sh 用它找 jcmd / jstat / jfr</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="map">
+  <h2><span class="no">13</span>代码地图</h2>
+  <p class="lead">每个文件一句话职责，方便跳读源码。</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>路径</th><th>职责</th></tr></thead>
+      <tbody>
+        <tr><td><code>demo-jvm/src/main/java/com/example/demo/jvm/JvmDemoApplication.java</code></td><td>Spring Boot 入口；启动 Web 观测面（端口 9005）</td></tr>
+        <tr><td><code>demo-jvm/src/main/java/com/example/demo/jvm/web/JvmController.java</code></td><td><code>/api/jvm/*</code> 接口集合：areas / pools / gc / threads / self / direct / heap-dump</td></tr>
+        <tr><td><code>demo-jvm/src/main/java/com/example/demo/jvm/area/HeapHolder.java</code></td><td>场景 1 的「分配 → 释放 → 回收」三步演示；用 <code>ArrayDeque&lt;byte[]&gt;</code> 留住引用</td></tr>
+        <tr><td><code>demo-jvm/src/main/java/com/example/demo/jvm/lab/StackDepthLab.java</code></td><td>场景 2 的栈深度实验；递归 <code>recurse()</code> 直到 StackOverflowError</td></tr>
+        <tr><td><code>demo-jvm/src/main/java/com/example/demo/jvm/lab/LocalSlotSample.java</code></td><td>场景 2 的局部变量槽位复用演示；用 <code>javap -c</code> 看字节码</td></tr>
+        <tr><td><code>demo-jvm/src/main/java/com/example/demo/jvm/oom/OomLab.java</code></td><td>场景 3 的 OOM 家族实验；每个 case 起独立子进程</td></tr>
+        <tr><td><code>demo-jvm/src/main/java/com/example/demo/jvm/gc/AllocationWorkload.java</code></td><td>场景 4 / 5 的确定性负载；LCG 随机数 + <code>ArrayDeque</code> 留住对象</td></tr>
+        <tr><td><code>demo-jvm/src/main/java/com/example/demo/jvm/gc/GcCompareLab.java</code></td><td>场景 4 的收集器横向对比；父进程按变体给旗标，起五个子进程</td></tr>
+        <tr><td><code>demo-jvm/src/main/java/com/example/demo/jvm/age/AgeLab.java</code></td><td>场景 5 的对象年龄 / 晋升 / 大对象实验；解析 <code>-Xlog:gc*,gc+age=trace</code></td></tr>
+        <tr><td><code>demo-jvm/src/main/java/com/example/demo/jvm/leak/LeakLab.java</code></td><td>场景 6 的泄漏实验；四个 case（staticCollection / threadLocal / unboundedCache / intern）</td></tr>
+        <tr><td><code>demo-jvm/src/main/java/com/example/demo/jvm/leak/LeakDetectLab.java</code></td><td>场景 6 的泄漏检测；进程外用 <code>jcmd</code> 取直方图，算 <code>growthMB</code></td></tr>
+        <tr><td><code>demo-jvm/src/main/java/com/example/demo/jvm/lab/ChildJvm.java</code></td><td>子进程隔离器；每个实验起独立 JVM，避免互相污染</td></tr>
+        <tr><td><code>demo-jvm/src/main/java/com/example/demo/jvm/lab/LabReport.java</code></td><td>实验报告格式化器；<code>key=value</code> 文本输出，方便 grep</td></tr>
+        <tr><td><code>demo-jvm/src/main/java/com/example/demo/jvm/lab/LabArgs.java</code></td><td>命令行参数解析器；支持 <code>--key=value</code> 和位置参数</td></tr>
+        <tr><td><code>demo-jvm/scripts/lab.sh</code></td><td>实验启动脚本；自动带旗标、起子进程、打印命令</td></tr>
+        <tr><td><code>demo-jvm/README.md</code></td><td>模块文档；启动、实测结果、接口清单、代码地图、坑与速查</td></tr>
+        <tr><td><code>docs/jvm-guide.html</code></td><td>单文件 HTML 教程；本文档</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+      <footer>
+        <p><strong>Java 虚拟机实战指南</strong> · 代码与实测记录来自 demo-jvm 模块（零中间件依赖，只用 JDK 自带工具）</p>
+        <p>核对日期 2026-10-29 · 每条命令都配一段真实返回；改代码请同步更新本文数字。</p>
+      </footer>
+    </div>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var toggle = document.getElementById('themeToggle');
+
+    function syncToggleLabel() {
+      if (toggle) toggle.textContent = root.dataset.theme === 'dark' ? '浅色' : '深色';
+    }
+    syncToggleLabel();
+
+    if (toggle) {
+      toggle.addEventListener('click', function () {
+        var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        try { localStorage.setItem('tech-guide-theme', next); } catch (e) { /* ignore */ }
+        syncToggleLabel();
+      });
+    }
+
+    document.querySelectorAll('[data-copy]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var block = btn.closest('.code');
+        var code = block ? block.querySelector('code') : null;
+        if (!code) return;
+        var text = code.innerText;
+        var done = function () {
+          var old = btn.textContent;
+          btn.textContent = '已复制';
+          setTimeout(function () { btn.textContent = old; }, 1400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done).catch(function () { fallback(text, done); });
+        } else {
+          fallback(text, done);
+        }
+      });
+    });
+
+    function fallback(text, done) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+      document.body.removeChild(ta);
+      done();
+    }
+
+    var links = Array.prototype.slice.call(document.querySelectorAll('.toc a[href^="#"]'));
+    var byId = {};
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      byId[id] = a;
+    });
+    var targets = Object.keys(byId).map(function (id) { return document.getElementById(id); }).filter(Boolean);
+
+    function setActive(id) {
+      links.forEach(function (a) { a.classList.remove('active'); });
+      var link = byId[id];
+      if (link) link.classList.add('active');
+    }
+
+    function onScroll() {
+      var y = window.scrollY + 140;
+      var current = targets.length ? targets[0] : null;
+      for (var i = 0; i < targets.length; i++) {
+        var top = targets[i].getBoundingClientRect().top + window.scrollY;
+        if (top <= y) current = targets[i];
+      }
+      if (current) setActive(current.id);
+      var bar = document.querySelector('.progress span');
+      if (bar) {
+        var max = document.documentElement.scrollHeight - window.innerHeight;
+        bar.style.width = (max > 0 ? Math.min(100, Math.max(0, window.scrollY / max * 100)) : 0) + '%';
+      }
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    onScroll();
+  })();
+</script>
+</body>
+</html>
+

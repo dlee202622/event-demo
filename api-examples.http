@@ -9,6 +9,7 @@
 @redisHost = http://localhost:9004
 @lockHost = http://localhost:9007
 @startupHost = http://localhost:9006
+@jvmHost = http://localhost:9005
 @orderId = ORD-XXXXXXXX
 
 ### 1. 下单（总价 399 × 2 = 798）
@@ -250,3 +251,82 @@ GET {{startupHost}}/api/startup/annotations/feature
 
 ### 56. 场景 0：非法类名的边界（返回 400 + 提示，而不是 500；异常处理器在 AnnotationProbeController）
 GET {{startupHost}}/api/startup/annotations/tree?className=com.example.NotExist
+
+### ===========================================================================
+### demo-jvm（9005）：JVM 运行时数据区 / 垃圾回收 / 调优
+### 启动：./mvnw -pl demo-jvm spring-boot:run
+### 文档：demo-jvm/README.md，教程：docs/jvm-guide.html
+### ===========================================================================
+
+### 57. 场景 1：运行时数据区快照（7 个区域 + 8 个内存池，每个区域标明「怎么量的、读不到怎么办」）
+GET {{jvmHost}}/api/jvm/areas
+
+### 58. 场景 1：内存池详情（CodeCache 三个段、Metaspace 两个段、G1 的 Eden/Survivor/Old）
+GET {{jvmHost}}/api/jvm/pools
+
+### 59. 场景 1：GC 计数与耗时（YGC/YGCT/FGC/FGCT，和 jstat -gc 同一口径）
+GET {{jvmHost}}/api/jvm/gc
+
+### 60. 场景 1：线程数（ThreadMXBean 的 Java 线程 + NMT 的 native 线程，差一倍多）
+GET {{jvmHost}}/api/jvm/threads
+
+### 61. 场景 1：自检（VM 名、版本、旗标、uptime）
+GET {{jvmHost}}/api/jvm/self
+
+### 62. 场景 1：直接内存（ByteBuffer.allocateDirect 的用量，和 -XX:MaxDirectMemorySize 对比）
+GET {{jvmHost}}/api/jvm/direct
+
+### 63. 场景 1：分配 3 块 32 MB（前两块保留强引用，第三块不保留；看 heldBlocks 和 usedMb 怎么变）
+POST {{jvmHost}}/api/jvm/hold
+Content-Type: application/json
+
+{
+  "blocks": 3,
+  "blockSizeMb": 32,
+  "retain": true
+}
+
+### 64. 场景 1：分配但不保留（heldBlocks 不变，usedMb 涨；等 GC 才降）
+POST {{jvmHost}}/api/jvm/allocate
+Content-Type: application/json
+
+{
+  "blocks": 3,
+  "blockSizeMb": 32
+}
+
+### 65. 场景 1：清空引用（heldBlocks 归零，usedMb 不动；要手动触发 GC 才降）
+POST {{jvmHost}}/api/jvm/clear
+
+### 66. 场景 1：手动触发 GC（usedMb 才真的降下来）
+POST {{jvmHost}}/api/jvm/gc
+
+### 67. 场景 1：NMT（native 内存总量，堆之外的部分只有这里能看到）
+GET {{jvmHost}}/api/jvm/native-memory
+
+### 68. 场景 1：JVM 旗标（jinfo -flags 同一口径）
+GET {{jvmHost}}/api/jvm/flags
+
+### 69. 场景 1：元空间（jcmd VM.metaspace 同一口径）
+GET {{jvmHost}}/api/jvm/metaspace
+
+### 70. 场景 1：类加载器（jcmd VM.classloader_stats 同一口径）
+GET {{jvmHost}}/api/jvm/classloaders
+
+### 71. 场景 1：死锁检测（jcmd Thread.print 同一口径）
+GET {{jvmHost}}/api/jvm/deadlocks
+
+### 72. 场景 1：堆 dump（POST 触发，返回文件路径和大小；需要 -XX:+HeapDumpOnOutOfMemoryError 才自动）
+POST {{jvmHost}}/api/jvm/heap-dump
+
+### 73. 场景 1：分配超大块（超 -Xmx 会返回 400 + 原因，而不是 500）
+POST {{jvmHost}}/api/jvm/allocate
+Content-Type: application/json
+
+{
+  "blocks": 1,
+  "blockSizeMb": 8192
+}
+
+### 74. 场景 1：直方图（jcmd GC.class_histogram 同一口径；all=true 看全部，all=false 只看可达）
+GET {{jvmHost}}/api/jvm/histogram?all=false

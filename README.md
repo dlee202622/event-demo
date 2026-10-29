@@ -20,7 +20,8 @@ demo
 ├── demo-rocketmq                      RocketMQ 基础用法示例（[文档](demo-rocketmq/README.md)）
 ├── demo-redis                         Redis 数据类型 / 限流 / 分布式锁 / 缓存一致性（[文档](demo-redis/README.md)）
 ├── demo-concurrency                   Java 锁 / AQS / 死锁 / 并发计数（[文档](demo-concurrency/README.md)）
-└── demo-springboot-startup            Spring Boot 注解与类 / 启动链路 / 自动配置 / Bean 生命周期（[文档](demo-springboot-startup/README.md)）
+├── demo-springboot-startup            Spring Boot 注解与类 / 启动链路 / 自动配置 / Bean 生命周期（[文档](demo-springboot-startup/README.md)）
+└── demo-jvm                           JVM 运行时数据区 / 垃圾回收 / 调优（[文档](demo-jvm/README.md)）
 ```
 
 服务之间只共享**事件契约**，不共享聚合、仓储或代码模块：每个服务各自定义它消费/发布的事件结构。
@@ -211,6 +212,27 @@ docker compose up -d redis mysql
 
 启动后从 `curl http://localhost:9006/api/startup/annotations`（注解对照表）或 `curl http://localhost:9006/api/startup`（场景总览）开始；接口与实测输出见 [demo-springboot-startup/README.md](demo-springboot-startup/README.md)，原理图解见 [docs/springboot-startup-guide.html](docs/springboot-startup-guide.html)。
 场景 0 与场景 1~4 都在当前进程内可重复调；场景 5 需要重启进程才能观测（`DEMO_FAIL_MODE=analyzer` / `raw`），失败的应用本身没有接口。
+
+### JVM 运行时数据区 / 垃圾回收 / 调优（场景 1–6）
+
+独立模块 `demo-jvm`（9005），零中间件依赖，只用 JDK 自带工具（jcmd / jstat / jmap / jhsdb / javap / jfr + `-Xlog:gc*`）。六个场景覆盖运行时数据区观测、栈深度实验、OOM 家族复现、五个收集器横向对比、对象年龄与晋升、内存泄漏排查与调优前后对比。
+
+| 场景 | 核心实验 | 关键数字 |
+| --- | --- | --- |
+| 1 · 运行时数据区 | `/api/jvm/areas` 一次拍全 7 个区域 + 8 个内存池 | 堆 / 元空间 / CodeCache / 直接内存各自怎么量、读不到怎么办 |
+| 2 · 栈 | `lab.sh stack-depth` 递归深度 vs 栈大小 | 256K → 6760 帧，1024K → 39528 帧；每帧 24 B + 固定开销 99904 B（JIT 编译层不同会差 2×） |
+| 3 · OOM 家族 | `lab.sh oom-*` 六种溢出 | 四个能稳定复现（heap / stack / metaspace / direct），两个复现不出来（thread / gcoverhead） |
+| 4 · 收集器对比 | `lab.sh gc-compare` 五个收集器跑同一份活 | Serial 43~77 ms / G1 27~32 ms / ZGC 0.10~0.54 ms；checksum=-13950 五处相同 |
+| 5 · 对象年龄 | `lab.sh age` 动态阈值 / 大对象 / humongous | 默认年龄上限 15，但动态阈值挤成 1；G1 region 1 MB 时 ≥ 512 KB 算 humongous |
+| 6 · 内存泄漏 | `lab.sh leak` 泄漏版 vs 修好版 | `growthMB` 12.5 MB（真泄漏）vs 0.00（修好）；intern 在 JDK 21 不泄可达堆 |
+
+```bash
+./mvnw -q -pl demo-jvm compile
+demo-jvm/scripts/lab.sh     # 不带参数：列出所有案例
+demo-jvm/scripts/lab.sh observe     # 起 Web 观测面（端口 9015，不占 9001–9003）
+```
+
+接口与实测输出见 [demo-jvm/README.md](demo-jvm/README.md)，原理图解见 [docs/jvm-guide.html](docs/jvm-guide.html)。
 
 ---
 
