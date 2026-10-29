@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: demo-jvm
+
+server:
+  # 9001~9003 是 IDEA 里常驻的业务服务，9004 是 demo-redis，本模块从 9005 开始
+  port: ${SERVER_PORT:9005}
+
+demo:
+  jvm:
+    # 类直方图默认展示前 N 个类，避免一次返回几十万个条目
+    histogram-limit: ${DEMO_JVM_HISTOGRAM_LIMIT:12}
+    # /allocate 单次最多申请的内存（MB），防止把观测进程直接打死
+    max-allocate-mb: ${DEMO_JVM_MAX_ALLOCATE_MB:64}
+
+logging:
+  level:
+    root: INFO
+    com.example.demo: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"

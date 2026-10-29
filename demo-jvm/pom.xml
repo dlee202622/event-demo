@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.example</groupId>
+        <artifactId>demo</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+    <artifactId>demo-jvm</artifactId>
+    <name>demo-jvm</name>
+    <description>JVM demo: runtime data areas, memory areas observation, GC comparison, OOM reproduction, leak hunting</description>
+
+    <repositories>
+        <!-- 本地直连 Maven Central 不稳定，走国内镜像 -->
+        <repository>
+            <id>aliyun-public</id>
+            <url>https://maven.aliyun.com/repository/public</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <!-- 观测接口要调用 DiagnosticCommand MBean，其中部分命令会动态加载 attach jar，
+                         JDK 21 默认对此打印告警；本模块是教学 demo，显式允许以免日志被告警淹没 -->
+                    <jvmArguments>
+                        -XX:NativeMemoryTracking=summary
+                        -XX:+EnableDynamicAgentLoading
+                    </jvmArguments>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- 测试 JVM 自己也要开 NMT：/api/jvm/native-memory 的正例断言
+                         依赖它；不开就只能断言「报 400」，等于没测到有效路径 -->
+                    <argLine>-XX:NativeMemoryTracking=summary -XX:+EnableDynamicAgentLoading -Xmx512m</argLine>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
