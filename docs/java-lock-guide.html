@@ -1,0 +1,2381 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Java 锁实战：从 synchronized 到 AQS · 技术实战指南</title>
+<script>
+  try {
+    var savedTheme = localStorage.getItem('tech-guide-theme');
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = savedTheme || (prefersDark ? 'dark' : 'light');
+  } catch (e) { /* 隐私模式下 localStorage 可能不可用，退回默认主题 */ }
+</script>
+<style>
+  :root {
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sidebar: 276px;
+    --maxw: 980px;
+
+    --bg: #f5f7fb;
+    --surface: #ffffff;
+    --surface-2: #eef2f8;
+    --text: #1b2433;
+    --muted: #5c6a7e;
+    --border: #dde4ef;
+    --accent: #4f46e5;
+    --accent-2: #0f766e;
+    --accent-weak: #eef0ff;
+    --ok: #047857;
+    --ok-bg: #ecfdf5;
+    --warn: #b45309;
+    --warn-bg: #fff7ed;
+    --danger: #b91c1c;
+    --danger-bg: #fef2f2;
+    --code-bg: #0c1424;
+    --code-head: #131f35;
+    --code-border: #22304c;
+    --code-text: #dbe4f5;
+    --shadow: 0 10px 30px -18px rgba(23, 37, 84, .35);
+  }
+  html[data-theme="dark"] {
+    --bg: #080d18;
+    --surface: #101829;
+    --surface-2: #0c1322;
+    --text: #e6ebf5;
+    --muted: #97a5bb;
+    --border: #22304a;
+    --accent: #8f9cff;
+    --accent-2: #2dd4bf;
+    --accent-weak: #1a2344;
+    --ok: #34d399;
+    --ok-bg: #08251d;
+    --warn: #fbbf24;
+    --warn-bg: #2a1e08;
+    --danger: #f87171;
+    --danger-bg: #2a1013;
+    --code-bg: #070c17;
+    --code-head: #0d1626;
+    --code-border: #1c2942;
+    --code-text: #dbe4f5;
+    --shadow: 0 12px 34px -18px rgba(0, 0, 0, .7);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.78;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  img, svg { max-width: 100%; }
+  ::selection { background: var(--accent); color: #fff; }
+
+  .progress {
+    position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 60;
+    background: transparent; pointer-events: none;
+  }
+  .progress span {
+    display: block; height: 100%; width: 0;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width .12s linear;
+  }
+  .theme-toggle {
+    position: fixed; top: 16px; right: 18px; z-index: 61;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font: 600 12px/1 var(--sans);
+    padding: 9px 13px; border-radius: 999px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+  }
+  .theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+  .shell {
+    display: grid;
+    grid-template-columns: var(--sidebar) minmax(0, 1fr);
+    max-width: 1520px;
+    margin: 0 auto;
+  }
+
+  .sidebar {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    padding: 30px 18px 48px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    scrollbar-width: thin;
+  }
+  .brand { padding: 0 10px 18px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .brand .mark {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700; letter-spacing: .16em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  .brand .mark::before {
+    content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 4px var(--accent-weak);
+  }
+  .brand h1 { margin: 10px 0 2px; font-size: 18px; letter-spacing: -.01em; }
+  .brand p { margin: 0; font-size: 12px; color: var(--muted); }
+
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a {
+    display: block; padding: 6px 10px;
+    color: var(--muted); font-size: 13.5px; line-height: 1.5;
+    border-left: 2px solid transparent; border-radius: 0 8px 8px 0;
+  }
+  .toc a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }
+  .toc a.active {
+    color: var(--accent); background: var(--accent-weak);
+    border-left-color: var(--accent); font-weight: 600;
+  }
+  .toc .sub a { padding-left: 26px; font-size: 12.8px; }
+  .toc .group {
+    padding: 14px 10px 4px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .12em;
+    color: var(--muted); text-transform: uppercase;
+  }
+  .side-note {
+    margin-top: 22px; padding: 12px;
+    border-radius: 10px; background: var(--surface-2);
+    color: var(--muted); font-size: 11.5px; line-height: 1.65;
+  }
+
+  main { padding: 34px clamp(18px, 4vw, 58px) 96px; min-width: 0; }
+  .content { max-width: var(--maxw); margin: 0 auto; }
+
+  .hero {
+    position: relative; overflow: hidden;
+    border-radius: 22px;
+    padding: clamp(26px, 5vw, 48px);
+    color: #fff;
+    background:
+      radial-gradient(800px 320px at 88% -10%, rgba(45, 212, 191, .38), transparent 62%),
+      radial-gradient(620px 300px at 0% 110%, rgba(167, 139, 250, .35), transparent 60%),
+      linear-gradient(135deg, #1e1b4b 0%, #3730a3 52%, #115e59 100%);
+    box-shadow: 0 26px 60px -32px rgba(30, 27, 75, .75);
+  }
+  .hero::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(rgba(255,255,255,.16) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: linear-gradient(120deg, transparent 40%, #000 100%);
+  }
+  .hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase;
+    color: #c7d2fe;
+  }
+  .hero .eyebrow::before { content: ""; width: 26px; height: 1px; background: currentColor; }
+  .hero h2 { margin: 14px 0 12px; font-size: clamp(30px, 4.4vw, 46px); line-height: 1.18; letter-spacing: -.02em; }
+  .hero .sub { max-width: 720px; margin: 0; color: #dbe3ff; font-size: 15.5px; }
+  .hero .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  .hero .badges span {
+    font-size: 11.5px; padding: 5px 10px; border-radius: 999px;
+    background: rgba(255,255,255,.11); border: 1px solid rgba(255,255,255,.22);
+    color: #eef2ff;
+  }
+  .hero .stats {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px; margin-top: 28px;
+    border-radius: 14px; overflow: hidden;
+    background: rgba(255,255,255,.18);
+  }
+  .hero .stat { padding: 14px 16px; background: rgba(15, 23, 42, .28); }
+  .hero .stat b { display: block; font-size: 22px; line-height: 1.2; }
+  .hero .stat small { color: #cbd5ff; font-size: 11.5px; letter-spacing: .03em; }
+  .hero .jump { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+  .hero .jump a {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 10px 16px; border-radius: 10px;
+    font-size: 13px; font-weight: 600;
+    background: #fff; color: #312e81;
+  }
+  .hero .jump a.ghost {
+    background: transparent; color: #e0e7ff; border: 1px solid rgba(255,255,255,.35);
+  }
+  .hero .jump a:hover { text-decoration: none; transform: translateY(-1px); }
+
+  section { margin-top: 78px; scroll-margin-top: 24px; }
+  h2 {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    margin: 0 0 10px; font-size: clamp(24px, 2.7vw, 30px);
+    letter-spacing: -.02em; line-height: 1.3;
+  }
+  h2 .no {
+    font: 700 12px/1 var(--mono); color: var(--accent);
+    background: var(--accent-weak); border: 1px solid var(--border);
+    padding: 5px 9px; border-radius: 7px;
+  }
+  h3 { margin: 44px 0 10px; font-size: 21px; letter-spacing: -.01em; scroll-margin-top: 24px; }
+  h4 { margin: 26px 0 8px; font-size: 16px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  strong { font-weight: 650; }
+  .lead { color: var(--muted); font-size: 15.5px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .02em;
+    padding: 3px 9px; border-radius: 999px;
+    color: var(--accent); background: var(--accent-weak);
+    border: 1px solid var(--border); white-space: nowrap;
+  }
+  .pill.ok { color: var(--ok); background: var(--ok-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .pill.bad { color: var(--danger); background: var(--danger-bg); }
+  .pill.gray { color: var(--muted); background: var(--surface-2); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px 22px; margin: 18px 0;
+    box-shadow: var(--shadow);
+  }
+  .card > :first-child { margin-top: 0; }
+  .card > :last-child { margin-bottom: 0; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+
+  .callout {
+    display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px;
+    margin: 18px 0; padding: 14px 16px;
+    border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface-2); font-size: 14.5px;
+  }
+  .callout .ico {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: grid; place-items: center;
+    font: 700 12px/1 var(--sans);
+    background: var(--accent-weak); color: var(--accent);
+  }
+  .callout p { margin: 0; }
+  .callout p + p { margin-top: 6px; }
+  .callout .title { font-weight: 700; display: block; margin-bottom: 2px; }
+  .callout.tip { background: var(--ok-bg); border-color: var(--border); }
+  .callout.tip .ico { background: var(--ok); color: #fff; }
+  .callout.warn { background: var(--warn-bg); border-color: var(--border); }
+  .callout.warn .ico { background: var(--warn); color: #fff; }
+  .callout.danger { background: var(--danger-bg); border-color: var(--border); }
+  .callout.danger .ico { background: var(--danger); color: #fff; }
+
+  .compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 18px 0; }
+  .box { border: 1px solid var(--border); border-radius: 12px; padding: 15px 18px; background: var(--surface); }
+  .box.bad { border-left: 4px solid var(--danger); }
+  .box.good { border-left: 4px solid var(--ok); }
+  .box h4 { margin: 0 0 8px; font-size: 14px; letter-spacing: .03em; }
+  .box.bad h4 { color: var(--danger); }
+  .box.good h4 { color: var(--ok); }
+  .box ul { margin: 0; padding-left: 18px; font-size: 14px; }
+  .box li { margin: 5px 0; }
+
+  .code {
+    margin: 18px 0; border-radius: 12px; overflow: hidden;
+    background: var(--code-bg); border: 1px solid var(--code-border);
+    box-shadow: var(--shadow);
+  }
+  .code-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 8px 12px 8px 15px;
+    background: var(--code-head); border-bottom: 1px solid var(--code-border);
+    color: #93a4c3; font: 12px/1.4 var(--mono);
+  }
+  .code-head .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .copy {
+    flex: 0 0 auto; border: 1px solid var(--code-border); border-radius: 6px;
+    background: transparent; color: #a9b8d4; cursor: pointer;
+    font: 11px/1 var(--sans); padding: 5px 9px;
+  }
+  .copy:hover { color: #fff; border-color: #4c5f85; }
+  .code pre { margin: 0; padding: 15px 17px; overflow-x: auto; }
+  .code code { font: 12.6px/1.72 var(--mono); color: var(--code-text); white-space: pre; }
+  .code.out { background: var(--surface); border-style: dashed; box-shadow: none; }
+  .code.out .code-head { background: var(--surface-2); color: var(--muted); }
+  .code.out .code-head .path { font-weight: 700; letter-spacing: .02em; }
+  .code.out code { color: var(--text); }
+  :not(pre) > code {
+    font: .9em/1.5 var(--mono); color: var(--accent);
+    background: var(--surface-2); border: 1px solid var(--border);
+    padding: 1px 5px; border-radius: 5px;
+  }
+
+  .table-wrap {
+    margin: 18px 0; overflow-x: auto;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13.8px; min-width: 560px; }
+  th, td { padding: 10px 14px; text-align: left; vertical-align: top; }
+  th {
+    background: var(--surface-2); color: var(--muted);
+    font-size: 11.5px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td { border-top: 1px solid var(--border); }
+  tbody tr:first-child td { border-top: 0; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td code { white-space: nowrap; }
+
+  .diagram {
+    margin: 22px 0; padding: 18px 18px 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow);
+  }
+  .diagram-scroll { overflow-x: auto; }
+  .diagram svg { display: block; width: 100%; height: auto; min-width: 640px; }
+  .diagram figcaption {
+    margin-top: 10px; color: var(--muted); font-size: 12.5px; text-align: center;
+  }
+  .svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .dg text { font-family: var(--sans); }
+  .dg-box { fill: var(--surface); stroke: var(--border); stroke-width: 1.4; }
+  .dg-box-accent { fill: var(--accent-weak); stroke: var(--accent); stroke-width: 1.5; }
+  .dg-box-ok { fill: var(--ok-bg); stroke: var(--ok); stroke-width: 1.5; }
+  .dg-box-danger { fill: var(--danger-bg); stroke: var(--danger); stroke-width: 1.5; }
+  .dg-box-warn { fill: var(--warn-bg); stroke: var(--warn); stroke-width: 1.5; }
+  .dg-lane { fill: var(--surface-2); stroke: var(--border); stroke-width: 1; }
+  .dg-text { fill: var(--text); font-size: 13.5px; font-weight: 600; }
+  .dg-text-sm { fill: var(--text); font-size: 11.5px; }
+  .dg-muted { fill: var(--muted); font-size: 10.8px; }
+  .dg-accent-text { fill: var(--accent); font-size: 11.5px; font-weight: 700; }
+  .dg-ok-text { fill: var(--ok); font-size: 11.5px; font-weight: 700; }
+  .dg-danger-text { fill: var(--danger); font-size: 11.5px; font-weight: 700; }
+  .dg-line { stroke: var(--muted); stroke-width: 1.5; fill: none; marker-end: url(#ar); }
+  .dg-line-accent { stroke: var(--accent); stroke-width: 1.6; fill: none; marker-end: url(#ar-accent); }
+  .dg-line-ok { stroke: var(--ok); stroke-width: 1.6; fill: none; marker-end: url(#ar-ok); }
+  .dg-line-danger { stroke: var(--danger); stroke-width: 1.6; fill: none; marker-end: url(#ar-danger); }
+  .dg-line-dashed { stroke-dasharray: 5 5; }
+  .dg-life { stroke: var(--border); stroke-width: 1.2; stroke-dasharray: 3 5; }
+  .mk-muted { fill: var(--muted); }
+  .mk-accent { fill: var(--accent); }
+  .mk-ok { fill: var(--ok); }
+  .mk-danger { fill: var(--danger); }
+  .dg-flow { stroke-dasharray: 6 7; animation: flow 1.4s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -13; } }
+
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps > li {
+    position: relative; padding-left: 40px; margin: 12px 0;
+  }
+  .steps > li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 0; top: 2px;
+    width: 25px; height: 25px; border-radius: 50%;
+    display: grid; place-items: center;
+    font: 700 11.5px/1 var(--mono);
+    color: var(--accent); background: var(--accent-weak);
+    border: 1px solid var(--border);
+  }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li {
+    position: relative; padding-left: 30px; margin: 9px 0;
+  }
+  .checklist li::before {
+    content: ""; position: absolute; left: 4px; top: 7px;
+    width: 13px; height: 13px; border-radius: 4px;
+    border: 1.5px solid var(--accent);
+  }
+
+  .kbd {
+    font: 12px/1.6 var(--mono);
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px;
+    white-space: nowrap;
+  }
+
+  footer {
+    margin-top: 90px; padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 12.5px;
+  }
+  footer p { margin: 4px 0; }
+
+  @media (max-width: 1100px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar {
+      position: static; height: auto; overflow: visible;
+      border-right: 0; border-bottom: 1px solid var(--border);
+      padding: 22px 18px;
+    }
+    .toc { max-height: 320px; overflow-y: auto; }
+    .toc .sub { display: block; }
+    main { padding-top: 26px; }
+    .theme-toggle {
+      position: static; display: block; width: fit-content;
+      margin: 14px 14px 0 auto; box-shadow: none;
+    }
+  }
+  @media (max-width: 760px) {
+    .grid2, .grid3, .compare { grid-template-columns: 1fr; }
+    .hero .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .theme-toggle { margin: 10px 12px 0 auto; }
+    body { line-height: 1.72; }
+    table { font-size: 13px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+
+  @media print {
+    .sidebar, .theme-toggle, .progress, .copy, .hero .jump { display: none !important; }
+    .shell { display: block; }
+    main { padding: 0; }
+    body { background: #fff; color: #111; font-size: 11pt; }
+    .content { max-width: none; }
+    .hero { box-shadow: none; border-radius: 0; padding: 18pt; background: #eef2ff !important; color: #111 !important; }
+    .hero .sub, .hero .badges span, .hero .stat small, .hero .eyebrow { color: #333 !important; }
+    .hero .badges span { border-color: #bbb; background: #fff; }
+    .hero .stat { background: #fff; }
+    .card, .diagram, .code, .table-wrap, .compare, .callout { box-shadow: none; break-inside: avoid; }
+    section { margin-top: 28pt; break-inside: auto; }
+    h2, h3 { break-after: avoid; }
+    .diagram svg { min-width: 0; }
+    .code { background: #fff; border-color: #ccc; }
+    .code-head { background: #f1f5f9; color: #333; border-color: #ccc; }
+    .code code { color: #111; white-space: pre-wrap; word-break: break-word; }
+    .diagram { page-break-inside: avoid; }
+    a { color: #111; text-decoration: underline; }
+    @page { margin: 14mm; }
+  }
+</style>
+</head>
+<body>
+
+<svg class="svg-defs" aria-hidden="true" focusable="false">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-muted" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-accent" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-ok" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-danger" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-danger" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+  </defs>
+</svg>
+
+<div class="progress" aria-hidden="true"><span></span></div>
+<button class="theme-toggle" id="themeToggle" type="button" aria-label="切换深浅色主题">深色</button>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">Concurrency</div>
+      <h1>Java 锁实战</h1>
+      <p>从 synchronized 到 AQS 的九个可观测实验</p>
+    </div>
+    <nav class="toc" aria-label="目录">
+      <div class="group">入门</div>
+      <a href="#start">1 · 开始之前</a>
+      <a href="#model">2 · 心智模型</a>
+      <div class="group">六个核心实验</div>
+      <div class="sub">
+        <a href="#sync">3.1 · synchronized 互斥</a>
+        <a href="#reentrant">3.2 · 可重入与 AQS</a>
+        <a href="#fairness">3.3 · 公平 vs 非公平</a>
+        <a href="#interrupt">3.4 · 等待期中断</a>
+        <a href="#deadlock">3.5 · 死锁与修复</a>
+        <a href="#counter">3.6 · 丢更新与计数</a>
+      </div>
+      <div class="group">进阶机制</div>
+      <div class="sub">
+        <a href="#watchdog">4.1 · 租约与看门狗</a>
+        <a href="#striped">4.2 · 分段计数</a>
+        <a href="#sharded">4.3 · 分片 Map 锁</a>
+      </div>
+      <div class="group">收尾</div>
+      <a href="#edges">5 · 边界与反例</a>
+      <a href="#run">6 · 运行与速查</a>
+      <a href="#map">7 · 代码地图</a>
+    </nav>
+    <div class="side-note">
+      所有输出来自 2026-10-29 的本机实测：12 核 macOS、OpenJDK 21.0.13、Spring Boot 4.1.2。实验代码在 demo-concurrency 模块，应用跑在 9017 端口。
+    </div>
+  </aside>
+
+  <main>
+    <div class="content">
+      <header class="hero">
+        <span class="eyebrow">Java Concurrency · Locks</span>
+        <h2>锁不是让代码更快，<br>而是让共享状态不再互相踩踏</h2>
+        <p class="sub">九个可以点击的实验：用 JDK 自带工具看清互斥、AQS 排队、公平性、中断、死锁与丢更新，再用看门狗、分段计数和分片 Map 锁理解高并发实现。每个结论都配一条命令和本机真实返回。</p>
+        <div class="badges">
+          <span>Java 21</span>
+          <span>ReentrantLock</span>
+          <span>ThreadMXBean</span>
+          <span>Spring Boot 4.1.2</span>
+          <span>端口 9007</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><b>9</b><small>可观测实验</small></div>
+          <div class="stat"><b>3</b><small>进阶机制</small></div>
+          <div class="stat"><b>20</b><small>自动化测试</small></div>
+          <div class="stat"><b>0</b><small>外部依赖</small></div>
+        </div>
+        <div class="jump">
+          <a href="#model">先看心智模型</a>
+          <a href="#sync" class="ghost">直接跑第一个实验</a>
+          <a href="#run" class="ghost">运行与速查</a>
+        </div>
+      </header>
+
+      <section id="start">
+        <h2><span class="no">01</span>开始之前</h2>
+        <p class="lead">这一页不是 API 手册，而是九个可复现实验的讲解。你不需要 Docker、Redis 或数据库，只需要 JDK 21 和 Maven Wrapper。</p>
+
+        <div class="grid3">
+          <div class="card">
+            <h4>运行环境</h4>
+            <p class="small muted">Java 21.0.13、Spring Boot 4.1.2、macOS 15.8.2、12 核。JDK 自带的 ThreadMXBean 负责观测，不依赖 JOL 或调试参数。</p>
+          </div>
+          <div class="card">
+            <h4>最短启动</h4>
+            <p class="small muted">在仓库根目录执行右侧命令。默认端口 9007；验证时换 9017，避免和常驻服务抢端口。</p>
+          </div>
+          <div class="card">
+            <h4>本文约定</h4>
+            <p class="small muted">时间单位均为毫秒，且相对单次请求开始；每个场景连续跑两轮；JSON 为真实返回的节选，省略字段会在块标题注明。</p>
+          </div>
+        </div>
+
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 启动与自检</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># 默认 9007；验证实例用 9017，避免占用 9001~9003 的常驻服务
+SERVER_PORT=9017 ./mvnw -pl demo-concurrency spring-boot:run
+
+# 另开一个终端：场景索引就是最简单的自检
+curl -s http://localhost:9017/api/lock</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock（已省略 whatToWatch 字段）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "module": "demo-concurrency",
+  "port": 9007,
+  "scenarios": [
+    { "type": "核心", "path": "/api/lock/synchronized" },
+    { "type": "核心", "path": "/api/lock/reentrant" },
+    { "type": "对比", "path": "/api/lock/fairness" },
+    { "type": "边界", "path": "/api/lock/interrupt" },
+    { "type": "故障", "path": "/api/lock/deadlock" },
+    { "type": "故障/对比", "path": "/api/lock/counter/lost-updates / compare" },
+    { "type": "进阶", "path": "/api/lock/watchdog" },
+    { "type": "进阶", "path": "/api/lock/counter/striped" },
+    { "type": "进阶", "path": "/api/lock/sharded-map" }
+  ]
+}</code></pre>
+        </div>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <span class="title">端口边界</span>
+            <p>9001~9003 是 IDEA 里常驻的业务服务，不要占用、也不要 kill。本模块默认 9007；并发验证请用独立端口，例如 <code>SERVER_PORT=9017</code>。</p>
+          </div>
+        </div>
+
+        <p class="small muted">源码入口：<code>demo-concurrency/src/main/java/com/example/demo/concurrency/</code>。每个实验一个类，控制器只做参数校验和转发，核心逻辑都在 <code>lock/</code> 包。</p>
+      </section>
+
+      <section id="model">
+        <h2><span class="no">02</span>心智模型：锁到底保护什么</h2>
+        <p class="lead">先纠正一个最常见的误解：锁不会让代码变快。它把“多个线程可以同时读改写”改成“同一时刻只有一个线程能改”，用并行度换正确性。</p>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <span class="title">一句话</span>
+            <p>锁保护的是共享可变状态，不是某段代码。两个线程锁不同的对象，等于没锁；没有共享状态，就不需要锁。</p>
+          </div>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 860 330" role="img" aria-label="对象监视器与 AQS 的全局结构对比">
+              <rect x="16" y="20" width="400" height="270" rx="12" class="dg-lane"></rect>
+              <text x="36" y="48" class="dg-text">synchronized：对象监视器</text>
+              <rect x="36" y="80" width="84" height="40" rx="8" class="dg-box"></rect>
+              <text x="78" y="105" text-anchor="middle" class="dg-text-sm">T1</text>
+              <rect x="36" y="150" width="84" height="40" rx="8" class="dg-box"></rect>
+              <text x="78" y="175" text-anchor="middle" class="dg-text-sm">T2</text>
+              <rect x="160" y="78" width="126" height="112" rx="10" class="dg-box-accent"></rect>
+              <text x="223" y="102" text-anchor="middle" class="dg-text-sm">monitor</text>
+              <text x="223" y="126" text-anchor="middle" class="dg-muted">owner = T1</text>
+              <text x="223" y="150" text-anchor="middle" class="dg-danger-text">entry = T2</text>
+              <text x="223" y="172" text-anchor="middle" class="dg-muted">T2: BLOCKED</text>
+              <rect x="330" y="100" width="66" height="70" rx="8" class="dg-box"></rect>
+              <text x="363" y="128" text-anchor="middle" class="dg-text-sm">共享状态</text>
+              <text x="363" y="148" text-anchor="middle" class="dg-muted">count</text>
+              <path d="M120 100 L160 100" class="dg-line-accent"></path>
+              <path d="M120 170 L160 160" class="dg-line-danger dg-line-dashed"></path>
+              <path d="M286 134 L330 134" class="dg-line-accent"></path>
+              <text x="140" y="94" class="dg-accent-text">持有</text>
+              <text x="126" y="190" class="dg-danger-text">等待</text>
+
+              <rect x="444" y="20" width="400" height="270" rx="12" class="dg-lane"></rect>
+              <text x="464" y="48" class="dg-text">ReentrantLock：AQS</text>
+              <rect x="464" y="80" width="84" height="40" rx="8" class="dg-box"></rect>
+              <text x="506" y="105" text-anchor="middle" class="dg-text-sm">T1</text>
+              <rect x="464" y="150" width="84" height="40" rx="8" class="dg-box"></rect>
+              <text x="506" y="175" text-anchor="middle" class="dg-text-sm">T2</text>
+              <rect x="588" y="74" width="126" height="120" rx="10" class="dg-box-accent"></rect>
+              <text x="651" y="98" text-anchor="middle" class="dg-text-sm">AQS</text>
+              <text x="651" y="122" text-anchor="middle" class="dg-muted">state = 1</text>
+              <text x="651" y="146" text-anchor="middle" class="dg-muted">owner = T1</text>
+              <text x="651" y="170" text-anchor="middle" class="dg-danger-text">queue = T2</text>
+              <rect x="750" y="100" width="70" height="70" rx="8" class="dg-box"></rect>
+              <text x="785" y="128" text-anchor="middle" class="dg-text-sm">共享状态</text>
+              <text x="785" y="148" text-anchor="middle" class="dg-muted">count</text>
+              <path d="M548 100 L588 100" class="dg-line-accent"></path>
+              <path d="M548 170 L588 160" class="dg-line-danger dg-line-dashed"></path>
+              <path d="M714 134 L750 134" class="dg-line-accent"></path>
+              <text x="620" y="210" text-anchor="middle" class="dg-muted">等待者是 WAITING（park），不是 BLOCKED</text>
+              <text x="430" y="316" text-anchor="middle" class="dg-muted">两种实现的外形不同，约束相同：同一时刻只有一个线程能修改共享状态</text>
+            </svg>
+          </div>
+          <figcaption>对象监视器把等待者放在 entry list（BLOCKED）；AQS 把等待者放进 FIFO 队列（WAITING）。</figcaption>
+        </figure>
+
+        <div class="grid3">
+          <div class="card">
+            <h4>互斥</h4>
+            <p class="small muted">同一时刻只有一个线程进入临界区。这是锁最直观的作用，也是本页大部分实验观察的对象。</p>
+          </div>
+          <div class="card">
+            <h4>可见性</h4>
+            <p class="small muted">synchronized 的 monitorexit 与后续 monitorenter 建立 happens-before；ReentrantLock 的 unlock 与后续 lock 同样保证之前的写入可见。</p>
+          </div>
+          <div class="card">
+            <h4>排队与唤醒</h4>
+            <p class="small muted">竞争失败的线程进入等待结构，释放时被唤醒。公平性、可中断、超时，都是围绕这个等待结构做文章。</p>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>能力</th><th>synchronized</th><th>ReentrantLock</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>可重入</td><td>是</td><td>是（AQS state 计数）</td></tr>
+              <tr><td>公平锁</td><td>不支持</td><td><code>new ReentrantLock(true)</code></td></tr>
+              <tr><td>等待可中断</td><td>否，monitorenter 不响应 interrupt</td><td>是，<code>lockInterruptibly()</code></td></tr>
+              <tr><td>超时获取</td><td>否</td><td>是，<code>tryLock(timeout, unit)</code></td></tr>
+              <tr><td>条件队列</td><td><code>wait/notify</code></td><td><code>Condition</code>，可多个</td></tr>
+              <tr><td>等待时的线程状态</td><td><code>BLOCKED</code></td><td><code>WAITING</code> / <code>TIMED_WAITING</code></td></tr>
+              <tr><td>释放方式</td><td>自动退出同步块</td><td>手动 <code>unlock()</code>，必须放 finally</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout tip">
+          <span class="ico">✓</span>
+          <div>
+            <span class="title">读快照前先记住这个区别</span>
+            <p>看到 <code>BLOCKED</code>，说明线程卡在 monitor 入口；看到 <code>WAITING</code> 且栈顶是 <code>Unsafe.park</code>，说明它卡在 AQS 队列。后面两个实验的快照都依赖这个判断。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="sync">
+        <h2><span class="no">3.1</span>synchronized：把并发变成串行</h2>
+        <p class="lead">一句话：<code>synchronized (monitor)</code> 用对象头里的监视器做互斥，进入时 monitorenter，退出时 monitorexit。</p>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <span class="title">类比</span>
+            <p>一间单人房只有一张门卡。A 刷卡进去后，B 只能站在门口等（BLOCKED）；A 出来交卡，B 才能进。门卡就是 monitor，房间就是临界区。</p>
+          </div>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 860 260" role="img" aria-label="synchronized 下两个线程串行进入临界区的时间线">
+              <rect x="16" y="16" width="828" height="228" rx="12" class="dg-lane"></rect>
+              <text x="36" y="44" class="dg-text">加锁：A 持锁 601ms，B 被挡在 monitor 外 602ms</text>
+              <rect x="120" y="64" width="339" height="38" rx="8" class="dg-box-accent"></rect>
+              <text x="160" y="88" class="dg-text-sm">A：临界区 601ms</text>
+              <rect x="120" y="136" width="339" height="38" rx="8" class="dg-box-danger"></rect>
+              <text x="150" y="160" class="dg-danger-text">B：BLOCKED 602ms</text>
+              <rect x="459" y="136" width="339" height="38" rx="8" class="dg-box-ok"></rect>
+              <text x="490" y="160" class="dg-ok-text">B：进入临界区 604ms</text>
+              <line x1="289" y1="48" x2="289" y2="186" class="dg-life"></line>
+              <text x="296" y="58" class="dg-muted">t≈300ms 采样</text>
+              <path d="M120 200 L800 200" class="dg-line"></path>
+              <text x="120" y="222" class="dg-muted">0ms</text>
+              <text x="452" y="222" class="dg-muted">600ms</text>
+              <text x="780" y="222" class="dg-muted">1200ms</text>
+            </svg>
+          </div>
+          <figcaption>阈值来自实测：A 0→601ms，B 602→1206ms；采样点看到 A 在 sleep、B 为 BLOCKED。</figcaption>
+        </figure>
+
+        <h4>核心代码</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">java · SynchronizedLockDemo#run（节选）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>Object monitor = new Object();              // 每次请求新建，避免不同请求互相串扰
+CountDownLatch startGate = new CountDownLatch(1);
+Runnable body = () -&gt; {
+    ready.countDown();
+    startGate.await();                      // 两个线程都就绪后才一起冲锁
+    if (locked) {
+        synchronized (monitor) {            // 互斥边界：同一时刻只允许一个线程进入
+            enterCritical(...);             // 内部用 AtomicInteger 记录最大并发
+        }
+    } else {
+        enterCritical(...);                 // 反例：没有同步块，两个线程可同时进入
+    }
+};</code></pre>
+        </div>
+
+        <h4>跑一次：加锁</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · synchronized 加锁</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># 默认 locked=true，显式写出来便于和反例对照
+curl -s 'http://localhost:9017/api/lock/synchronized?locked=true&amp;holdMillis=600'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/synchronized?locked=true&amp;holdMillis=600</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "locked": true,
+  "holdMillis": 600,
+  "maxConcurrent": 1,
+  "spans": [
+    { "thread": "A", "enterAtMillis": 0, "exitAtMillis": 601 },
+    { "thread": "B", "enterAtMillis": 602, "exitAtMillis": 1206 }
+  ],
+  "snapshots": [
+    { "threadName": "sync-3-A", "state": "TIMED_WAITING",
+      "waitingOn": null, "lockOwner": null, "blockedCount": 0,
+      "topFrame": "java.base@21.0.13/java.lang.Thread.sleep0(Native Method)" },
+    { "threadName": "sync-3-B", "state": "BLOCKED",
+      "waitingOn": "java.lang.Object@1cbfdc8c", "lockOwner": "sync-3-A",
+      "blockedCount": 1,
+      "topFrame": "com.example.demo.concurrency.lock.SynchronizedLockDemo.lambda$run$0(SynchronizedLockDemo.java:70)" }
+  ],
+  "elapsedMillis": 1206,
+  "conclusion": "synchronized 生效：两个线程串行进入，最大并发=1"
+}</code></pre>
+        </div>
+
+        <p>读法：<code>maxConcurrent=1</code> 证明互斥；B 的快照是 <code>BLOCKED</code>，<code>lockOwner=sync-3-A</code>，栈顶停在同步块入口；A 在临界区里 <code>sleep</code>，所以是 <code>TIMED_WAITING</code>，并不等于“没在持锁”。</p>
+
+        <h4>反例：去掉同步块</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 无锁裸跑</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># locked=false：同样的两个线程、同样的 holdMillis
+curl -s 'http://localhost:9017/api/lock/synchronized?locked=false&amp;holdMillis=600'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/synchronized?locked=false&amp;holdMillis=600（已省略 topFrame）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "locked": false,
+  "maxConcurrent": 2,
+  "spans": [
+    { "thread": "A", "enterAtMillis": 0, "exitAtMillis": 602 },
+    { "thread": "B", "enterAtMillis": 0, "exitAtMillis": 605 }
+  ],
+  "snapshots": [
+    { "threadName": "sync-4-A", "state": "TIMED_WAITING",
+      "waitingOn": null, "lockOwner": null, "blockedCount": 0 },
+    { "threadName": "sync-4-B", "state": "TIMED_WAITING",
+      "waitingOn": null, "lockOwner": null, "blockedCount": 0 }
+  ],
+  "elapsedMillis": 605,
+  "conclusion": "没有互斥：两个线程同时进入临界区，最大并发=2"
+}</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>指标</th><th>locked=true</th><th>locked=false</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>maxConcurrent</code></td><td>1</td><td>2</td></tr>
+              <tr><td>进入区间</td><td>A 0~601，B 602~1206</td><td>A、B 都从 0 开始</td></tr>
+              <tr><td>总耗时</td><td>1206ms</td><td>605ms</td></tr>
+              <tr><td>等待者状态</td><td><code>BLOCKED</code> + <code>lockOwner</code></td><td>无等待，都是 <code>TIMED_WAITING</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <span class="title">四个容易踩的坑</span>
+            <p>1）锁对象必须是同一个引用；每次 new 一个 Object 去锁，等于没锁。2）<code>sleep()</code> 不释放锁，只有退出同步块才释放。3）锁 <code>this</code> 或 <code>Class</code> 会把无关代码耦合到同一把锁上，优先用私有 final 锁对象。4）等待者处于 <code>TIMED_WAITING</code> 不代表没在等锁，必须看 <code>lockOwner</code> 和栈顶。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="reentrant">
+        <h2><span class="no">3.2</span>ReentrantLock：可重入与 AQS 队列</h2>
+        <p class="lead">一句话：ReentrantLock 用 AQS 的 <code>state</code> 记录重入层数，同一线程可以重复 <code>lock()</code>，但 <code>unlock()</code> 次数必须一一抵消。</p>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <span class="title">类比</span>
+            <p>一扇门允许同一个人刷三次卡，但出门也要刷三次；刷多一次会报警（IllegalMonitorStateException），少刷一次门就永远锁着。</p>
+          </div>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 860 300" role="img" aria-label="ReentrantLock 重入三层与 AQS 等待队列">
+              <rect x="16" y="16" width="828" height="268" rx="12" class="dg-lane"></rect>
+              <text x="36" y="44" class="dg-text">holder 重入 3 层，9 个等待者在 AQS 队列里排队</text>
+              <rect x="40" y="70" width="110" height="60" rx="8" class="dg-box"></rect>
+              <text x="95" y="94" text-anchor="middle" class="dg-text-sm">holder</text>
+              <text x="95" y="114" text-anchor="middle" class="dg-muted">lock() × 3</text>
+              <rect x="200" y="60" width="170" height="90" rx="10" class="dg-box-accent"></rect>
+              <text x="285" y="84" text-anchor="middle" class="dg-text-sm">ReentrantLock</text>
+              <text x="285" y="108" text-anchor="middle" class="dg-muted">AQS state = 3</text>
+              <text x="285" y="132" text-anchor="middle" class="dg-accent-text">holdCount = 3</text>
+              <rect x="430" y="60" width="390" height="150" rx="10" class="dg-box"></rect>
+              <text x="450" y="86" class="dg-text-sm">AQS FIFO 队列</text>
+              <rect x="452" y="108" width="50" height="34" rx="6" class="dg-box-warn"></rect>
+              <text x="477" y="130" text-anchor="middle" class="dg-text-sm">w1</text>
+              <rect x="514" y="108" width="50" height="34" rx="6" class="dg-box-warn"></rect>
+              <text x="539" y="130" text-anchor="middle" class="dg-text-sm">w2</text>
+              <rect x="576" y="108" width="50" height="34" rx="6" class="dg-box-warn"></rect>
+              <text x="601" y="130" text-anchor="middle" class="dg-text-sm">w3</text>
+              <rect x="638" y="108" width="50" height="34" rx="6" class="dg-box-warn"></rect>
+              <text x="663" y="130" text-anchor="middle" class="dg-text-sm">w4</text>
+              <rect x="700" y="108" width="50" height="34" rx="6" class="dg-box-warn"></rect>
+              <text x="725" y="130" text-anchor="middle" class="dg-text-sm">w5</text>
+              <text x="770" y="130" class="dg-muted">… w9</text>
+              <text x="450" y="180" class="dg-muted">getQueueLength() = 9（连续 5 次采样都是 9）</text>
+              <path d="M430 150 C400 150, 390 105, 370 105" class="dg-line-accent"></path>
+              <text x="200" y="190" class="dg-muted">释放顺序：unlock → 2，unlock → 1，unlock → 0 才唤醒队列</text>
+              <text x="40" y="240" class="dg-muted">所有等待者完成后，请求线程故意再 unlock 一次，触发 IllegalMonitorStateException</text>
+            </svg>
+          </div>
+          <figcaption>state 既是锁标志也是重入计数；state 归零时，AQS 才会把锁交给队首等待者。</figcaption>
+        </figure>
+
+        <h4>核心代码</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">java · ReentrantLockDemo#run（节选）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>lock.lock();                                   // 第 1 层：state 0→1
+try {
+    lockSteps.add(new LockStep("lock", 1, lock.getHoldCount()));   // 1
+    lock.lock();                               // 第 2 层：state 1→2
+    lockSteps.add(new LockStep("lock", 2, lock.getHoldCount()));   // 2
+    lock.lock();                               // 第 3 层：state 2→3
+    lockSteps.add(new LockStep("lock", 3, lock.getHoldCount()));   // 3
+    queueReady.await(3, TimeUnit.SECONDS);     // 等 9 个 waiter 全部入队
+    Thread.sleep(holdMillis);                  // 持锁一段时间，供队列采样
+} finally {
+    lock.unlock();                             // 3→2
+    lock.unlock();                             // 2→1
+    lock.unlock();                             // 1→0，此时才唤醒队首
+}</code></pre>
+        </div>
+
+        <h4>跑一次</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 三层重入 + 9 个等待者</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># waiters=9：队列里有 9 个线程；holdMillis 控制队列排满后的持锁时间
+curl -s 'http://localhost:9017/api/lock/reentrant?waiters=9&amp;holdMillis=300'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/reentrant?waiters=9&amp;holdMillis=300（已省略 timeline）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "waiters": 9,
+  "holdMillis": 300,
+  "lockSteps": [
+    { "action": "lock", "depth": 1, "holdCount": 1 },
+    { "action": "lock", "depth": 2, "holdCount": 2 },
+    { "action": "lock", "depth": 3, "holdCount": 3 },
+    { "action": "unlock", "depth": 3, "holdCount": 2 },
+    { "action": "unlock", "depth": 2, "holdCount": 1 },
+    { "action": "unlock", "depth": 1, "holdCount": 0 }
+  ],
+  "maxQueueLength": 9,
+  "queueLengthSamples": [9, 9, 9, 9, 9],
+  "acquisitionOrder": ["waiter-1", "waiter-2", "waiter-3", "waiter-4", "waiter-5",
+                       "waiter-6", "waiter-7", "waiter-8", "waiter-9"],
+  "allWaitersAcquired": true,
+  "elapsedMillis": 425,
+  "misuse": {
+    "caseName": "unlock-without-holding",
+    "exception": "IllegalMonitorStateException",
+    "message": "(no message)"
+  },
+  "lockFreeAtEnd": true,
+  "conclusion": "可重入 holdCount 依次为 1/2/3；9 个等待者全部获取；多余 unlock 抛出 IllegalMonitorStateException"
+}</code></pre>
+        </div>
+
+        <p>三个观察点：<code>lockSteps</code> 证明重入层数；<code>maxQueueLength=9</code> 是 AQS 队列的可观测形态；<code>misuse</code> 证明 <code>unlock()</code> 会校验“当前线程是否持有锁”，不是任何线程都能释放。</p>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <span class="title">坑：lock 与 unlock 必须成对</span>
+            <p>少一次 <code>unlock()</code>，锁永远不释放，后续线程全部卡死；多一次立刻抛 <code>IllegalMonitorStateException</code>。生产代码把 <code>unlock()</code> 放在 <code>finally</code>，并优先使用 <code>tryLock(timeout)</code> 给等待设上限。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="fairness">
+        <h2><span class="no">3.3</span>公平锁 vs 非公平锁：谁能在释放瞬间插队</h2>
+        <p class="lead">一句话：公平锁在抢锁前先看队列，队列非空就排到队尾；非公平锁跳过检查，直接 CAS 抢，释放者常常能插到最前面。</p>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <span class="title">类比</span>
+            <p>公平锁是取号排队，叫到号才能办；非公平锁是柜台一空出来，谁先挤到窗口谁先办。后者吞吐更高，但等待时间不可预测。</p>
+          </div>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 860 300" role="img" aria-label="公平锁与非公平锁下 holder 重抢的位置对比">
+              <rect x="16" y="16" width="828" height="268" rx="12" class="dg-lane"></rect>
+              <text x="36" y="52" class="dg-text">holder 释放后立刻重抢：H 最终排在哪里</text>
+              <text x="30" y="112" class="dg-text-sm">公平锁</text>
+              <path d="M100 105 L120 105" class="dg-line-accent"></path>
+              <rect x="120" y="84" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="149" y="110" text-anchor="middle" class="dg-text-sm">w1</text>
+              <rect x="186" y="84" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="215" y="110" text-anchor="middle" class="dg-text-sm">w2</text>
+              <rect x="252" y="84" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="281" y="110" text-anchor="middle" class="dg-text-sm">w3</text>
+              <rect x="318" y="84" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="347" y="110" text-anchor="middle" class="dg-text-sm">w4</text>
+              <rect x="384" y="84" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="413" y="110" text-anchor="middle" class="dg-text-sm">w5</text>
+              <rect x="450" y="84" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="479" y="110" text-anchor="middle" class="dg-text-sm">w6</text>
+              <rect x="516" y="84" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="545" y="110" text-anchor="middle" class="dg-text-sm">w7</text>
+              <rect x="582" y="84" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="611" y="110" text-anchor="middle" class="dg-text-sm">w8</text>
+              <rect x="648" y="84" width="70" height="42" rx="6" class="dg-box-accent"></rect>
+              <text x="683" y="110" text-anchor="middle" class="dg-accent-text">H 第 9</text>
+              <text x="120" y="150" class="dg-muted">H = holder-reacquire：发现队列非空，排到队尾</text>
+
+              <text x="30" y="222" class="dg-text-sm">非公平锁</text>
+              <path d="M100 215 L120 215" class="dg-line-danger"></path>
+              <rect x="120" y="194" width="70" height="42" rx="6" class="dg-box-accent"></rect>
+              <text x="155" y="220" text-anchor="middle" class="dg-accent-text">H 第 1</text>
+              <rect x="198" y="194" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="227" y="220" text-anchor="middle" class="dg-text-sm">w1</text>
+              <rect x="264" y="194" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="293" y="220" text-anchor="middle" class="dg-text-sm">w2</text>
+              <rect x="330" y="194" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="359" y="220" text-anchor="middle" class="dg-text-sm">w3</text>
+              <rect x="396" y="194" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="425" y="220" text-anchor="middle" class="dg-text-sm">w4</text>
+              <rect x="462" y="194" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="491" y="220" text-anchor="middle" class="dg-text-sm">w5</text>
+              <rect x="528" y="194" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="557" y="220" text-anchor="middle" class="dg-text-sm">w6</text>
+              <rect x="594" y="194" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="623" y="220" text-anchor="middle" class="dg-text-sm">w7</text>
+              <rect x="660" y="194" width="58" height="42" rx="6" class="dg-box"></rect>
+              <text x="689" y="220" text-anchor="middle" class="dg-text-sm">w8</text>
+              <text x="120" y="260" class="dg-muted">H 跳过队列检查，插到队首；等待者整体后移一位</text>
+            </svg>
+          </div>
+          <figcaption>实测：公平锁 H 的位置是 [9,9,9]；非公平锁 5 轮都是 [1,1,1,1,1]。</figcaption>
+        </figure>
+
+        <h4>核心代码</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">java · FairnessDemo#oneRound（节选）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>lock.lock();                         // holder 先持有锁
+try {
+    holderLocked.countDown();
+    queueReady.await(3, TimeUnit.SECONDS);   // 等 8 个 waiter 依次入队
+    lock.unlock();                   // 释放
+    lock.lock();                     // 关键动作：不睡眠，立刻重抢
+    acquisitions.add("holder-reacquire");    // 记录 H 的位置
+    sleepQuietly(20);
+} finally {
+    if (lock.isHeldByCurrentThread()) {
+        lock.unlock();               // 兜底，避免异常时把锁泄漏给后续轮次
+    }
+}</code></pre>
+        </div>
+
+        <h4>跑一次：公平锁</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 公平锁 3 轮</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># fair=true：8 个等待者，3 轮，观察 holder 第二次拿锁的位置
+curl -s 'http://localhost:9017/api/lock/fairness?fair=true&amp;threads=8&amp;rounds=3'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/fairness?fair=true&amp;threads=8&amp;rounds=3（已省略每轮完整顺序）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "fair": true,
+  "threads": 8,
+  "rounds": 3,
+  "bargedRounds": 0,
+  "conclusion": "公平锁：holder 重抢时排到队尾（位置=9），等待者保持入队顺序",
+  "roundResults": [
+    { "round": 1, "holderPosition": 9, "holderBarged": false, "waiterOrderMismatches": 0, "maxQueueLength": 8 },
+    { "round": 2, "holderPosition": 9, "holderBarged": false, "waiterOrderMismatches": 0, "maxQueueLength": 8 },
+    { "round": 3, "holderPosition": 9, "holderBarged": false, "waiterOrderMismatches": 0, "maxQueueLength": 8 }
+  ]
+}</code></pre>
+        </div>
+
+        <h4>跑一次：非公平锁</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 非公平锁 5 轮</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># fair=false：多跑两轮，确认插队不是偶然
+curl -s 'http://localhost:9017/api/lock/fairness?fair=false&amp;threads=8&amp;rounds=5'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/fairness?fair=false&amp;threads=8&amp;rounds=5（已省略每轮完整顺序）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "fair": false,
+  "threads": 8,
+  "rounds": 5,
+  "bargedRounds": 5,
+  "conclusion": "非公平锁：释放者在 5/5 轮中插队成功（holder 位置=1）",
+  "roundResults": [
+    { "round": 1, "holderPosition": 1, "holderBarged": true, "waiterOrderMismatches": 0, "maxQueueLength": 8 },
+    { "round": 2, "holderPosition": 1, "holderBarged": true, "waiterOrderMismatches": 0, "maxQueueLength": 8 },
+    { "round": 3, "holderPosition": 1, "holderBarged": true, "waiterOrderMismatches": 0, "maxQueueLength": 8 },
+    { "round": 4, "holderPosition": 1, "holderBarged": true, "waiterOrderMismatches": 0, "maxQueueLength": 8 },
+    { "round": 5, "holderPosition": 1, "holderBarged": true, "waiterOrderMismatches": 0, "maxQueueLength": 8 }
+  ]
+}</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>模式</th><th>holder 位置</th><th>等待者顺序错位</th><th>适用场景</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>公平锁</td><td>9（队尾）</td><td>0</td><td>对等待时间敏感、吞吐要求不高</td></tr>
+              <tr><td>非公平锁</td><td>1（队首）</td><td>0（等待者之间仍 FIFO）</td><td>默认选择，吞吐优先</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <span class="title">公平不等于“线程调度公平”</span>
+            <p>公平锁只保证队列中的线程按 FIFO 获得锁，不保证操作系统调度公平，也不保证 <code>tryLock()</code> 公平：<code>tryLock()</code> 不带超时时会直接插队。公平锁还要额外维护队列顺序，吞吐通常低于非公平锁。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="interrupt">
+        <h2><span class="no">3.4</span>等待期中断：monitorenter 与 lockInterruptibly</h2>
+        <p class="lead">一句话：<code>synchronized</code> 的等待不可中断，中断只留下标记；<code>lockInterruptibly()</code> 的等待可中断，收到中断立即抛 <code>InterruptedException</code> 并清除标记。</p>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <span class="title">类比</span>
+            <p>synchronized 像排队等电梯，队伍不会因为你接了个电话就让你离开；lockInterruptibly 像排队时允许接电话，接到“立刻回来”的通知就退出队伍。</p>
+          </div>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 860 340" role="img" aria-label="synchronized 与 ReentrantLock 在等待期收到中断的时间线">
+              <rect x="16" y="16" width="828" height="308" rx="12" class="dg-lane"></rect>
+              <text x="36" y="44" class="dg-text">同一时序：holder 持锁 1200ms，第 200ms 调用 interrupt()</text>
+              <text x="24" y="62" class="dg-text-sm">synchronized</text>
+              <text x="24" y="90" class="dg-muted">holder</text>
+              <rect x="140" y="70" width="600" height="30" rx="6" class="dg-box-warn"></rect>
+              <text x="155" y="90" class="dg-muted">持锁并 sleep(1200)</text>
+              <text x="24" y="132" class="dg-muted">victim</text>
+              <rect x="140" y="112" width="600" height="30" rx="6" class="dg-box-danger"></rect>
+              <text x="155" y="132" class="dg-danger-text">BLOCKED：中断只置标记，继续等</text>
+              <rect x="740" y="112" width="48" height="30" rx="6" class="dg-box-ok"></rect>
+              <text x="788" y="160" text-anchor="end" class="dg-ok-text">1202ms 才进入</text>
+
+              <text x="24" y="182" class="dg-text-sm">ReentrantLock</text>
+              <text x="24" y="210" class="dg-muted">holder</text>
+              <rect x="140" y="190" width="600" height="30" rx="6" class="dg-box-warn"></rect>
+              <text x="155" y="210" class="dg-muted">持锁并 sleep(1200)</text>
+              <text x="24" y="252" class="dg-muted">victim</text>
+              <rect x="140" y="232" width="107" height="30" rx="6" class="dg-box-warn"></rect>
+              <text x="155" y="252" class="dg-muted">WAITING</text>
+              <text x="260" y="252" class="dg-ok-text">215ms 抛 InterruptedException，未进入</text>
+
+              <line x1="240" y1="58" x2="240" y2="270" class="dg-life"></line>
+              <text x="250" y="166" class="dg-danger-text">interrupt() @200ms</text>
+              <path d="M140 290 L800 290" class="dg-line"></path>
+              <text x="140" y="312" class="dg-muted">0ms</text>
+              <text x="432" y="312" class="dg-muted">600ms</text>
+              <text x="726" y="312" class="dg-muted">1200ms</text>
+            </svg>
+          </div>
+          <figcaption>synchronized 的进入时间由锁释放决定（1202ms）；ReentrantLock 的退出时间由中断决定（约 215ms）。</figcaption>
+        </figure>
+
+        <h4>核心代码</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">java · InterruptDemo#run（节选）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>// synchronized 分支：中断不会取消 monitorenter
+synchronized (monitor) {
+    victimEntered.set(true);                 // 只有拿到 monitor 才会执行到这里
+    timeline.add(new TimelineEvent(..., "entered", "interrupt 未阻止进入"));
+}
+
+// ReentrantLock 分支：park 期间响应中断
+try {
+    lock.lockInterruptibly();                // 等待可被 interrupt 打断
+    try {
+        victimEntered.set(true);
+    } finally {
+        lock.unlock();
+    }
+} catch (InterruptedException e) {
+    interruptLatencyMillis.set(...);         // 记录从 interrupt() 到捕获异常的延迟
+    exceptionThrown.set(true);
+}</code></pre>
+        </div>
+
+        <h4>跑一次：synchronized</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · synchronized 等待期中断</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># 持有者 1200ms；受害者确认阻塞后再等 200ms 被中断
+curl -s 'http://localhost:9017/api/lock/interrupt?mode=synchronized&amp;holdMillis=1200&amp;interruptAfterMillis=200'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/interrupt?mode=synchronized（已省略部分 timeline）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "mode": "synchronized",
+  "holdMillis": 1200,
+  "interruptAfterMillis": 200,
+  "victimEntered": true,
+  "enteredAtMillis": 1202,
+  "exceptionThrown": false,
+  "exceptionType": null,
+  "interruptLatencyMillis": -1,
+  "interruptFlagAfter": true,
+  "blockedSnapshot": {
+    "threadName": "int-3-victim",
+    "state": "BLOCKED",
+    "waitingOn": "java.lang.Object@18804bc3",
+    "lockOwner": "int-3-holder",
+    "blockedCount": 1,
+    "topFrame": "com.example.demo.concurrency.lock.InterruptDemo.lambda$run$1(InterruptDemo.java:107)"
+  },
+  "conclusion": "synchronized 不可中断：中断只置标记，受害者在锁释放后才进入临界区"
+}</code></pre>
+        </div>
+
+        <h4>跑一次：ReentrantLock</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · lockInterruptibly 等待期中断</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># 同样的 1200ms 持锁与 200ms 中断时点，只切换锁类型
+curl -s 'http://localhost:9017/api/lock/interrupt?mode=reentrant&amp;holdMillis=1200&amp;interruptAfterMillis=200'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/interrupt?mode=reentrant（已省略部分 timeline）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "mode": "reentrant",
+  "holdMillis": 1200,
+  "interruptAfterMillis": 200,
+  "victimEntered": false,
+  "enteredAtMillis": -1,
+  "exceptionThrown": true,
+  "exceptionType": "InterruptedException",
+  "interruptLatencyMillis": 0,
+  "interruptFlagAfter": false,
+  "blockedSnapshot": {
+    "threadName": "int-4-victim",
+    "state": "WAITING",
+    "waitingOn": "java.util.concurrent.locks.ReentrantLock$NonfairSync@6e091149",
+    "lockOwner": "int-4-holder",
+    "blockedCount": 0,
+    "topFrame": "java.base@21.0.13/jdk.internal.misc.Unsafe.park(Native Method)"
+  },
+  "conclusion": "lockInterruptibly 可中断：等待约 0ms 后抛出 InterruptedException，未进入临界区"
+}</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>观察点</th><th>synchronized</th><th>lockInterruptibly</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>等待状态</td><td><code>BLOCKED</code></td><td><code>WAITING</code>（栈顶 Unsafe.park）</td></tr>
+              <tr><td>是否进入临界区</td><td>是，1202ms</td><td>否</td></tr>
+              <tr><td>异常</td><td>无</td><td><code>InterruptedException</code>，延迟 0ms</td></tr>
+              <tr><td>中断标记</td><td>保留 <code>true</code></td><td>被异常清除为 <code>false</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <span class="title">坑：不可中断不等于中断无效</span>
+            <p>synchronized 分支里中断标记已经置上，只是进入 monitor 的动作不会因此放弃；等它之后调用 <code>sleep/wait/join</code> 时会立刻抛异常。捕获 <code>InterruptedException</code> 后不要吞掉：要么继续向上抛，要么 <code>Thread.currentThread().interrupt()</code> 恢复标记。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="deadlock">
+        <h2><span class="no">3.5</span>死锁：AB-BA 成环、检测与固定顺序修复</h2>
+        <p class="lead">一句话：两个线程各持一把锁、又等对方的锁，形成等待环；打破环最直接的办法是让所有线程按同一顺序加锁。</p>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <span class="title">类比</span>
+            <p>两辆车在窄巷相遇：A 车等 B 车倒，B 车等 A 车倒，谁都不动。固定顺序相当于规定“所有车先靠右再前进”，从规则上消除互等。</p>
+          </div>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 860 340" role="img" aria-label="AB-BA 死锁环与固定顺序修复">
+              <rect x="16" y="16" width="400" height="308" rx="12" class="dg-lane"></rect>
+              <text x="36" y="46" class="dg-text">交叉顺序：形成等待环</text>
+              <rect x="50" y="70" width="90" height="44" rx="8" class="dg-box"></rect>
+              <text x="95" y="97" text-anchor="middle" class="dg-text-sm">T1</text>
+              <rect x="50" y="220" width="90" height="44" rx="8" class="dg-box"></rect>
+              <text x="95" y="247" text-anchor="middle" class="dg-text-sm">T2</text>
+              <rect x="280" y="60" width="90" height="50" rx="8" class="dg-box-accent"></rect>
+              <text x="325" y="91" text-anchor="middle" class="dg-text-sm">锁 A</text>
+              <rect x="280" y="210" width="90" height="50" rx="8" class="dg-box-accent"></rect>
+              <text x="325" y="241" text-anchor="middle" class="dg-text-sm">锁 B</text>
+              <path d="M140 92 L280 84" class="dg-line-ok"></path>
+              <path d="M140 242 L280 235" class="dg-line-ok"></path>
+              <path d="M140 106 L280 222" class="dg-line-danger dg-line-dashed"></path>
+              <path d="M140 230 L280 96" class="dg-line-danger dg-line-dashed"></path>
+              <text x="160" y="186" class="dg-danger-text">互等对方</text>
+              <text x="36" y="300" class="dg-muted">实线=已持有，虚线=正在等待</text>
+
+              <rect x="444" y="16" width="400" height="308" rx="12" class="dg-lane"></rect>
+              <text x="464" y="46" class="dg-text">固定顺序：所有人先 A 后 B</text>
+              <rect x="464" y="70" width="90" height="44" rx="8" class="dg-box"></rect>
+              <text x="509" y="97" text-anchor="middle" class="dg-text-sm">T1</text>
+              <rect x="464" y="180" width="90" height="44" rx="8" class="dg-box"></rect>
+              <text x="509" y="207" text-anchor="middle" class="dg-text-sm">T2</text>
+              <rect x="610" y="60" width="120" height="50" rx="8" class="dg-box-accent"></rect>
+              <text x="670" y="91" text-anchor="middle" class="dg-text-sm">锁 A</text>
+              <rect x="610" y="180" width="120" height="50" rx="8" class="dg-box-accent"></rect>
+              <text x="670" y="211" text-anchor="middle" class="dg-text-sm">锁 B</text>
+              <path d="M554 92 L610 84" class="dg-line-ok"></path>
+              <text x="556" y="80" class="dg-ok-text">持有</text>
+              <path d="M554 194 L610 104" class="dg-line-danger dg-line-dashed"></path>
+              <text x="540" y="150" class="dg-danger-text">等待</text>
+              <path d="M730 110 L730 180" class="dg-line-accent"></path>
+              <text x="740" y="150" class="dg-accent-text">再拿 B</text>
+              <text x="610" y="270" class="dg-muted">T2 在 A 上排队，T1 完成后才 A→B</text>
+            </svg>
+          </div>
+          <figcaption>左边是环，右边是队列：同样的两把锁，只改加锁顺序，死锁条件就不再成立。</figcaption>
+        </figure>
+
+        <h4>核心代码</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">java · DeadlockDemo#crossWorker（节选）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>first.lock();                              // 先拿自己那把：T1 拿 A，T2 拿 B
+try {
+    ownHeld.countDown();
+    otherHeld.await(2, TimeUnit.SECONDS);  // 等对方也拿到第一把，确保能成环
+    try {
+        second.lockInterruptibly();        // 关键：可中断，检测到死锁后才能恢复
+        try {
+            sleepQuietly(holdMillis);
+        } finally {
+            second.unlock();
+        }
+    } catch (InterruptedException e) {
+        interrupted.set(true);             // 从等待中醒来，记录并退出
+    }
+} finally {
+    first.unlock();                        // 无论是否死锁，都归还第一把锁
+}</code></pre>
+        </div>
+
+        <h4>跑一次：交叉顺序</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · AB-BA 死锁</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># fixed=false：T1 先 A 后 B，T2 先 B 后 A；检测到死锁后 interrupt 清理
+curl -s 'http://localhost:9017/api/lock/deadlock?fixed=false&amp;holdMillis=100'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/deadlock?fixed=false（已省略部分 timeline 和栈帧）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "fixed": false,
+  "deadlockDetected": true,
+  "cleanedUp": true,
+  "allThreadsFinished": true,
+  "interrupted": true,
+  "elapsedMillis": 37,
+  "deadlockedThreads": [
+    { "threadName": "dead-3-T1", "state": "WAITING",
+      "waitingOn": "java.util.concurrent.locks.ReentrantLock$NonfairSync@33404506",
+      "lockOwner": "dead-3-T2",
+      "topFrames": ["Unsafe.park", "LockSupport.park",
+                    "AbstractQueuedSynchronizer.acquire",
+                    "AbstractQueuedSynchronizer.acquireInterruptibly"] },
+    { "threadName": "dead-3-T2", "state": "WAITING",
+      "waitingOn": "java.util.concurrent.locks.ReentrantLock$NonfairSync@30a9996d",
+      "lockOwner": "dead-3-T1",
+      "topFrames": ["Unsafe.park", "LockSupport.park",
+                    "AbstractQueuedSynchronizer.acquire",
+                    "AbstractQueuedSynchronizer.acquireInterruptibly"] }
+  ],
+  "conclusion": "AB-BA 死锁：两个线程各持一把锁并等待对方；ThreadMXBean 检出 2 个死锁线程，interrupt 后恢复"
+}</code></pre>
+        </div>
+
+        <h4>跑一次：固定顺序</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 固定 A→B 顺序</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># fixed=true：两个线程都按 A→B 加锁，T2 在 A 上正常排队
+curl -s 'http://localhost:9017/api/lock/deadlock?fixed=true&amp;holdMillis=100'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/deadlock?fixed=true（已省略 timeline）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "fixed": true,
+  "deadlockDetected": false,
+  "cleanedUp": true,
+  "allThreadsFinished": true,
+  "interrupted": false,
+  "elapsedMillis": 363,
+  "deadlockedThreads": [],
+  "conclusion": "固定加锁顺序（A→B）后没有死锁，两个线程在 363ms 内完成"
+}</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>指标</th><th>交叉顺序</th><th>固定顺序 A→B</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>deadlockDetected</code></td><td>true</td><td>false</td></tr>
+              <tr><td>死锁线程</td><td>T1 等 T2 的 B，T2 等 T1 的 A</td><td>无</td></tr>
+              <tr><td>清理方式</td><td>interrupt 唤醒，两线程退出</td><td>不需要</td></tr>
+              <tr><td>实测耗时</td><td>19~37ms</td><td>321~363ms</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout danger">
+          <span class="ico">!</span>
+          <div>
+            <span class="title">坑：检测不是修复</span>
+            <p><code>ThreadMXBean.findDeadlockedThreads()</code> 只能发现 monitor 与 ownable synchronizer（ReentrantLock 属于后者）形成的死锁，发现不了数据库锁、网络等待等外部阻塞。检测只是诊断；要恢复，第二把锁必须可中断或带超时，否则只能重启 JVM。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="counter">
+        <h2><span class="no">3.6</span>丢更新与计数：锁、CAS、分段累加</h2>
+        <p class="lead">一句话：<code>count++</code> 是“读、加、写”三步，不是原子操作；两个线程读到同一个旧值，后写的会覆盖先写的。</p>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <span class="title">类比</span>
+            <p>两个人同时抄同一张考勤表：都看到“已到 0 人”，各自改成“1”，最后表上只有 1；另一次 +1 被覆盖了。</p>
+          </div>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 860 320" role="img" aria-label="丢更新的读改写窗口与四种计数写法">
+              <rect x="16" y="16" width="420" height="288" rx="12" class="dg-lane"></rect>
+              <text x="36" y="46" class="dg-text">丢更新：都读到 0，都写回 1</text>
+              <rect x="46" y="80" width="80" height="44" rx="8" class="dg-box"></rect>
+              <text x="86" y="107" text-anchor="middle" class="dg-text-sm">T1</text>
+              <rect x="46" y="210" width="80" height="44" rx="8" class="dg-box"></rect>
+              <text x="86" y="237" text-anchor="middle" class="dg-text-sm">T2</text>
+              <rect x="190" y="130" width="100" height="60" rx="8" class="dg-box-warn"></rect>
+              <text x="240" y="156" text-anchor="middle" class="dg-text-sm">读到 0</text>
+              <text x="240" y="176" text-anchor="middle" class="dg-muted">同一个旧值</text>
+              <rect x="330" y="130" width="90" height="60" rx="8" class="dg-box-danger"></rect>
+              <text x="375" y="156" text-anchor="middle" class="dg-text-sm">写回 1</text>
+              <text x="375" y="176" text-anchor="middle" class="dg-danger-text">+1 被覆盖</text>
+              <path d="M126 102 C160 102, 165 130, 190 145" class="dg-line"></path>
+              <path d="M126 232 C160 232, 165 190, 190 175" class="dg-line"></path>
+              <path d="M290 160 L330 160" class="dg-line-danger"></path>
+              <text x="46" y="282" class="dg-muted">expected = 2，actual = 1</text>
+
+              <rect x="456" y="16" width="388" height="288" rx="12" class="dg-lane"></rect>
+              <text x="476" y="46" class="dg-text">四种写法的代价</text>
+              <rect x="476" y="66" width="348" height="44" rx="8" class="dg-box-danger"></rect>
+              <text x="492" y="93" class="dg-danger-text">none：丢更新，结果不可信</text>
+              <rect x="476" y="120" width="348" height="44" rx="8" class="dg-box-warn"></rect>
+              <text x="492" y="147" class="dg-text-sm">synchronized：正确，但线程排队</text>
+              <rect x="476" y="174" width="348" height="44" rx="8" class="dg-box-accent"></rect>
+              <text x="492" y="201" class="dg-text-sm">atomic：CAS 自旋，高竞争时重试多</text>
+              <rect x="476" y="228" width="348" height="44" rx="8" class="dg-box-ok"></rect>
+              <text x="492" y="255" class="dg-ok-text">longadder：分段 Cell，最后 sum 合并</text>
+            </svg>
+          </div>
+          <figcaption>左边是丢更新的根本原因；右边是四种保护方式的代价差异，实测吞吐见本节末尾。</figcaption>
+        </figure>
+
+        <h4>核心代码：把竞态窗口放大</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">java · CounterDemo#lostUpdates（节选）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>for (int k = 0; k &lt; iterations; k++) {
+    long read = value[0];                  // 读：所有线程读到同一个旧值
+    barrier.await(10, TimeUnit.SECONDS);   // 第一道栅栏：等所有线程都读完
+    value[0] = read + 1;                   // 写：都写回同一个旧值 + 1
+    barrier.await(10, TimeUnit.SECONDS);   // 第二道栅栏：等所有写完成再进下一轮
+}</code></pre>
+        </div>
+
+        <h4>跑一次：确定性丢更新</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 8 线程 × 2000 次</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># 每个线程每轮都读同一个值再写回，因此 actual 必然等于 iterations，而不是 threads × iterations
+curl -s 'http://localhost:9017/api/lock/counter/lost-updates?threads=8&amp;iterations=2000'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/counter/lost-updates</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "threads": 8,
+  "iterations": 2000,
+  "expected": 16000,
+  "actual": 2000,
+  "lost": 14000,
+  "elapsedMillis": 214,
+  "orchestrated": true,
+  "note": "两道栅栏把读改写窗口放大到必然重叠：每轮所有线程写回同一个值，只 +1"
+}</code></pre>
+        </div>
+
+        <h4>核心代码：四种写法</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">java · CounterDemo#runRound（节选）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>switch (mode) {
+    case NONE -&gt; plain[0]++;              // 反例：读和写是两步，中间可能被插入
+    case SYNCHRONIZED -&gt; {                // 锁把“读 + 写”包成一个临界区
+        synchronized (monitor) {
+            plain[0]++;
+        }
+    }
+    case ATOMIC -&gt; atomic.incrementAndGet();   // CAS 自旋：失败就重试
+    case LONGADDER -&gt; adder.increment();       // 分段累加：不同线程更新不同 Cell
+}</code></pre>
+        </div>
+
+        <h4>跑一次：8 线程对比</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 四种写法，8 线程</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># 每种写法先热身 2 轮，再测 3 轮取中位数；iterations 是每线程次数
+curl -s 'http://localhost:9017/api/lock/counter/compare?threads=8&amp;iterations=100000&amp;rounds=3'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/counter/compare?threads=8（已省略 note）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "threads": 8,
+  "iterations": 100000,
+  "rounds": 3,
+  "warmupRounds": 2,
+  "modes": [
+    { "mode": "none", "expectedPerRound": 800000,
+      "actuals": [322318, 305345, 350754], "exact": false,
+      "medianElapsedMillis": 4.0, "opsPerMillis": 81153.5 },
+    { "mode": "synchronized", "expectedPerRound": 800000,
+      "actuals": [800000, 800000, 800000], "exact": true,
+      "medianElapsedMillis": 46.4, "opsPerMillis": 17235.8 },
+    { "mode": "atomic", "expectedPerRound": 800000,
+      "actuals": [800000, 800000, 800000], "exact": true,
+      "medianElapsedMillis": 21.8, "opsPerMillis": 36712.8 },
+    { "mode": "longadder", "expectedPerRound": 800000,
+      "actuals": [800000, 800000, 800000], "exact": true,
+      "medianElapsedMillis": 5.7, "opsPerMillis": 139960.8 }
+  ]
+}</code></pre>
+        </div>
+
+        <h4>跑一次：32 线程对比</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 四种写法，32 线程</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># 线程数翻 4 倍，总操作量变成 3200000；观察竞争加剧后的排名是否变化
+curl -s 'http://localhost:9017/api/lock/counter/compare?threads=32&amp;iterations=100000&amp;rounds=3'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/counter/compare?threads=32（已省略 note）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "threads": 32,
+  "iterations": 100000,
+  "rounds": 3,
+  "warmupRounds": 2,
+  "modes": [
+    { "mode": "none", "expectedPerRound": 3200000,
+      "actuals": [728309, 962288, 627141], "exact": false,
+      "medianElapsedMillis": 11.8, "opsPerMillis": 61804.3 },
+    { "mode": "synchronized", "expectedPerRound": 3200000,
+      "actuals": [3200000, 3200000, 3200000], "exact": true,
+      "medianElapsedMillis": 185.3, "opsPerMillis": 17264.8 },
+    { "mode": "atomic", "expectedPerRound": 3200000,
+      "actuals": [3200000, 3200000, 3200000], "exact": true,
+      "medianElapsedMillis": 74.8, "opsPerMillis": 42778.4 },
+    { "mode": "longadder", "expectedPerRound": 3200000,
+      "actuals": [3200000, 3200000, 3200000], "exact": true,
+      "medianElapsedMillis": 12.4, "opsPerMillis": 258090.8 }
+  ]
+}</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>写法</th><th>8 线程有效 ops/ms</th><th>32 线程有效 ops/ms</th><th>正确性</th><th>选择建议</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>none</td><td>81153.5（数字无意义）</td><td>61804.3（数字无意义）</td><td>不可信</td><td>永不用于并发写</td></tr>
+              <tr><td>synchronized</td><td>17235.8</td><td>17264.8</td><td>精确</td><td>临界区还有多项操作时</td></tr>
+              <tr><td>atomic</td><td>36712.8</td><td>42778.4</td><td>精确</td><td>低竞争且需要返回值</td></tr>
+              <tr><td>longadder</td><td>139960.8</td><td>258090.8</td><td>精确</td><td>高竞争、只做计数/求和</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>读法：<code>none</code> 的 <code>opsPerMillis</code> 算的是“真正成功的 +1”，不是尝试次数，所以它看起来不慢，但结果已经丢了；三种有保护写法的 <code>exact</code> 在两种线程数下都是 <code>true</code>。<code>LongAdder</code> 在 32 线程时约为 <code>AtomicLong</code> 的 6 倍、<code>synchronized</code> 的 15 倍。</p>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <span class="title">坑：数字与语义</span>
+            <p><code>LongAdder.sum()</code> 不是原子快照：并发调用时可能少算正在更新的 Cell，适合最终统计，不适合“读一个精确瞬时值”。<code>AtomicLong</code> 在高竞争下 CAS 失败重试会消耗 CPU。锁能保护多个变量的不变量，原子类只能保护一个变量。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="watchdog">
+        <h2><span class="no">4.1</span>租约锁与看门狗：过期接管与到期续期</h2>
+        <p class="lead">一句话：租约锁不假设“持有者会永远活着”，而是把锁租出去一个有效期；看门狗在到期前替仍在用锁的线程续期，业务结束后必须停止续期。</p>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <span class="title">类比</span>
+            <p>酒店房卡 30 分钟有效。住客还在房间里，前台每 10 分钟给他续一次卡；人退房后必须停止续卡。如果卡已经过期、房间分给了新住客，前台不能再把旧住客的卡续上——那会让两个人同时拥有同一个房间。</p>
+          </div>
+        </div>
+
+        <p>纯内存版只需要两个状态：<code>owner</code> 和 <code>expireAtNanos</code>。获取时如果锁空闲或租约已过期，就写入新 owner 与新的到期时间；释放时校验 owner，迟到的旧持有者不能释放新持有者的锁。所谓“看门狗”，就是一个守护线程按 <code>lease/3</code> 的间隔调用续期。</p>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 860 350" role="img" aria-label="无看门狗时租约到期被 B 接管，有看门狗时 B 等到 A 释放">
+              <rect x="16" y="16" width="828" height="150" rx="12" class="dg-lane"></rect>
+              <text x="36" y="42" class="dg-text">watchdog=false：租约 800ms，业务执行 2500ms</text>
+              <text x="36" y="80" class="dg-text-sm">A</text>
+              <text x="36" y="126" class="dg-text-sm">B</text>
+              <rect x="110" y="60" width="200" height="28" rx="6" class="dg-box-accent"></rect>
+              <text x="210" y="79" text-anchor="middle" class="dg-text-sm">租约有效 0→800ms</text>
+              <rect x="310" y="60" width="426" height="28" rx="6" class="dg-box-danger"></rect>
+              <text x="523" y="79" text-anchor="middle" class="dg-danger-text">租约已过期，A 仍在执行</text>
+              <rect x="360" y="106" width="426" height="28" rx="6" class="dg-box-ok"></rect>
+              <text x="573" y="125" text-anchor="middle" class="dg-text-sm">B 持锁 1002→2705ms</text>
+              <rect x="360" y="56" width="376" height="82" rx="8" fill="none" stroke="var(--danger)" stroke-width="1.4" stroke-dasharray="5 5"></rect>
+              <text x="548" y="154" text-anchor="middle" class="dg-danger-text">overlap=true：1002→2503ms 两个线程同时在临界区</text>
+
+              <rect x="16" y="182" width="828" height="150" rx="12" class="dg-lane"></rect>
+              <text x="36" y="208" class="dg-text">watchdog=true：每 800/3≈266ms 续期一次，共 9 次</text>
+              <text x="36" y="246" class="dg-text-sm">A</text>
+              <text x="36" y="292" class="dg-text-sm">B</text>
+              <rect x="110" y="226" width="626" height="28" rx="6" class="dg-box-accent"></rect>
+              <text x="423" y="245" text-anchor="middle" class="dg-text-sm">A 持锁 0→2501ms，期间不断续期</text>
+              <rect x="178" y="222" width="3" height="36" fill="var(--accent)"></rect>
+              <rect x="244" y="222" width="3" height="36" fill="var(--accent)"></rect>
+              <rect x="311" y="222" width="3" height="36" fill="var(--accent)"></rect>
+              <rect x="378" y="222" width="3" height="36" fill="var(--accent)"></rect>
+              <rect x="443" y="222" width="3" height="36" fill="var(--accent)"></rect>
+              <rect x="511" y="222" width="3" height="36" fill="var(--accent)"></rect>
+              <rect x="577" y="222" width="3" height="36" fill="var(--accent)"></rect>
+              <rect x="642" y="222" width="3" height="36" fill="var(--accent)"></rect>
+              <rect x="710" y="222" width="3" height="36" fill="var(--accent)"></rect>
+              <text x="500" y="272" text-anchor="middle" class="dg-muted">B 从 1000ms 起每 25ms 重试，一直等到租约真正释放</text>
+              <path d="M360 292 L736 292" class="dg-line" stroke-dasharray="4 4"></path>
+              <rect x="742" y="280" width="30" height="24" rx="6" class="dg-box-ok"></rect>
+              <text x="782" y="296" class="dg-ok-text">2528→2648ms</text>
+              <text x="36" y="320" class="dg-ok-text">overlap=false：A 在 2501ms 释放后，B 才在 2528ms 进入</text>
+            </svg>
+          </div>
+          <figcaption>上：租约自然过期，B 在 1002ms 闯入；下：看门狗每 266ms 续期，B 等到 2501ms A 释放后才进入。B 的获取时间会有几毫秒调度浮动。</figcaption>
+        </figure>
+
+        <h4>核心代码：获取、续期与释放都要校验</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">java · WatchdogDemo#Lease 与续期任务（节选）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>// 租约 = owner + 到期时间；判断与写入必须在同一个临界区里完成
+synchronized boolean tryAcquire(String candidate, long leaseMillis) {
+    long now = System.nanoTime();
+    if (owner == null || now &gt;= expireAtNanos) {        // 空闲或已过期才能接管
+        owner = candidate;
+        expireAtNanos = now + TimeUnit.MILLISECONDS.toNanos(leaseMillis);
+        return true;
+    }
+    return false;
+}
+
+// 看门狗每 lease/3 续期一次；owner 变了或租约已过期就返回 false，任务随即停止
+synchronized boolean renew(String expected, long leaseMillis) {
+    long now = System.nanoTime();
+    if (!expected.equals(owner) || now &gt;= expireAtNanos) {
+        return false;                                    // 拒绝“过期后复活”
+    }
+    expireAtNanos = now + TimeUnit.MILLISECONDS.toNanos(leaseMillis);
+    return true;
+}
+
+// 带 owner 校验的释放：A 迟到时不能把 B 已经拿到的锁删掉
+synchronized boolean release(String expected) {
+    if (expected.equals(owner)) {
+        owner = null;
+        return true;
+    }
+    return false;
+}
+
+// 释放前先停表，否则解锁后看门狗可能还在续期
+if (renewer != null) {
+    renewer.shutdownNow();
+    awaitTermination(renewer);
+}
+lease.release("A");</code></pre>
+        </div>
+
+        <h4>跑一次：没有看门狗</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 租约 800ms，业务执行 2500ms</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># B 在 lease + 200ms 时开始抢锁；A 的业务时间远大于租约
+curl -s 'http://localhost:9017/api/lock/watchdog?leaseMillis=800&amp;holdMillis=2500&amp;watchdog=false'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/watchdog?watchdog=false（已省略 note）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "watchdog": false,
+  "leaseMillis": 800,
+  "holdMillis": 2500,
+  "contendAtMillis": 1000,
+  "overlap": true,
+  "renewCount": 0,
+  "renewedAfterRelease": false,
+  "staleReleaseIgnored": true,
+  "aReleasedAtMillis": 2503,
+  "bAcquiredAtMillis": 1002,
+  "ownerAtEnd": null,
+  "timeline": [
+    {"atMillis": 2, "thread": "A", "action": "acquire", "note": "lease=800ms"},
+    {"atMillis": 1002, "thread": "B", "action": "contend", "note": "开始尝试获取锁"},
+    {"atMillis": 1003, "thread": "B", "action": "acquire", "note": "A 是否仍在执行=true"},
+    {"atMillis": 2503, "thread": "A", "action": "release-ignored", "note": "租约已过期，当前 owner 不是 A"},
+    {"atMillis": 2705, "thread": "B", "action": "release", "note": "B 正常释放"}
+  ],
+  "conclusion": "租约 800ms 到期后无人续期，B 在 1002ms 闯入，而 A 直到 2503ms 才结束，overlap=true"
+}</code></pre>
+        </div>
+
+        <h4>跑一次：开启看门狗</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 同一时序，开启续期</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># 看门狗每 800/3≈266ms 续一次；B 的重试间隔是 25ms
+curl -s 'http://localhost:9017/api/lock/watchdog?leaseMillis=800&amp;holdMillis=2500&amp;watchdog=true'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/watchdog?watchdog=true（已省略 timeline 与 note）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "watchdog": true,
+  "leaseMillis": 800,
+  "holdMillis": 2500,
+  "contendAtMillis": 1000,
+  "overlap": false,
+  "renewCount": 9,
+  "renewedAfterRelease": false,
+  "staleReleaseIgnored": false,
+  "aReleasedAtMillis": 2501,
+  "bAcquiredAtMillis": 2528,
+  "ownerAtEnd": null,
+  "conclusion": "看门狗每 266ms 续期一次，共续期 9 次；B 到 A 释放（2501ms）后才进入，overlap=false"
+}</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>模式</th><th><code>overlap</code></th><th><code>renewCount</code></th><th>A 释放</th><th>B 拿到锁</th><th>迟到的 release</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>watchdog=false</code></td><td>true</td><td>0</td><td>2503ms</td><td>1002ms</td><td>被忽略（<code>staleReleaseIgnored=true</code>）</td></tr>
+              <tr><td><code>watchdog=true</code></td><td>false</td><td>9</td><td>2501ms</td><td>2528ms</td><td>不存在（A 先释放）</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>看门狗模式的 9 次续期出现在约 274、535、803、1070、1331、1602、1867、2129、2399ms，与 <code>800/3</code> 的节拍一致。B 在 1000ms 开始抢锁、每 25ms 重试一次，直到 A 在 2501ms 释放后才成功——<code>overlap=false</code> 说明互斥被保住了。</p>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <span class="title">坑：续期不是“无脑续”</span>
+            <p>三个必须同时满足的条件：释放前停止看门狗（否则 <code>renewedAfterRelease</code> 会为 true）；续期前确认 owner 仍是自己（否则会把 B 的锁续上）；租约已过期就直接放弃（否则等于“复活”一个已经被接管的锁）。另外，业务时间不应无限依赖续期，生产实现还要有最大持有时间与监控。</p>
+          </div>
+        </div>
+
+        <div class="callout tip">
+          <span class="ico">✓</span>
+          <div>
+            <span class="title">从内存实现映射到 Redisson</span>
+            <p>内存里的 <code>owner + expireAtNanos</code> 对应 Redis 的 key value 与 <code>PEXPIRE</code>；<code>tryAcquire/renew/release</code> 对应三段 Lua，保证“判断 + 写入”在服务端原子执行；看门狗就是按 <code>TTL/3</code> 调度的续期任务。Redisson 默认 TTL 30s、每 10s 续期；显式传 <code>leaseTime</code> 会关闭看门狗。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="striped">
+        <h2><span class="no">4.2</span>分段计数：把热点拆到多个 Cell</h2>
+        <p class="lead">一句话：<code>LongAdder</code> 不追求“所有线程更新同一个变量”，而是让线程各自更新一个 Cell，读取时再把所有 Cell 加起来。</p>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <span class="title">类比</span>
+            <p>超市有 32 个收银员，却只有一台总收银机：每个人都排队去按同一个按钮。分段计数相当于开 16 台收银机，每个人按自己的机器，最后把 16 台机器的金额相加。</p>
+          </div>
+        </div>
+
+        <p>实现只需要三件事：一个 <code>Cell[]</code> 数组、一个把线程映射到格子的规则、一个最后求和的 <code>sum()</code>。本例把 Cell 数量向上取到 2 的幂，用 <code>threadId &amp; (size - 1)</code> 选格——同一线程总是命中同一格，不同线程尽量分散。</p>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 860 340" role="img" aria-label="AtomicLong 所有线程争一个地址，StripedCounter 把线程分散到 16 个 Cell">
+              <rect x="16" y="16" width="400" height="308" rx="12" class="dg-lane"></rect>
+              <text x="36" y="44" class="dg-text">AtomicLong：32 个线程争同一个地址</text>
+              <rect x="44" y="66" width="60" height="30" rx="6" class="dg-box"></rect>
+              <text x="74" y="86" text-anchor="middle" class="dg-text-sm">T1</text>
+              <rect x="44" y="116" width="60" height="30" rx="6" class="dg-box"></rect>
+              <text x="74" y="136" text-anchor="middle" class="dg-text-sm">T2</text>
+              <rect x="44" y="166" width="60" height="30" rx="6" class="dg-box"></rect>
+              <text x="74" y="186" text-anchor="middle" class="dg-text-sm">…</text>
+              <rect x="44" y="216" width="60" height="30" rx="6" class="dg-box"></rect>
+              <text x="74" y="236" text-anchor="middle" class="dg-text-sm">T31</text>
+              <rect x="44" y="266" width="60" height="30" rx="6" class="dg-box"></rect>
+              <text x="74" y="286" text-anchor="middle" class="dg-text-sm">T32</text>
+              <path d="M104 81 C160 81, 180 150, 244 160" class="dg-line"></path>
+              <path d="M104 131 C160 131, 180 158, 244 166" class="dg-line"></path>
+              <path d="M104 181 L244 172" class="dg-line"></path>
+              <path d="M104 231 C160 231, 180 184, 244 178" class="dg-line"></path>
+              <path d="M104 281 C160 281, 180 194, 244 184" class="dg-line"></path>
+              <rect x="244" y="132" width="140" height="76" rx="10" class="dg-box-danger"></rect>
+              <text x="314" y="162" text-anchor="middle" class="dg-text-sm">value</text>
+              <text x="314" y="184" text-anchor="middle" class="dg-danger-text">CAS 自旋</text>
+              <text x="36" y="310" class="dg-muted">冲突时失败重试；热点仍是同一个缓存行</text>
+
+              <rect x="440" y="16" width="404" height="308" rx="12" class="dg-lane"></rect>
+              <text x="460" y="44" class="dg-text">StripedCounter：threadId &amp; mask 选格</text>
+              <text x="470" y="87" class="dg-text-sm">T1</text>
+              <text x="470" y="135" class="dg-text-sm">T2</text>
+              <text x="470" y="183" class="dg-text-sm">T3</text>
+              <text x="470" y="231" class="dg-text-sm">T4</text>
+              <path d="M492 83 L526 83" class="dg-line-accent"></path>
+              <path d="M492 131 L526 131" class="dg-line-accent"></path>
+              <path d="M492 179 L526 179" class="dg-line-accent"></path>
+              <path d="M492 227 L526 227" class="dg-line-accent"></path>
+              <rect x="530" y="70" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="562" y="91" text-anchor="middle" class="dg-text-sm">Cell 0</text>
+              <rect x="610" y="70" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="642" y="91" text-anchor="middle" class="dg-text-sm">Cell 1</text>
+              <rect x="690" y="70" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="722" y="91" text-anchor="middle" class="dg-text-sm">Cell 2</text>
+              <rect x="770" y="70" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="802" y="91" text-anchor="middle" class="dg-text-sm">Cell 3</text>
+              <rect x="530" y="118" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="562" y="139" text-anchor="middle" class="dg-text-sm">Cell 4</text>
+              <rect x="610" y="118" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="642" y="139" text-anchor="middle" class="dg-text-sm">Cell 5</text>
+              <rect x="690" y="118" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="722" y="139" text-anchor="middle" class="dg-text-sm">Cell 6</text>
+              <rect x="770" y="118" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="802" y="139" text-anchor="middle" class="dg-text-sm">Cell 7</text>
+              <rect x="530" y="166" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="562" y="187" text-anchor="middle" class="dg-text-sm">Cell 8</text>
+              <rect x="610" y="166" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="642" y="187" text-anchor="middle" class="dg-text-sm">Cell 9</text>
+              <rect x="690" y="166" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="722" y="187" text-anchor="middle" class="dg-text-sm">Cell 10</text>
+              <rect x="770" y="166" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="802" y="187" text-anchor="middle" class="dg-text-sm">Cell 11</text>
+              <rect x="530" y="214" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="562" y="235" text-anchor="middle" class="dg-text-sm">Cell 12</text>
+              <rect x="610" y="214" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="642" y="235" text-anchor="middle" class="dg-text-sm">Cell 13</text>
+              <rect x="690" y="214" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="722" y="235" text-anchor="middle" class="dg-text-sm">Cell 14</text>
+              <rect x="770" y="214" width="64" height="34" rx="6" class="dg-box"></rect>
+              <text x="802" y="235" text-anchor="middle" class="dg-text-sm">Cell 15</text>
+              <text x="530" y="282" class="dg-muted">每格独立 getAndAdd，热点被分散到 16 个地址</text>
+              <text x="530" y="304" class="dg-muted">sum() 逐格相加，不是原子快照</text>
+            </svg>
+          </div>
+          <figcaption>左：所有线程争同一个地址，CAS 冲突只能重试。右：线程按 id 低位落到不同 Cell，每格独立累加，最后 sum 合并。</figcaption>
+        </figure>
+
+        <h4>核心代码：选格与求和</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">java · StripedCounterDemo#StripedCounter（节选）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>// 16→16、17→32：Cell 数向上取到 2 的幂，减一就是取模掩码
+this.mask = size - 1;
+
+void increment() {
+    int index = (int) (Thread.currentThread().threadId() &amp; mask); // 同一线程固定命中一格
+    cells[index].increment();                                      // 每格独立 getAndAdd
+}
+
+long sum() {
+    long total = 0;
+    for (Cell cell : cells) {   // 逐格读取，没有全局锁
+        total += cell.value;    // 并发时可能读到中间状态，不是原子快照
+    }
+    return total;
+}</code></pre>
+        </div>
+
+        <h4>跑一次：16 个 Cell</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 32 线程 × 10 万次，16 个 Cell</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># 每种写法先热身 2 轮，再测 3 轮取中位数；32 线程 × 10 万次 = 每轮 3200000
+curl -s 'http://localhost:9017/api/lock/counter/striped?threads=32&amp;iterations=100000&amp;cells=16&amp;rounds=3'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/counter/striped?cells=16（已省略 note）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "threads": 32,
+  "iterations": 100000,
+  "requestedCells": 16,
+  "actualCells": 16,
+  "rounds": 3,
+  "warmupRounds": 2,
+  "modes": [
+    { "mode": "atomic", "expectedPerRound": 3200000,
+      "actuals": [3200000, 3200000, 3200000], "exact": true,
+      "medianElapsedMillis": 65.3, "opsPerMillis": 49022.8, "cellDistribution": [] },
+    { "mode": "striped", "expectedPerRound": 3200000,
+      "actuals": [3200000, 3200000, 3200000], "exact": true,
+      "medianElapsedMillis": 26.4, "opsPerMillis": 121132.6,
+      "cellDistribution": [200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000,
+                           200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000] },
+    { "mode": "longadder", "expectedPerRound": 3200000,
+      "actuals": [3200000, 3200000, 3200000], "exact": true,
+      "medianElapsedMillis": 6.1, "opsPerMillis": 520396.0, "cellDistribution": [] }
+  ]
+}</code></pre>
+        </div>
+
+        <h4>跑一次：只剩 1 个 Cell</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 32 线程 × 10 万次，1 个 Cell</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># cells=1 退化成单点 CAS，用来观察“分段只有多格时才有收益”
+curl -s 'http://localhost:9017/api/lock/counter/striped?threads=32&amp;iterations=100000&amp;cells=1&amp;rounds=3'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/counter/striped?cells=1（已省略 threads/iterations/rounds/warmupRounds/note）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "requestedCells": 1,
+  "actualCells": 1,
+  "modes": [
+    { "mode": "atomic", "expectedPerRound": 3200000,
+      "actuals": [3200000, 3200000, 3200000], "exact": true,
+      "medianElapsedMillis": 65.3, "opsPerMillis": 48994.3, "cellDistribution": [] },
+    { "mode": "striped", "expectedPerRound": 3200000,
+      "actuals": [3200000, 3200000, 3200000], "exact": true,
+      "medianElapsedMillis": 93.0, "opsPerMillis": 34393.3,
+      "cellDistribution": [3200000] },
+    { "mode": "longadder", "expectedPerRound": 3200000,
+      "actuals": [3200000, 3200000, 3200000], "exact": true,
+      "medianElapsedMillis": 6.8, "opsPerMillis": 472553.1, "cellDistribution": [] }
+  ]
+}</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Cell 数</th><th>写法</th><th>三轮实际值</th><th>中位耗时(ms)</th><th>有效 ops/ms</th><th>Cell 分布</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>16</td><td>atomic</td><td>3200000 × 3</td><td>65.3</td><td>49022.8</td><td>—</td></tr>
+              <tr><td>16</td><td>striped</td><td>3200000 × 3</td><td>26.4</td><td>121132.6</td><td>16 格，每格 200000</td></tr>
+              <tr><td>16</td><td>longadder</td><td>3200000 × 3</td><td>6.1</td><td>520396.0</td><td>—</td></tr>
+              <tr><td>1</td><td>atomic</td><td>3200000 × 3</td><td>65.3</td><td>48994.3</td><td>—</td></tr>
+              <tr><td>1</td><td>striped</td><td>3200000 × 3</td><td>93.0</td><td>34393.3</td><td>单格 3200000</td></tr>
+              <tr><td>1</td><td>longadder</td><td>3200000 × 3</td><td>6.8</td><td>472553.1</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>读法：32 个线程落到 16 个 Cell 上，每格恰好 2 个线程 × 10 万次 = 20 万次，热点被分散，耗时约为单 Cell 的 1/3.5；<code>AtomicLong</code> 的 CAS 全部争同一个地址，介于两者之间。单 Cell 的手写实现还多了一层数组与 <code>threadId</code> 间接寻址，因此比 <code>AtomicLong</code> 略慢——这正说明“分段”只有在确实分散到多个 Cell 时才有收益。JDK <code>LongAdder</code> 还会在竞争加剧时扩容 Cell 并做缓存行填充，所以最快。</p>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <span class="title">坑：sum 的语义与 Cell 数量</span>
+            <p><code>sum()</code> 逐格读取后相加，不是原子快照：并发更新时可能少算正在变化的 Cell，适合最终统计，不适合“读一个精确瞬时值”。Cell 数量也不是越大越好——格子太多会增加缓存占用与求和成本，JDK 会在竞争变化时自行扩容。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="sharded">
+        <h2><span class="no">4.3</span>分片 Map 锁：一把大锁拆成多把小锁</h2>
+        <p class="lead">一句话：把 key 哈希到固定数量的分片，每个分片一把锁、一张表；不同分片的操作互不阻塞，锁的竞争范围从整张表缩小到一个分片。</p>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <span class="title">类比</span>
+            <p>图书馆只有 1 个借阅台，所有读者排一队；改成 16 个借阅台、每人按书名首字母去对应窗口，队伍立刻变短。但如果所有人都借同一本热门书，还是只能挤在同一个窗口——分片救不了热点。</p>
+          </div>
+        </div>
+
+        <p>本例对比三种策略：<code>global</code> 用 1 把锁保护整张表；<code>sharded</code> 用 16 把锁、每把锁保护自己的 <code>HashMap</code>；<code>hotkey</code> 仍然分 16 片，但所有线程操作同一个 key，最终落到同一片。锁内忙等 200µs 模拟业务耗时，让串行与并行在总时长上体现出来。</p>
+
+        <figure class="diagram">
+          <div class="diagram-scroll">
+            <svg class="dg" viewBox="0 0 860 360" role="img" aria-label="线程按 key 哈希到不同分片，每个分片一把锁一张表；热点 key 全部落到同一分片">
+              <rect x="16" y="16" width="828" height="328" rx="12" class="dg-lane"></rect>
+              <text x="36" y="44" class="dg-text">分片 Map 锁：锁只保护本分片的表</text>
+              <rect x="36" y="64" width="64" height="28" rx="6" class="dg-box"></rect>
+              <text x="68" y="83" text-anchor="middle" class="dg-text-sm">T1</text>
+              <rect x="36" y="108" width="64" height="28" rx="6" class="dg-box"></rect>
+              <text x="68" y="127" text-anchor="middle" class="dg-text-sm">T2</text>
+              <rect x="36" y="152" width="64" height="28" rx="6" class="dg-box"></rect>
+              <text x="68" y="171" text-anchor="middle" class="dg-text-sm">T3</text>
+              <rect x="36" y="196" width="64" height="28" rx="6" class="dg-box"></rect>
+              <text x="68" y="215" text-anchor="middle" class="dg-text-sm">T4</text>
+              <rect x="36" y="240" width="64" height="28" rx="6" class="dg-box"></rect>
+              <text x="68" y="259" text-anchor="middle" class="dg-text-sm">T5</text>
+              <rect x="36" y="284" width="64" height="28" rx="6" class="dg-box"></rect>
+              <text x="68" y="303" text-anchor="middle" class="dg-text-sm">T6</text>
+              <path d="M100 78 C120 78, 120 150, 140 168" class="dg-line"></path>
+              <path d="M100 166 L140 176" class="dg-line"></path>
+              <path d="M100 298 C120 298, 120 202, 140 184" class="dg-line"></path>
+              <rect x="140" y="150" width="150" height="52" rx="8" class="dg-box-accent"></rect>
+              <text x="215" y="172" text-anchor="middle" class="dg-text-sm">shard =</text>
+              <text x="215" y="191" text-anchor="middle" class="dg-text-sm">hash(key) &amp; 15</text>
+              <path d="M290 176 C310 176, 310 72, 330 72" class="dg-line"></path>
+              <path d="M290 176 C310 176, 310 138, 330 138" class="dg-line"></path>
+              <path d="M290 176 C310 176, 310 204, 330 204" class="dg-line"></path>
+              <path d="M290 176 C310 176, 310 270, 330 270" class="dg-line"></path>
+              <rect x="330" y="50" width="92" height="44" rx="7" class="dg-box"></rect>
+              <text x="376" y="77" text-anchor="middle" class="dg-text-sm">lock[0]</text>
+              <rect x="436" y="50" width="150" height="44" rx="7" class="dg-box"></rect>
+              <text x="511" y="77" text-anchor="middle" class="dg-text-sm">HashMap[0]</text>
+              <text x="602" y="77" class="dg-muted">分片 0</text>
+              <rect x="330" y="116" width="92" height="44" rx="7" class="dg-box"></rect>
+              <text x="376" y="143" text-anchor="middle" class="dg-text-sm">lock[1]</text>
+              <rect x="436" y="116" width="150" height="44" rx="7" class="dg-box"></rect>
+              <text x="511" y="143" text-anchor="middle" class="dg-text-sm">HashMap[1]</text>
+              <text x="602" y="143" class="dg-muted">分片 1</text>
+              <rect x="330" y="182" width="92" height="44" rx="7" class="dg-box-danger"></rect>
+              <text x="376" y="209" text-anchor="middle" class="dg-danger-text">lock[2]</text>
+              <rect x="436" y="182" width="150" height="44" rx="7" class="dg-box-danger"></rect>
+              <text x="511" y="209" text-anchor="middle" class="dg-danger-text">HashMap[2]</text>
+              <text x="602" y="202" class="dg-danger-text">热点 key 全落这里</text>
+              <text x="602" y="218" class="dg-muted">maxConcurrent 回到 1</text>
+              <text x="330" y="252" class="dg-muted">… 共 shards 个分片，每片一把锁 + 一张表</text>
+              <text x="330" y="276" class="dg-muted">扩容/缩容需要迁移分片，范围由 shards 参数控制</text>
+              <text x="36" y="330" class="dg-muted">全局锁 = shards 1；分片锁 = shards×N；热点 key 让 N 把锁退化成 1 把</text>
+            </svg>
+          </div>
+          <figcaption>线程按 key 的哈希落到分片；不同分片可以并行进入临界区。热点模式所有线程算出的 shard 相同，仍然排队。</figcaption>
+        </figure>
+
+        <h4>核心代码：每个分片一把锁、一张表</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">java · ShardedMapDemo#runMode（节选）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>int shardCount = mode == Mode.GLOBAL ? 1 : shards;
+ReentrantLock[] locks = new ReentrantLock[shardCount];
+List&lt;Map&lt;String, Integer&gt;&gt; maps = new ArrayList&lt;&gt;(shardCount);
+
+// 每个分片：一把锁 + 一张自己的 HashMap（不是 16 把锁共用一张表）
+for (int i = 0; i &lt; shardCount; i++) {
+    locks[i] = new ReentrantLock();
+    maps.add(new HashMap&lt;&gt;());
+}
+
+int shard = Math.floorMod(key.hashCode(), shardCount);
+locks[shard].lock();
+try {
+    spinMicros(workMicros);                 // 模拟业务耗时，让串行/并行可见
+    maps.get(shard).merge(key, 1, Integer::sum);
+} finally {
+    active.decrementAndGet();               // 先退出计数，再 unlock
+    locks[shard].unlock();
+}</code></pre>
+        </div>
+
+        <h4>跑一次：全局锁 / 分片锁 / 热点 key</h4>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 8 线程 × 300 次，16 个分片</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># 三种模式在一次请求里依次执行；锁内忙等 200µs 模拟业务
+curl -s 'http://localhost:9017/api/lock/sharded-map?threads=8&amp;keys=64&amp;operations=300&amp;shards=16&amp;workMicros=200'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · GET /api/lock/sharded-map（已省略 note）</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{
+  "threads": 8,
+  "keys": 64,
+  "operations": 300,
+  "shards": 16,
+  "workMicros": 200,
+  "modes": [
+    {"mode": "global", "shards": 1, "maxConcurrent": 1, "elapsedMillis": 503.8,
+     "opsPerMillis": 4.8, "expectedSum": 2400, "actualSum": 2400, "mapSize": 64,
+     "exact": true, "shardDistribution": [2400]},
+    {"mode": "sharded", "shards": 16, "maxConcurrent": 8, "elapsedMillis": 69.3,
+     "opsPerMillis": 34.6, "expectedSum": 2400, "actualSum": 2400, "mapSize": 64,
+     "exact": true, "shardDistribution": [150, 113, 76, 38, 0, 75, 112, 149,
+                                         187, 188, 225, 225, 225, 225, 225, 187]},
+    {"mode": "hotkey", "shards": 16, "maxConcurrent": 1, "elapsedMillis": 500.4,
+     "opsPerMillis": 4.8, "expectedSum": 2400, "actualSum": 2400, "mapSize": 1,
+     "exact": true, "shardDistribution": [0, 0, 0, 0, 0, 0, 0, 0,
+                                          0, 0, 0, 0, 0, 2400, 0, 0]}
+  ],
+  "conclusion": "全局锁 maxConcurrent=1；分片锁 maxConcurrent=8，耗时约为全局锁的 0.14；热点 key 模式 maxConcurrent=1，仍然退化为单锁"
+}</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>模式</th><th>分片数</th><th><code>maxConcurrent</code></th><th>耗时(ms)</th><th>有效 ops/ms</th><th><code>mapSize</code></th></tr>
+            </thead>
+            <tbody>
+              <tr><td>global</td><td>1</td><td>1</td><td>503.8</td><td>4.8</td><td>64</td></tr>
+              <tr><td>sharded</td><td>16</td><td>8</td><td>69.3</td><td>34.6</td><td>64</td></tr>
+              <tr><td>hotkey</td><td>16</td><td>1</td><td>500.4</td><td>4.8</td><td>1</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>读法：全局锁下 8 个线程完全串行；16 分片下 8 个线程可以同时进入各自的临界区，<code>maxConcurrent=8</code>，耗时约 69ms；热点 key 模式所有操作落到同一分片，<code>maxConcurrent</code> 回到 1，耗时与全局锁相同。分片分布也不均匀：64 个 key 的哈希没有落到第 4 个分片（计数为 0），热点 key 固定落在第 13 个分片。</p>
+
+        <div class="callout danger">
+          <span class="ico">!</span>
+          <div>
+            <span class="title">坑：分片锁必须“每片一张表”</span>
+            <p>最初所有分片共用同一张 <code>HashMap</code>，只按 key 配锁。不同分片仍会并发修改同一张表的扩容/链表结构，实测出现过 <code>mapSize=63</code>（应为 64）——锁只锁住了自己的 key，没有锁住表结构。修复方式是每个分片各持一张表，这也正是 ConcurrentHashMap 1.7 中 Segment 的形态：一把锁保护一张子表。测试因此加入了 5 轮重复运行，防止回归。</p>
+          </div>
+        </div>
+
+        <div class="callout warn">
+          <span class="ico">!</span>
+          <div>
+            <span class="title">边界：分片数、热点与扩容</span>
+            <p>分片越多，理论并行度越高，但每片的内存、元数据和求和成本也越高；分片数通常取 2 的幂，便于用掩码定位。更关键的是热点：只要大量请求命中同一个 key，16 把锁就会退化成 1 把。真实系统需要先识别热点，再做 key 拆分、缓存或异步合并，而不是盲目加大分片数。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="edges">
+        <h2><span class="no">05</span>边界与反例：把错误结果放在一起看</h2>
+        <p class="lead">九个实验覆盖了机制的正反面。下面把最容易踩的边界集中成一张表，方便写代码前快速对照。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>现象</th><th>根因</th><th>正确做法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>两个线程各 new 一个 Object 去同步，仍然并发</td><td>锁的是不同对象，监视器不是同一个</td><td>共享同一个 <code>private static final</code> 锁对象</td></tr>
+              <tr><td>临界区里 sleep，另一个线程还是进不来</td><td>sleep 不释放锁</td><td>需要让出锁时用 <code>wait()</code> 或 <code>Condition.await()</code></td></tr>
+              <tr><td>unlock 抛 IllegalMonitorStateException</td><td>当前线程没有持有锁，或 unlock 次数多于 lock</td><td>lock/unlock 成对，unlock 放 finally</td></tr>
+              <tr><td>synchronized 等待中被中断，线程仍不退出</td><td>monitorenter 不可中断，只置标记</td><td>需要取消/超时用 <code>lockInterruptibly()</code> 或 <code>tryLock(timeout)</code></td></tr>
+              <tr><td>非公平锁下某个线程很久拿不到锁</td><td>释放者或其他线程持续插队</td><td>对延迟敏感时用公平锁，并给等待设上限</td></tr>
+              <tr><td>并发 count++ 结果小于预期</td><td>读改写三步可交错，后写覆盖先写</td><td>锁、AtomicLong 或 LongAdder，按竞争程度选择</td></tr>
+              <tr><td>LongAdder.sum() 在并发时偏小</td><td>sum 不是原子快照，Cell 仍在更新</td><td>用于最终统计；需要瞬时精确值改用 AtomicLong</td></tr>
+              <tr><td>租约锁下两个线程同时进入临界区</td><td>租约到期后无人续期，锁被新持有者接管</td><td>长业务开启看门狗；释放前停止续期</td></tr>
+              <tr><td>看门狗把已经被别人接管的锁续上</td><td>续期前没有校验 owner 或到期时间</td><td><code>renew</code> 必须校验 owner，过期就放弃</td></tr>
+              <tr><td>分片数加到 16，仍有大量线程排队</td><td>所有请求命中同一个热点 key，落到同一分片</td><td>先治理热点（拆 key、缓存、异步合并），分片数救不了热点</td></tr>
+              <tr><td>按 key 分了锁，Map 仍偶发少 key</td><td>多个分片共用同一张 HashMap，表结构仍被并发修改</td><td>每个分片各持一张表，锁保护自己的子表</td></tr>
+              <tr><td>手写分段计数在单 Cell 时比 AtomicLong 慢</td><td>多一层数组与 threadId 寻址，且没有 JIT 内建优化</td><td>分段只在确实分散到多个 Cell 时才有收益</td></tr>
+              <tr><td>应用刚启动后第一次吞吐对比明显偏慢</td><td>JIT 尚未完成 C2 编译，预热轮不足</td><td>每种写法先跑 2 轮预热，再取多轮中位数</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="compare">
+          <div class="box good">
+            <h4>锁能保证</h4>
+            <ul>
+              <li>同一把锁上的互斥</li>
+              <li>unlock/lock 或 monitorexit/monitorenter 之间的可见性</li>
+              <li>同一线程的可重入</li>
+              <li>可选的公平、可中断、超时（ReentrantLock）</li>
+            </ul>
+          </div>
+          <div class="box bad">
+            <h4>锁不能保证</h4>
+            <ul>
+              <li>不同锁对象之间的互斥</li>
+              <li>线程调度的公平（公平锁也只管队列顺序）</li>
+              <li>不死锁：加锁顺序不一致仍会成环</li>
+              <li>跨服务、跨数据库的事务一致性</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>选型速查</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>需求</th><th>首选</th><th>理由</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>简单临界区，无超时/中断需求</td><td><code>synchronized</code></td><td>语法短，自动释放，JVM 持续优化</td></tr>
+              <tr><td>需要 tryLock、超时、可中断、公平或 Condition</td><td><code>ReentrantLock</code></td><td>能力更全，但必须手动 unlock</td></tr>
+              <tr><td>低竞争计数且需要返回值</td><td><code>AtomicLong</code></td><td>CAS 无锁，读写都精确</td></tr>
+              <tr><td>高竞争计数/求和，只关心最终值</td><td><code>LongAdder</code></td><td>分段累加，减少 CAS 冲突</td></tr>
+              <tr><td>锁要跨进程/跨服务，且持有时间不确定</td><td>租约锁 + 看门狗</td><td>到期可接管，续期保活；释放前必须停止续期</td></tr>
+              <tr><td>单表并发写严重且 key 分布均匀</td><td>分片锁（每片一锁一表）</td><td>把锁范围缩小到一个分片；热点 key 仍需单独治理</td></tr>
+              <tr><td>临界区里要同时改多个变量</td><td>锁</td><td>原子类只能保护单个变量</td></tr>
+              <tr><td>多把锁的嵌套</td><td>全局固定顺序 + tryLock 超时</td><td>从规则上消除等待环，并保留恢复能力</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="run">
+        <h2><span class="no">06</span>运行与速查</h2>
+        <p class="lead">所有实验纯内存运行。启动、测试、参数范围、错误返回都集中在这一节。</p>
+
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 构建与测试</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># 只跑本模块测试（20 个，不依赖 Redis/MySQL/Docker）
+./mvnw -pl demo-concurrency test
+
+# 打包后指定端口启动
+./mvnw -pl demo-concurrency -am package
+SERVER_PORT=9017 java -jar demo-concurrency/target/demo-concurrency-0.0.1-SNAPSHOT.jar</code></pre>
+        </div>
+
+        <h3>环境变量</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>变量</th><th>默认值</th><th>作用</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>SERVER_PORT</code></td><td>9007</td><td>应用端口；验证建议 9017</td></tr>
+              <tr><td><code>DEMO_LOCK_MAX_THREADS</code></td><td>32</td><td>单次实验最大工作线程数</td></tr>
+              <tr><td><code>DEMO_LOCK_MAX_HOLD_MS</code></td><td>3000</td><td>持锁/阻塞类实验最大毫秒数</td></tr>
+              <tr><td><code>DEMO_LOCK_MAX_ITERATIONS</code></td><td>200000</td><td>计数实验单线程最大迭代次数</td></tr>
+              <tr><td><code>DEMO_LOCK_COUNTER_ROUNDS</code></td><td>3</td><td>吞吐对比默认轮数</td></tr>
+              <tr><td><code>DEMO_LOCK_DEADLOCK_TIMEOUT_MS</code></td><td>2000</td><td>死锁检测最长轮询时间</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>接口与参数范围</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>路径</th><th>参数（默认值）</th><th>范围</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>/api/lock</code></td><td>无</td><td>场景索引</td></tr>
+              <tr><td><code>/api/lock/synchronized</code></td><td><code>locked=true</code>、<code>holdMillis=600</code></td><td>holdMillis 100~3000</td></tr>
+              <tr><td><code>/api/lock/reentrant</code></td><td><code>waiters=9</code>、<code>holdMillis=300</code></td><td>waiters 1~32；holdMillis 50~3000</td></tr>
+              <tr><td><code>/api/lock/fairness</code></td><td><code>fair=true</code>、<code>threads=8</code>、<code>rounds=5</code></td><td>threads 2~32；rounds 1~5</td></tr>
+              <tr><td><code>/api/lock/interrupt</code></td><td><code>mode=synchronized</code>、<code>holdMillis=1200</code>、<code>interruptAfterMillis=200</code></td><td>holdMillis 300~3000；interruptAfterMillis 50~holdMillis-50</td></tr>
+              <tr><td><code>/api/lock/deadlock</code></td><td><code>fixed=false</code>、<code>holdMillis=100</code></td><td>holdMillis 20~1000</td></tr>
+              <tr><td><code>/api/lock/counter/lost-updates</code></td><td><code>threads=8</code>、<code>iterations=2000</code></td><td>threads 2~32；iterations 100~200000</td></tr>
+              <tr><td><code>/api/lock/counter/compare</code></td><td><code>threads=8</code>、<code>iterations=100000</code>、<code>rounds=3</code></td><td>threads 2~32；iterations 1000~200000；rounds 1~5</td></tr>
+              <tr><td><code>/api/lock/watchdog</code></td><td><code>leaseMillis=800</code>、<code>holdMillis=2500</code>、<code>watchdog=false</code></td><td>leaseMillis 100~2000；holdMillis 500~3000</td></tr>
+              <tr><td><code>/api/lock/counter/striped</code></td><td><code>threads=32</code>、<code>iterations=100000</code>、<code>cells=16</code>、<code>rounds=3</code></td><td>threads 2~32；iterations 1000~200000；cells 1~64；rounds 1~5</td></tr>
+              <tr><td><code>/api/lock/sharded-map</code></td><td><code>threads=8</code>、<code>keys=64</code>、<code>operations=300</code>、<code>shards=16</code>、<code>workMicros=200</code></td><td>threads 2~32；keys 1~256；operations 1~1000；shards 1~64；workMicros 10~1000；三者乘积 ≤ 2000000</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>错误返回</h3>
+        <div class="code">
+          <div class="code-head"><span class="path">bash · 非法枚举、越界参数与过大工作量</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code># mode 只能是 synchronized / reentrant
+curl -s 'http://localhost:9017/api/lock/interrupt?mode=abc'
+
+# threads 合法范围 2~32
+curl -s 'http://localhost:9017/api/lock/counter/compare?threads=999'
+
+# threads × operations × workMicros 不能超过 2000000（约 2 秒）
+curl -s 'http://localhost:9017/api/lock/sharded-map?threads=32&amp;operations=1000&amp;workMicros=1000'</code></pre>
+        </div>
+        <div class="code out">
+          <div class="code-head"><span class="path">执行结果 · 三个 400 响应</span><button class="copy" data-copy type="button">复制</button></div>
+          <pre><code>{"error": "mode 只能是 synchronized 或 reentrant，当前=abc", "status": 400}
+{"error": "threads 必须在 2~32 之间，当前=999", "status": 400}
+{"error": "threads × operations × workMicros 不能超过 2000000（约 2 秒），当前=32000000", "status": 400}</code></pre>
+        </div>
+
+        <div class="callout tip">
+          <span class="ico">✓</span>
+          <div>
+            <span class="title">验证完记得停掉自己启动的实例</span>
+            <p>用 <code>SERVER_PORT=9017</code> 启动的进程只属于本次验证。停掉它不会影响 9001~9003 的常驻服务；不要对那三个端口做 kill。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="map">
+        <h2><span class="no">07</span>代码地图</h2>
+        <p class="lead">一个类只承担一个实验。读源码时先看类级 Javadoc，再看公开方法的参数单位与失败行为。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>文件</th><th>职责</th><th>关键观测</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>lock/SynchronizedLockDemo.java</code></td><td>两个线程冲同一段临界区，可关闭同步块做反例</td><td><code>maxConcurrent</code>、<code>BLOCKED</code>、<code>lockOwner</code></td></tr>
+              <tr><td><code>lock/ReentrantLockDemo.java</code></td><td>三层重入、AQS 队列、获取顺序、多余 unlock</td><td><code>holdCount</code>、<code>getQueueLength</code>、异常</td></tr>
+              <tr><td><code>lock/FairnessDemo.java</code></td><td>固定入队顺序后让 holder 释放并立刻重抢</td><td><code>holderPosition</code>、<code>bargedRounds</code></td></tr>
+              <tr><td><code>lock/InterruptDemo.java</code></td><td>同一时序比较 synchronized 与 lockInterruptibly</td><td><code>victimEntered</code>、中断延迟、中断标记</td></tr>
+              <tr><td><code>lock/DeadlockDemo.java</code></td><td>双 latch 编排 AB-BA 死锁；MXBean 检测；固定顺序修复</td><td><code>deadlockDetected</code>、<code>cleanedUp</code>、死锁线程栈</td></tr>
+              <tr><td><code>lock/CounterDemo.java</code></td><td>双栅栏确定性丢更新；四种写法的预热与中位数</td><td><code>expected/actual/lost</code>、<code>opsPerMillis</code></td></tr>
+              <tr><td><code>lock/WatchdogDemo.java</code></td><td>内存租约锁 + 看门狗续期；B 在租约到期点抢锁</td><td><code>overlap</code>、<code>renewCount</code>、<code>release-ignored</code></td></tr>
+              <tr><td><code>lock/StripedCounterDemo.java</code></td><td>手写 Cell 分段计数，对比 AtomicLong / LongAdder</td><td><code>cellDistribution</code>、中位耗时、<code>opsPerMillis</code></td></tr>
+              <tr><td><code>lock/ShardedMapDemo.java</code></td><td>全局锁 / 分片锁 / 热点 key 三种 Map 策略</td><td><code>maxConcurrent</code>、<code>shardDistribution</code></td></tr>
+              <tr><td><code>support/ThreadSampler.java</code></td><td>ThreadMXBean 封装：线程快照、死锁检测、栈帧</td><td><code>getThreadInfo(..., true, true)</code></td></tr>
+              <tr><td><code>support/Observations.java</code></td><td>Span、ThreadSnapshot、TimelineEvent 三个记录</td><td>统一返回结构</td></tr>
+              <tr><td><code>support/DemoThreads.java</code></td><td>创建 daemon 线程、带超时的 join</td><td>避免实验线程泄漏</td></tr>
+              <tr><td><code>support/Params.java</code></td><td>参数范围校验，错误信息带合法区间</td><td>400 响应</td></tr>
+              <tr><td><code>config/DemoSettings.java</code></td><td><code>demo.concurrency.*</code> 配置绑定</td><td>环境变量覆盖</td></tr>
+              <tr><td><code>controller/*Controller.java</code></td><td>HTTP 入口、参数解析、场景索引</td><td>默认值与范围</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <span class="ico">i</span>
+          <div>
+            <span class="title">阅读顺序建议</span>
+            <p>先读 <code>SynchronizedLockDemo</code> 和 <code>ThreadSampler</code>，理解快照字段；再读 <code>ReentrantLockDemo</code> 与 <code>FairnessDemo</code>，理解 AQS 队列；接着读 <code>DeadlockDemo</code> 和 <code>CounterDemo</code>，看时序编排与统计口径；最后读 <code>WatchdogDemo</code>、<code>StripedCounterDemo</code> 和 <code>ShardedMapDemo</code>，看租约、分段与分片如何把同一套锁语义用到高并发场景。</p>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        <p><strong>Java 锁实战：从 synchronized 到 AQS</strong> · 源码与实测数据来自 demo-concurrency 模块</p>
+        <p>实测日期 2026-10-29 · OpenJDK 21.0.13 · Spring Boot 4.1.2 · macOS 15.8.2 / 12 核 · 端口 9017</p>
+        <p>所有命令均可按文中参数复跑；绝对吞吐依赖机器，只适合同机对比。</p>
+      </footer>
+    </div>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var toggle = document.getElementById('themeToggle');
+
+    function syncToggleLabel() {
+      if (toggle) toggle.textContent = root.dataset.theme === 'dark' ? '浅色' : '深色';
+    }
+    syncToggleLabel();
+
+    if (toggle) {
+      toggle.addEventListener('click', function () {
+        var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        try { localStorage.setItem('tech-guide-theme', next); } catch (e) { /* ignore */ }
+        syncToggleLabel();
+      });
+    }
+
+    document.querySelectorAll('[data-copy]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var block = btn.closest('.code');
+        var code = block ? block.querySelector('code') : null;
+        if (!code) return;
+        var text = code.innerText;
+        var done = function () {
+          var old = btn.textContent;
+          btn.textContent = '已复制';
+          setTimeout(function () { btn.textContent = old; }, 1400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done).catch(function () { fallback(text, done); });
+        } else {
+          fallback(text, done);
+        }
+      });
+    });
+
+    function fallback(text, done) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+      document.body.removeChild(ta);
+      done();
+    }
+
+    var links = Array.prototype.slice.call(document.querySelectorAll('.toc a[href^="#"]'));
+    var byId = {};
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      byId[id] = a;
+    });
+    var targets = Object.keys(byId).map(function (id) { return document.getElementById(id); }).filter(Boolean);
+
+    function setActive(id) {
+      links.forEach(function (a) { a.classList.remove('active'); });
+      var link = byId[id];
+      if (link) link.classList.add('active');
+    }
+
+    function onScroll() {
+      var y = window.scrollY + 140;
+      var current = targets.length ? targets[0] : null;
+      for (var i = 0; i < targets.length; i++) {
+        var top = targets[i].getBoundingClientRect().top + window.scrollY;
+        if (top <= y) current = targets[i];
+      }
+      if (current) setActive(current.id);
+      var bar = document.querySelector('.progress span');
+      if (bar) {
+        var max = document.documentElement.scrollHeight - window.innerHeight;
+        bar.style.width = (max > 0 ? Math.min(100, Math.max(0, window.scrollY / max * 100)) : 0) + '%';
+      }
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    onScroll();
+  })();
+</script>
+</body>
+</html>

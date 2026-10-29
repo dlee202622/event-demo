@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: demo-concurrency
+
+server:
+  # 9001~9003 是 IDEA 里常驻的业务服务，9004 是 demo-redis，
+  # 9005 是 demo-jvm，9006 是 demo-springboot-startup，本模块从 9007 开始
+  port: ${SERVER_PORT:9007}
+
+demo:
+  concurrency:
+    # 并发实验最多创建多少个工作线程：线程数过大时，调度抖动会盖过锁本身的行为
+    max-threads: ${DEMO_LOCK_MAX_THREADS:32}
+    # 持锁/阻塞类实验的最长等待，防止一个 HTTP 请求占用线程池太久
+    max-hold-ms: ${DEMO_LOCK_MAX_HOLD_MS:3000}
+    # 计数实验单线程最大迭代次数，避免误传大数字把 CPU 打满
+    max-iterations: ${DEMO_LOCK_MAX_ITERATIONS:200000}
+    # 计数吞吐对比默认跑几轮，取中位数抵消 GC / 调度抖动
+    counter-rounds: ${DEMO_LOCK_COUNTER_ROUNDS:3}
+    # 死锁检测的轮询上限：超过这个时间还没检测到，就按“未复现”返回
+    deadlock-detect-timeout-ms: ${DEMO_LOCK_DEADLOCK_TIMEOUT_MS:2000}
+
+logging:
+  level:
+    root: INFO
+    com.example.demo: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
