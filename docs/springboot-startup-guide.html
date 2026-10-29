@@ -1,0 +1,2373 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Spring Boot 启动原理 · 技术实战指南</title>
+<script>
+  try {
+    var savedTheme = localStorage.getItem('tech-guide-theme');
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = savedTheme || (prefersDark ? 'dark' : 'light');
+  } catch (e) { /* 隐私模式下 localStorage 可能不可用，退回默认主题 */ }
+</script>
+<style>
+  :root {
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sidebar: 276px;
+    --maxw: 980px;
+
+    --bg: #f5f7fb;
+    --surface: #ffffff;
+    --surface-2: #eef2f8;
+    --text: #1b2433;
+    --muted: #5c6a7e;
+    --border: #dde4ef;
+    --accent: #4f46e5;
+    --accent-2: #0f766e;
+    --accent-weak: #eef0ff;
+    --ok: #047857;
+    --ok-bg: #ecfdf5;
+    --warn: #b45309;
+    --warn-bg: #fff7ed;
+    --danger: #b91c1c;
+    --danger-bg: #fef2f2;
+    --code-bg: #0c1424;
+    --code-head: #131f35;
+    --code-border: #22304c;
+    --code-text: #dbe4f5;
+    --shadow: 0 10px 30px -18px rgba(23, 37, 84, .35);
+  }
+  html[data-theme="dark"] {
+    --bg: #080d18;
+    --surface: #101829;
+    --surface-2: #0c1322;
+    --text: #e6ebf5;
+    --muted: #97a5bb;
+    --border: #22304a;
+    --accent: #8f9cff;
+    --accent-2: #2dd4bf;
+    --accent-weak: #1a2344;
+    --ok: #34d399;
+    --ok-bg: #08251d;
+    --warn: #fbbf24;
+    --warn-bg: #2a1e08;
+    --danger: #f87171;
+    --danger-bg: #2a1013;
+    --code-bg: #070c17;
+    --code-head: #0d1626;
+    --code-border: #1c2942;
+    --code-text: #dbe4f5;
+    --shadow: 0 12px 34px -18px rgba(0, 0, 0, .7);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.78;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  img, svg { max-width: 100%; }
+  ::selection { background: var(--accent); color: #fff; }
+
+  .progress {
+    position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 60;
+    background: transparent; pointer-events: none;
+  }
+  .progress span {
+    display: block; height: 100%; width: 0;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width .12s linear;
+  }
+  .theme-toggle {
+    position: fixed; top: 16px; right: 18px; z-index: 61;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font: 600 12px/1 var(--sans);
+    padding: 9px 13px; border-radius: 999px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+  }
+  .theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+  .shell {
+    display: grid;
+    grid-template-columns: var(--sidebar) minmax(0, 1fr);
+    max-width: 1520px;
+    margin: 0 auto;
+  }
+
+  /* ---------- 侧边目录 ---------- */
+  .sidebar {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    padding: 30px 18px 48px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    scrollbar-width: thin;
+  }
+  .brand { padding: 0 10px 18px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .brand .mark {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700; letter-spacing: .16em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  .brand .mark::before {
+    content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 4px var(--accent-weak);
+  }
+  .brand h1 { margin: 10px 0 2px; font-size: 18px; letter-spacing: -.01em; }
+  .brand p { margin: 0; font-size: 12px; color: var(--muted); }
+
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a {
+    display: block; padding: 6px 10px;
+    color: var(--muted); font-size: 13.5px; line-height: 1.5;
+    border-left: 2px solid transparent; border-radius: 0 8px 8px 0;
+  }
+  .toc a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }
+  .toc a.active {
+    color: var(--accent); background: var(--accent-weak);
+    border-left-color: var(--accent); font-weight: 600;
+  }
+  .toc .sub a { padding-left: 26px; font-size: 12.8px; }
+  .toc .group {
+    padding: 14px 10px 4px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .12em;
+    color: var(--muted); text-transform: uppercase;
+  }
+  .side-note {
+    margin-top: 22px; padding: 12px;
+    border-radius: 10px; background: var(--surface-2);
+    color: var(--muted); font-size: 11.5px; line-height: 1.65;
+  }
+
+  /* ---------- 主体 ---------- */
+  main { padding: 34px clamp(18px, 4vw, 58px) 96px; min-width: 0; }
+  .content { max-width: var(--maxw); margin: 0 auto; }
+
+  .hero {
+    position: relative; overflow: hidden;
+    border-radius: 22px;
+    padding: clamp(26px, 5vw, 48px);
+    color: #fff;
+    background:
+      radial-gradient(800px 320px at 88% -10%, rgba(45, 212, 191, .38), transparent 62%),
+      radial-gradient(620px 300px at 0% 110%, rgba(167, 139, 250, .35), transparent 60%),
+      linear-gradient(135deg, #1e1b4b 0%, #3730a3 52%, #115e59 100%);
+    box-shadow: 0 26px 60px -32px rgba(30, 27, 75, .75);
+  }
+  .hero::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(rgba(255,255,255,.16) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: linear-gradient(120deg, transparent 40%, #000 100%);
+  }
+  .hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase;
+    color: #c7d2fe;
+  }
+  .hero .eyebrow::before { content: ""; width: 26px; height: 1px; background: currentColor; }
+  .hero h2 { margin: 14px 0 12px; font-size: clamp(30px, 4.4vw, 46px); line-height: 1.18; letter-spacing: -.02em; }
+  .hero .sub { max-width: 720px; margin: 0; color: #dbe3ff; font-size: 15.5px; }
+  .hero .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  .hero .badges span {
+    font-size: 11.5px; padding: 5px 10px; border-radius: 999px;
+    background: rgba(255,255,255,.11); border: 1px solid rgba(255,255,255,.22);
+    color: #eef2ff;
+  }
+  .hero .stats {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px; margin-top: 28px;
+    border-radius: 14px; overflow: hidden;
+    background: rgba(255,255,255,.18);
+  }
+  .hero .stat { padding: 14px 16px; background: rgba(15, 23, 42, .28); }
+  .hero .stat b { display: block; font-size: 22px; line-height: 1.2; }
+  .hero .stat small { color: #cbd5ff; font-size: 11.5px; letter-spacing: .03em; }
+  .hero .jump { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+  .hero .jump a {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 10px 16px; border-radius: 10px;
+    font-size: 13px; font-weight: 600;
+    background: #fff; color: #312e81;
+  }
+  .hero .jump a.ghost {
+    background: transparent; color: #e0e7ff; border: 1px solid rgba(255,255,255,.35);
+  }
+  .hero .jump a:hover { text-decoration: none; transform: translateY(-1px); }
+
+  section { margin-top: 78px; scroll-margin-top: 24px; }
+  h2 {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    margin: 0 0 10px; font-size: clamp(24px, 2.7vw, 30px);
+    letter-spacing: -.02em; line-height: 1.3;
+  }
+  h2 .no {
+    font: 700 12px/1 var(--mono); color: var(--accent);
+    background: var(--accent-weak); border: 1px solid var(--border);
+    padding: 5px 9px; border-radius: 7px;
+  }
+  h3 { margin: 44px 0 10px; font-size: 21px; letter-spacing: -.01em; scroll-margin-top: 24px; }
+  h4 { margin: 26px 0 8px; font-size: 16px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  strong { font-weight: 650; }
+  .lead { color: var(--muted); font-size: 15.5px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .02em;
+    padding: 3px 9px; border-radius: 999px;
+    color: var(--accent); background: var(--accent-weak);
+    border: 1px solid var(--border); white-space: nowrap;
+  }
+  .pill.ok { color: var(--ok); background: var(--ok-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .pill.bad { color: var(--danger); background: var(--danger-bg); }
+  .pill.gray { color: var(--muted); background: var(--surface-2); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px 22px; margin: 18px 0;
+    box-shadow: var(--shadow);
+  }
+  .card > :first-child { margin-top: 0; }
+  .card > :last-child { margin-bottom: 0; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+
+  .callout {
+    display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px;
+    margin: 18px 0; padding: 14px 16px;
+    border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface-2); font-size: 14.5px;
+  }
+  .callout .ico {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: grid; place-items: center;
+    font: 700 12px/1 var(--sans);
+    background: var(--accent-weak); color: var(--accent);
+  }
+  .callout p { margin: 0; }
+  .callout p + p { margin-top: 6px; }
+  .callout .title { font-weight: 700; display: block; margin-bottom: 2px; }
+  .callout.tip { background: var(--ok-bg); border-color: var(--border); }
+  .callout.tip .ico { background: var(--ok); color: #fff; }
+  .callout.warn { background: var(--warn-bg); border-color: var(--border); }
+  .callout.warn .ico { background: var(--warn); color: #fff; }
+  .callout.danger { background: var(--danger-bg); border-color: var(--border); }
+  .callout.danger .ico { background: var(--danger); color: #fff; }
+
+  .compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 18px 0; }
+  .box { border: 1px solid var(--border); border-radius: 12px; padding: 15px 18px; background: var(--surface); }
+  .box.bad { border-left: 4px solid var(--danger); }
+  .box.good { border-left: 4px solid var(--ok); }
+  .box h4 { margin: 0 0 8px; font-size: 14px; letter-spacing: .03em; }
+  .box.bad h4 { color: var(--danger); }
+  .box.good h4 { color: var(--ok); }
+  .box ul { margin: 0; padding-left: 18px; font-size: 14px; }
+  .box li { margin: 5px 0; }
+
+  .code {
+    margin: 18px 0; border-radius: 12px; overflow: hidden;
+    background: var(--code-bg); border: 1px solid var(--code-border);
+    box-shadow: var(--shadow);
+  }
+  .code-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 8px 12px 8px 15px;
+    background: var(--code-head); border-bottom: 1px solid var(--code-border);
+    color: #93a4c3; font: 12px/1.4 var(--mono);
+  }
+  .code-head .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .copy {
+    flex: 0 0 auto; border: 1px solid var(--code-border); border-radius: 6px;
+    background: transparent; color: #a9b8d4; cursor: pointer;
+    font: 11px/1 var(--sans); padding: 5px 9px;
+  }
+  .copy:hover { color: #fff; border-color: #4c5f85; }
+  .code pre { margin: 0; padding: 15px 17px; overflow-x: auto; }
+  .code code { font: 12.6px/1.72 var(--mono); color: var(--code-text); white-space: pre; }
+  /* 执行结果：与代码块同尺寸，虚线边框 + 浅色底表示「这是跑出来的」 */
+  .code.out { background: var(--surface); border-style: dashed; box-shadow: none; }
+  .code.out .code-head { background: var(--surface-2); color: var(--muted); }
+  .code.out .code-head .path { font-weight: 700; letter-spacing: .02em; }
+  .code.out code { color: var(--text); }
+  :not(pre) > code {
+    font: .9em/1.5 var(--mono); color: var(--accent);
+    background: var(--surface-2); border: 1px solid var(--border);
+    padding: 1px 5px; border-radius: 5px;
+  }
+
+  .table-wrap {
+    margin: 18px 0; overflow-x: auto;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13.8px; min-width: 560px; }
+  th, td { padding: 10px 14px; text-align: left; vertical-align: top; }
+  th {
+    background: var(--surface-2); color: var(--muted);
+    font-size: 11.5px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td { border-top: 1px solid var(--border); }
+  tbody tr:first-child td { border-top: 0; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td code { white-space: nowrap; }
+
+  .diagram {
+    margin: 22px 0; padding: 18px 18px 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow);
+  }
+  .diagram-scroll { overflow-x: auto; }
+  .diagram svg { display: block; width: 100%; height: auto; min-width: 640px; }
+  .diagram figcaption {
+    margin-top: 10px; color: var(--muted); font-size: 12.5px; text-align: center;
+  }
+  .svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .dg text { font-family: var(--sans); }
+  .dg-box { fill: var(--surface); stroke: var(--border); stroke-width: 1.4; }
+  .dg-box-accent { fill: var(--accent-weak); stroke: var(--accent); stroke-width: 1.5; }
+  .dg-box-ok { fill: var(--ok-bg); stroke: var(--ok); stroke-width: 1.5; }
+  .dg-box-danger { fill: var(--danger-bg); stroke: var(--danger); stroke-width: 1.5; }
+  .dg-box-warn { fill: var(--warn-bg); stroke: var(--warn); stroke-width: 1.5; }
+  .dg-lane { fill: var(--surface-2); stroke: var(--border); stroke-width: 1; }
+  .dg-text { fill: var(--text); font-size: 13.5px; font-weight: 600; }
+  .dg-text-sm { fill: var(--text); font-size: 11.5px; }
+  .dg-muted { fill: var(--muted); font-size: 10.8px; }
+  .dg-accent-text { fill: var(--accent); font-size: 11.5px; font-weight: 700; }
+  .dg-ok-text { fill: var(--ok); font-size: 11.5px; font-weight: 700; }
+  .dg-danger-text { fill: var(--danger); font-size: 11.5px; font-weight: 700; }
+  .dg-line { stroke: var(--muted); stroke-width: 1.5; fill: none; marker-end: url(#ar); }
+  .dg-line-accent { stroke: var(--accent); stroke-width: 1.6; fill: none; marker-end: url(#ar-accent); }
+  .dg-line-ok { stroke: var(--ok); stroke-width: 1.6; fill: none; marker-end: url(#ar-ok); }
+  .dg-line-danger { stroke: var(--danger); stroke-width: 1.6; fill: none; marker-end: url(#ar-danger); }
+  .dg-line-dashed { stroke-dasharray: 5 5; }
+  .dg-life { stroke: var(--border); stroke-width: 1.2; stroke-dasharray: 3 5; }
+  .mk-muted { fill: var(--muted); }
+  .mk-accent { fill: var(--accent); }
+  .mk-ok { fill: var(--ok); }
+  .mk-danger { fill: var(--danger); }
+  .dg-flow { stroke-dasharray: 6 7; animation: flow 1.4s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -13; } }
+
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps > li {
+    position: relative; padding-left: 40px; margin: 12px 0;
+  }
+  .steps > li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 0; top: 2px;
+    width: 25px; height: 25px; border-radius: 50%;
+    display: grid; place-items: center;
+    font: 700 11.5px/1 var(--mono);
+    color: var(--accent); background: var(--accent-weak);
+    border: 1px solid var(--border);
+  }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li {
+    position: relative; padding-left: 30px; margin: 9px 0;
+  }
+  .checklist li::before {
+    content: ""; position: absolute; left: 4px; top: 7px;
+    width: 13px; height: 13px; border-radius: 4px;
+    border: 1.5px solid var(--accent);
+  }
+
+  .kbd {
+    font: 12px/1.6 var(--mono);
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px;
+    white-space: nowrap;
+  }
+
+  footer {
+    margin-top: 90px; padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 12.5px;
+  }
+  footer p { margin: 4px 0; }
+
+  @media (max-width: 1100px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar {
+      position: static; height: auto; overflow: visible;
+      border-right: 0; border-bottom: 1px solid var(--border);
+      padding: 22px 18px;
+    }
+    .toc { max-height: 250px; overflow-y: auto; }
+    .toc .sub { display: none; }
+    main { padding-top: 26px; }
+    /* 窄屏下固定按钮会压住内容，改为跟随页面流排布 */
+    .theme-toggle {
+      position: static; display: block; width: fit-content;
+      margin: 14px 14px 0 auto; box-shadow: none;
+    }
+  }
+  @media (max-width: 760px) {
+    .grid2, .grid3, .compare { grid-template-columns: 1fr; }
+    .hero .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .theme-toggle { margin: 10px 12px 0 auto; }
+    body { line-height: 1.72; }
+    table { font-size: 13px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+
+  @media print {
+    .sidebar, .theme-toggle, .progress, .copy, .hero .jump { display: none !important; }
+    .shell { display: block; }
+    main { padding: 0; }
+    body { background: #fff; color: #111; font-size: 11pt; }
+    .content { max-width: none; }
+    .hero { box-shadow: none; border-radius: 0; padding: 18pt; background: #eef2ff !important; color: #111 !important; }
+    .hero .sub, .hero .badges span, .hero .stat small, .hero .eyebrow { color: #333 !important; }
+    .hero .badges span { border-color: #bbb; background: #fff; }
+    .hero .stat { background: #fff; }
+    .card, .diagram, .code, .table-wrap, .compare, .callout { box-shadow: none; break-inside: avoid; }
+    section { margin-top: 28pt; break-inside: auto; }
+    h2, h3 { break-after: avoid; }
+    .diagram svg { min-width: 0; }
+    .code { background: #fff; border-color: #ccc; }
+    .code-head { background: #f1f5f9; color: #333; border-color: #ccc; }
+    .code code { color: #111; white-space: pre-wrap; word-break: break-word; }
+    .diagram { page-break-inside: avoid; }
+    a { color: #111; text-decoration: underline; }
+    @page { margin: 14mm; }
+  }
+</style>
+</head>
+<body>
+
+<svg class="svg-defs" aria-hidden="true" focusable="false">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-muted" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-accent" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-ok" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+    <marker id="ar-danger" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-danger" d="M0 0 L10 5 L0 10 z"></path>
+    </marker>
+  </defs>
+</svg>
+
+<div class="progress" aria-hidden="true"><span></span></div>
+<button class="theme-toggle" id="themeToggle" type="button" aria-label="切换深浅色主题">深色</button>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">Demo Engineering</div>
+      <h1>Spring Boot 启动原理</h1>
+      <p>注解与类 · 启动链路 · 自动配置 · Bean 生命周期 · 失败分析</p>
+    </div>
+    <nav class="toc" aria-label="目录">
+      <a href="#start">1 · 开始之前</a>
+<a href="#annotations">2 · 从注解讲起（场景 0）</a>
+<div class="sub">
+  <a href="#an-map">2.1 十七行对照表</a>
+  <a href="#an-tree">2.2 剖开 @SpringBootApplication</a>
+  <a href="#an-spi">2.3 两个 SPI 文件</a>
+  <a href="#an-conditional">2.4 @Conditional 家族</a>
+  <a href="#an-provenance">2.5 191 个 Bean 谁注册的</a>
+  <a href="#an-proxy">2.6 proxyBeanMethods 两档</a>
+  <a href="#an-enable">2.7 手写一个 @EnableXxx</a>
+</div>
+<a href="#model">3 · 心智模型</a>
+<div class="group">场景 1~5：把注解放回时间轴</div>
+<a href="#timeline">4 · 启动事件时间线</a>
+<div class="sub">
+  <a href="#timeline-stages">4.1 九个刻度和一串日志</a>
+  <a href="#timeline-two">4.2 两种监听器的视野差</a>
+</div>
+<a href="#modes">5 · 启动模式对比</a>
+<div class="sub">
+  <a href="#modes-table">5.1 四种模式并排</a>
+  <a href="#modes-port">5.2 端口冲突的异常链</a>
+</div>
+<a href="#autoconfig">6 · 自动配置与条件报告</a>
+<div class="sub">
+  <a href="#ac-report">6.1 报告一直在记，只是不打印</a>
+  <a href="#ac-condition">6.2 让条件自己解释为什么</a>
+  <a href="#ac-exclude">6.3 反例：排除一个自动配置</a>
+</div>
+<a href="#beanlife">7 · Bean 生命周期</a>
+<div class="sub">
+  <a href="#bl-order">7.1 实测 17 条打点</a>
+  <a href="#bl-proxy">7.2 BPP 把对象换成代理</a>
+</div>
+<a href="#failure">8 · 启动失败双结局</a>
+<div class="group">收尾</div>
+<a href="#edge">9 · 边界与反例汇总</a>
+<a href="#run">10 · 运行与速查</a>
+<a href="#map">11 · 代码地图</a>
+    </nav>
+    <div class="side-note">
+      数据来源：本仓库 demo-springboot-startup 模块在本机的实测输出（Spring Boot 4.1.2 / Java 21.0.13 / Tomcat 11.0.27，2026-10-29）。所有耗时与端口会随机器变化，顺序与数量不会。
+    </div>
+  </aside>
+
+  <main>
+    <div class="content">
+      <header class="hero">
+  <div class="eyebrow">Spring Boot 4.1 · 注解、类与启动链路解剖</div>
+  <h2>先讲注解点亮了哪些类，再把启动拆成能看见的九个刻度</h2>
+  <p class="sub">
+    第 02 章先把「你写的注解 → 框架里干活的类 → 容器里多出来的 Bean」这张对照表立起来：
+    <code>@SpringBootApplication</code> 剖开是 12 次出现 / 9 个类型，
+    <code>@ConditionalOnXxx</code> 21 个注解其实只有 11 个 Condition 类，
+    容器里 191 个定义能逐个说清是谁注册的。
+    第 03~08 章再把这批类放回时间轴：<code>run()</code> 是 7 个有名字的回调阶段 + 一次
+    <code>refresh()</code>，注解处理器全在 refresh 里跑。6 个实验，每个数字都来自本机实测。
+  </p>
+  <div class="badges">
+    <span>Spring Boot 4.1.2</span><span>Java 21.0.13</span><span>Tomcat 11.0.27</span>
+    <span>零中间件依赖</span><span>23 个单测</span>
+  </div>
+  <div class="stats">
+    <div class="stat"><b>3.459s</b><small>启动到 started（jar 直跑，单次实测）</small></div>
+    <div class="stat"><b>6 → 191</b><small>Bean 定义数：contextLoaded 到 refresh 完成</small></div>
+    <div class="stat"><b>111 / 139</b><small>条件报告的判定源 / 条件条目数</small></div>
+    <div class="stat"><b>42 vs 63 行</b><small>友好报告 vs 满屏堆栈</small></div>
+  </div>
+  <div class="jump">
+    <a href="#annotations">先看注解与类</a>
+    <a href="#model">心智模型与时间线</a>
+    <a class="ghost" href="#ac-exclude">排除自动配置的反例</a>
+    <a class="ghost" href="#run">速查与接口清单</a>
+  </div>
+</header>
+
+<section id="start">
+  <h2><span class="no">01</span>开始之前</h2>
+  <p class="lead">不需要 Docker、MySQL、Redis。一个进程 + 一条 curl 就能看完前四个场景。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 最短启动路径</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 1) 起模块（默认端口 9006；本文实测用 SERVER_PORT=9014 起 jar，避免撞上正在跑的服务）
+./mvnw -pl demo-springboot-startup spring-boot:run
+
+# 2) 另一个终端：索引一次列全六个场景。返回是 JSON，用系统自带的 jq 摊平成可读文本
+curl -s http://localhost:9014/api/startup | jq -r '"module " + .module + "  port " + (.port|tostring),
+  (.scenarios[] | " \(.id) \(.title)\n   触发: \(.trigger)\n   看什么: \(.observe)"), "note: " + .note'
+
+# 3) 场景 5 必须重启进程才看得到（启动失败的应用根本没有接口）
+DEMO_FAIL_MODE=analyzer java -jar demo-springboot-startup/target/demo-springboot-startup-0.0.1-SNAPSHOT.jar</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 上面第 2 条命令的真实输出（默认端口 9006，此处 9014 为验证用临时端口）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>module demo-springboot-startup  port 9014
+ 0 注解与类（起点）
+   触发: GET /api/startup/annotations → /annotations/tree → /conditional → /spi → /provenance → /proxymethods → /feature
+   看什么: 每个注解点亮哪个类、@SpringBootApplication 的元注解树、条件注解家族、.imports 与
+          spring.factories 的分工、Bean 定义来源、proxyBeanMethods 两档实测差值（见第 02 章）
+ 1 启动事件时间线
+   触发: GET /api/startup/timeline（数据在启动日志里已打好，接口只做回看）
+   看什么: 7 个 RunListener 阶段 + 3 个容器事件的顺序与耗时
+ 2 启动模式对比
+   触发: GET /api/startup/modes/compare；端口冲突看 GET /api/startup/modes/port-in-use
+   看什么: 容器实现类、Bean 定义数、WebServer 类型与端口
+ 3 自动配置揭秘
+   触发: GET /api/startup/autoconfig → /autoconfig/search?contains=FeatureColor → /autoconfig/exclude-demo
+   看什么: 条件命中/落选原因；排除 DispatcherServletAutoConfiguration 的真实后果（实测是启动失败，
+          不是想象中的干净 404——自动配置之间有依赖）
+ 4 Bean 生命周期
+   触发: GET /api/startup/beanlife/trace
+   看什么: 从 constructor 到 destroy-method 的有序站点，含 BPP 换代理现场
+ 5 启动失败双结局（必须重启进程）
+   触发: DEMO_FAIL_MODE=analyzer 与 DEMO_FAIL_MODE=raw 各启动一次，对比控制台输出
+   看什么: 友好报告 DESCRIPTION/ACTION 三五行 vs 满屏堆栈
+note: 场景 5 无法用接口触发：启动失败的应用根本没有接口。</code></pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>约定</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>实测环境</td><td>Spring Boot 4.1.2 / Java 21.0.13 / Apache Tomcat 11.0.27，macOS，核对日期 2026-10-29</td></tr>
+        <tr><td>采集端口</td><td>验证时用 <code>SERVER_PORT=9014</code> 临时端口；正文里的端口号与毫秒数会因机器浮动，<strong>顺序和数量不会变</strong></td></tr>
+        <tr><td>「实测」的含义</td><td>每个结论都配一条可复制命令和紧跟其后的真实返回；关键实验重复跑过两遍</td></tr>
+        <tr><td>不做什么</td><td>不接 Nacos / 不做打包优化 / 不讲 AOT 与 GraalVM 原生镜像——那是另一套启动链路</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="annotations">
+  <h2><span class="no">02</span>从注解讲起：你写的每个注解，点亮的是哪个类</h2>
+  <p class="lead">
+    Spring Boot 没有魔法。它做的只有两件事：<strong>读你写的注解</strong>，然后<strong>调用处理这个注解的类</strong>。
+    所以「启动原理」的正确起点不是 <code>run()</code> 的九个阶段，而是这张
+    <strong>「注解 → 类 → 容器里多了什么」</strong>对照表。本章的每一个数字都由反射和类路径现场算出来，
+    接口共 7 个，全部可重复执行。
+  </p>
+
+  <div class="callout tip">
+    <div class="ico">≈</div>
+    <p><span class="title">类比：墙上的开关面板</span>
+      注解是家装完留在墙面上的开关面板——你只看得见面板上的字（<code>@EnableXxx</code>），
+      看不见墙里的走线。<code>@EnableScheduling</code> 后面接的是
+      <code>SchedulingConfiguration</code>，<code>@ConfigurationProperties</code> 后面接的是
+      <code>ConfigurationPropertiesBindingPostProcessor</code>。
+      学启动原理，本质就是把「按哪个开关、哪台电器会转」这张表抄下来并验证它。</p>
+  </div>
+
+  <figure class="diagram">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 920 250" role="img" aria-label="三层结构：你写的注解、处理它的类、容器里多出来的东西">
+        <text class="dg-muted" x="16" y="22">你写的注解（可见）</text>
+        <text class="dg-muted" x="330" y="22">框架里干活的类（看不见，但能数）</text>
+        <text class="dg-muted" x="680" y="22">容器里多出来的东西（实测数字）</text>
+
+        <rect class="dg-box" x="16" y="38" width="220" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="126" y="62" text-anchor="middle">@SpringBootApplication</text>
+        <rect class="dg-box-accent" x="300" y="38" width="300" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="450" y="55" text-anchor="middle">ConfigurationClassPostProcessor</text>
+        <text class="dg-text-sm" x="450" y="71" text-anchor="middle">+ AutoConfigurationImportSelector</text>
+        <rect class="dg-box-ok" x="660" y="38" width="244" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="782" y="62" text-anchor="middle">191 个 Bean 定义</text>
+
+        <rect class="dg-box" x="16" y="104" width="220" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="126" y="128" text-anchor="middle">@ComponentScan</text>
+        <rect class="dg-box-accent" x="300" y="104" width="300" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="450" y="128" text-anchor="middle">ClassPathBeanDefinitionScanner</text>
+        <rect class="dg-box-ok" x="660" y="104" width="244" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="782" y="128" text-anchor="middle">23 个扫描产物（短名 Bean）</text>
+
+        <rect class="dg-box" x="16" y="170" width="220" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="126" y="194" text-anchor="middle">@ConditionalOnXxx</text>
+        <rect class="dg-box-accent" x="300" y="170" width="300" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="450" y="194" text-anchor="middle">OnBeanCondition / OnClassCondition …（共 11 个）</text>
+        <rect class="dg-box-warn" x="660" y="170" width="244" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="782" y="194" text-anchor="middle">44 个候选 → 只有 20 个进容器</text>
+
+        <path class="dg-line" d="M236 58 H299"></path>
+        <path class="dg-line-ok" d="M600 58 H659"></path>
+        <path class="dg-line" d="M236 124 H299"></path>
+        <path class="dg-line-ok" d="M600 124 H659"></path>
+        <path class="dg-line" d="M236 190 H299"></path>
+        <path class="dg-line-danger" d="M600 190 H659"></path>
+      </svg>
+    </div>
+    <figcaption>三列从左到右就是本章的读法：写下的注解 → 被点亮的类 → 容器里可数的结果。数字来自 <code>/api/startup/annotations/provenance</code> 与 <code>/spi</code>。</figcaption>
+  </figure>
+
+  <h3 id="an-map">2.1 十七行对照表：注解、干活的类、去哪验证</h3>
+  <p>
+    这张表就是本章的目录。每一行的「干活类」都用 <code>Class.forName(name, false, classLoader)</code>
+    在当前类路径上真查过一遍——<code>missing</code> 为空，说明 Boot 4.1.2 这套依赖里 17 行全部落地；
+    换个大版本若某行失效，测试 <code>mapRowsPointToRealClasses</code> 会先替报错。
+  </p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 注解 → 类 总表</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>curl -s http://localhost:9014/api/startup/annotations</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /api/startup/annotations（实测，17 行全部 present=true）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>rowCount 17  presentCount 17  missing []
+
+@SpringBootConfiguration        -&gt; Configuration                              /annotations/tree
+@EnableAutoConfiguration         -&gt; AutoConfigurationImportSelector             /annotations/spi + 场景 3 条件报告
+@AutoConfiguration               -&gt; AutoConfigurationPackages                   场景 3 /annotations/spi
+@ComponentScan                   -&gt; ClassPathBeanDefinitionScanner              /annotations/provenance
+@ComponentScan.Filter(CUSTOM)    -&gt; TypeExcludeFilter + AutoConfigurationExcludeFilter   /annotations/provenance
+@Conditional                     -&gt; OnClassCondition                            /annotations/conditional
+@Import                          -&gt; ConfigurationClassParser                    /annotations/feature
+@Bean                            -&gt; ConfigurationClassBeanDefinitionReader      /annotations/provenance
+@Configuration(proxyBeanMethods) -&gt; ConfigurationClassEnhancer                  /annotations/proxymethods
+@ConfigurationProperties         -&gt; ConfigurationPropertiesBindingPostProcessor /annotations/feature（full 档）
+@EnableConfigurationProperties   -&gt; EnableConfigurationPropertiesRegistrar      /annotations/feature（full 档）
+@EnableScheduling（@EnableXxx 通例）-&gt; SchedulingConfiguration                   /annotations/feature（本模块手写同款）
+@PostConstruct / @PreDestroy     -&gt; InitDestroyAnnotationBeanPostProcessor      场景 4 打点顺序
+@Value                           -&gt; PropertySourcesPlaceholderConfigurer        场景 3 / 首页端口回显
+@RestController + @GetMapping    -&gt; RequestMappingHandlerMapping                本模块全部接口
+META-INF/spring.factories（非注解）-&gt; SpringFactoriesLoader                      场景 1 / 场景 5 + /annotations/spi
+FailureAnalyzer（接口）           -&gt; AbstractFailureAnalyzer                     场景 5（需重启进程）</code></pre>
+  </div>
+
+  <div class="callout warn">
+    <div class="ico">!</div>
+    <p><span class="title">最后两行不是注解，却最能坑人</span>
+      <code>SpringApplicationRunListener</code> 和 <code>FailureAnalyzer</code> 在容器存在之前就要用到，
+      所以它们不能靠 <code>@Component</code> 注册，只能写进 <code>META-INF/spring.factories</code>。
+      这是本章唯一一处「你不写注解、而是写文件」的地方，也是 场景 1 与 场景 5 的注册入口。</p>
+  </div>
+
+  <h3 id="an-tree">2.2 把 @SpringBootApplication 剖开：12 次出现，9 个类型</h3>
+  <p>
+    「<code>@SpringBootApplication</code> = 三合一」这句人人都背，但很少有人数过它到底套了几层。
+    本模块用两条互不依赖的路径同时看：JDK 反射递归（完全不碰 Spring）和 Spring 的
+    <code>MergedAnnotations</code>。下面这棵树是递归打印出来的，缩进一层就是深一层元注解。
+  </p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">java · annotations/AnnotationTreeService.java（递归核心，节选）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>private void walk(Annotation present, int depth, String declaredOn, List&lt;TreeRow&gt; rows, Set&lt;String&gt; path) {
+    Class&lt;? extends Annotation&gt; annType = present.annotationType();
+    if (depth &gt; MAX_DEPTH || !path.add(annType.getName())) {
+        return;                       // 同一条链上重复 = 注解互相引用，截断
+    }
+    rows.add(new TreeRow(depth, annType.getName(), declaredOn, attributesOf(present)));
+    for (Annotation meta : annType.getAnnotations()) {
+        // 跳过 @Target/@Retention/@Documented：它们是注解的"定义元信息"，不承载装配语义，
+        // 留着会把树读成一堵墙，读者要找的 @Import/@Conditional 会被埋掉
+        if (meta.annotationType().getName().startsWith("java.lang.annotation")) {
+            continue;
+        }
+        walk(meta, depth + 1, annType.getName(), rows, path);
+    }
+    path.remove(annType.getName());   // 回溯：允许同一个元注解出现在另一条分支上
+}</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 解剖主类的注解树</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># className 留空 → 默认解剖本模块主类；传别的类名可以剖任意类
+curl -s "http://localhost:9014/api/startup/annotations/tree?className="</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /annotations/tree（实测，两次输出逐字节相同）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>rootClass com.example.demo.startup.StartupApplication
+treeRows 12   mergedOccurrences 12   mergedUniqueTypes 9
+
+@SpringBootApplication                      ← StartupApplication        (depth 0)
+  @SpringBootConfiguration                  ← SpringBootApplication     (depth 1)
+    @Configuration                          ← SpringBootConfiguration   (depth 2)
+      @Component                            ← Configuration             (depth 3)
+        @Indexed                            ← Component                 (depth 4)
+    @Indexed                                ← SpringBootConfiguration   (depth 2)
+  @EnableAutoConfiguration                  ← SpringBootApplication     (depth 1)
+    @AutoConfigurationPackage               ← EnableAutoConfiguration   (depth 2)
+      @Import                               ← AutoConfigurationPackage  (depth 3)
+    @Import                                 ← EnableAutoConfiguration   (depth 2)
+  @ComponentScan                            ← SpringBootApplication     (depth 1)
+@ComponentScan                              ← StartupApplication        (depth 0)
+
+mergedTypeCounts {"SpringBootApplication":1, "ComponentScan":2, "SpringBootConfiguration":1,
+  "EnableAutoConfiguration":1, "Configuration":1, "Indexed":2, "AutoConfigurationPackage":1,
+  "Import":2, "Component":1}
+countByStrategy {"DIRECT":12, "INHERITED_ANNOTATIONS":12, "SUPERCLASS":12, "TYPE_HIERARCHY":12}</code></pre>
+  </div>
+
+  <p>
+    换个类名，同一个接口就能解剖框架自己的配置类。注意 Boot 4 的包名已经拆到
+    <code>webmvc.autoconfigure</code>——按 Boot 3 的 <code>autoconfigure.web.servlet</code> 填，
+    得到的是 400 加一句提示，而不是空结果。
+  </p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 解剖一个真实的自动配置类</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 类名必须是运行时已加载的：填 Boot 3 的 autoconfigure.web.servlet 包名会拿到 400 + 提示
+curl -s "http://localhost:9014/api/startup/annotations/tree?className=org.springframework.boot.webmvc.autoconfigure.WebMvcAutoConfiguration" \
+  | jq -r '"treeRows=\(.treeRows) unique=\(.mergedUniqueTypes)",
+           (.tree[] | "d\(.depth) \(.annotation|split(".")[-1])  &lt;-  \(.declaredOn|split(".")[-1])")'</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · WebMvcAutoConfiguration 的注解树（实测，14 次出现 / 12 个唯一类型）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>d0 AutoConfiguration          ←  WebMvcAutoConfiguration
+d1 Configuration              ←  AutoConfiguration
+d2 Component                  ←  Configuration
+d3 Indexed                    ←  Component
+d1 AutoConfigureBefore        ←  AutoConfiguration
+d1 AutoConfigureAfter         ←  AutoConfiguration
+d0 ConditionalOnWebApplication ←  WebMvcAutoConfiguration
+d1 Conditional                ←  ConditionalOnWebApplication
+d0 ConditionalOnClass          ←  WebMvcAutoConfiguration
+d1 Conditional                ←  ConditionalOnClass
+d0 ConditionalOnMissingBean    ←  WebMvcAutoConfiguration
+d1 Conditional                ←  ConditionalOnMissingBean
+d0 AutoConfigureOrder         ←  WebMvcAutoConfiguration
+d0 ImportRuntimeHints         ←  WebMvcAutoConfiguration</code></pre>
+  </div>
+
+  <p>
+    这张树就是「注解 → 类」在框架自己身上的样子：<code>@AutoConfiguration</code> 往下仍然是
+    <code>@Configuration → @Component</code>；三个 <code>@ConditionalOnXxx</code> 头上挂的是
+    <strong>同一个根 <code>@Conditional</code></strong>（它出现三次，所以 14 次出现只剩 12 个唯一类型）。
+    Boot 自己的自动配置用的就是你刚学到的那批注解，没有另一套私有语法。
+  </p>
+
+  <p>三个可以直接背走的结论：</p>
+  <ul>
+    <li><strong>depth 1 的三个就是「三合一」</strong>——<code>@SpringBootConfiguration</code>、
+      <code>@EnableAutoConfiguration</code>、<code>@ComponentScan</code>，不用记文档，数缩进就行。</li>
+    <li><strong>12 次出现但只有 9 个类型</strong>：<code>ComponentScan</code>、<code>Import</code>、<code>Indexed</code>
+      各出现两次。<code>ComponentScan</code> 那两行里，一行 depth 1（元注解带来的），一行 depth 0
+      （本模块为了写 <code>excludeFilters</code> 自己又标了一次）。</li>
+    <li><strong>四种 <code>SearchStrategy</code> 数字全是 12</strong>。Spring 7 只剩
+      <code>DIRECT / INHERITED_ANNOTATIONS / SUPERCLASS / TYPE_HIERARCHY</code> 四个值，
+      它们只决定「沿类的继承链往上找多深」，<strong>不决定要不要展开元注解</strong>——
+      网上抄来的 <code>SearchStrategy.PRESENT</code>、<code>TYPE_MAPPING</code> 在 Boot 4 已经编译不过。</li>
+  </ul>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">同一次返回里的别名对照 · filterAliasProof</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>Spring 合成视图 value=[TypeExcludeFilter] / classes=[TypeExcludeFilter]
+（别名由 Spring 解析，JDK 树里的原始视图两个数组不等价）</code></pre>
+  </div>
+
+  <p>
+    这行解决一个高频疑问：文档里写 <code>@Filter(type = CUSTOM, classes = ...)</code>，
+    有人抄成 <code>value = ...</code> 也能跑。原因是 <code>value</code> 与 <code>classes</code> 互为
+    <code>@AliasFor</code>；用 JDK 原始反射只看得到你写的那个成员，
+    只有 Spring 的<em>合成</em>视图会把两个数组都填成同一个值。
+  </p>
+
+  <h3 id="an-spi">2.3 注解之外：两个 SPI 文件决定「候选名单」</h3>
+  <p>
+    <code>@EnableAutoConfiguration</code> 点亮的是 <code>AutoConfigurationImportSelector</code>，
+    但它自己并不知道有哪些自动配置类——名单写在<strong>每个 jar 的文件里</strong>。
+    Boot 4 用两套并存的文件：自动配置走 <code>META-INF/spring/…AutoConfiguration.imports</code>，
+    容器之前就需要的东西仍走 <code>META-INF/spring.factories</code>。
+  </p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 直接把两类文件从 jar 里掏出来看</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 1) 本模块自己那份 spring.factories（场景 1 的 RunListener、场景 5 的 FailureAnalyzer 都在这里面）
+cat demo-springboot-startup/src/main/resources/META-INF/spring.factories
+
+# 2) spring-boot-autoconfigure 里的自动配置名单（一行一个类名，# 是注释）
+unzip -p ~/.m2/repository/org/springframework/boot/spring-boot-autoconfigure/4.1.2/spring-boot-autoconfigure-4.1.2.jar \
+  META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports | head -4</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 两条命令的真实输出</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># Boot 4.1 仍用 META-INF/spring.factories 加载 SpringApplicationRunListener / FailureAnalyzer
+# （自动配置才迁移到 META-INF/spring/*.imports；两套机制并存，本文件是场景 1 和场景 5 的注册入口）
+
+org.springframework.boot.SpringApplicationRunListener=\
+com.example.demo.startup.timeline.StartupTimelineRunListener
+
+org.springframework.boot.diagnostics.FailureAnalyzer=\
+com.example.demo.startup.failure.StartupConfigFailureAnalyzer
+
+org.springframework.boot.autoconfigure.admin.SpringApplicationAdminJmxAutoConfiguration
+org.springframework.boot.autoconfigure.aop.AopAutoConfiguration
+org.springframework.boot.autoconfigure.availability.ApplicationAvailabilityAutoConfiguration
+org.springframework.boot.autoconfigure.context.ConfigurationPropertiesAutoConfiguration</code></pre>
+  </div>
+
+  <p>
+    <strong>注意续行符</strong>：<code>spring.factories</code> 里一个键对应多行实现类时，
+    上一行必须以 <code>\</code> 结尾。漏写不会报编译错，只会让第二个实现类被当成一个新键——
+    表现是「我明明注册了，怎么没生效」。
+  </p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 运行时看全类路径的汇总结果</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>curl -s http://localhost:9014/api/startup/annotations/spi</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /annotations/spi（实测，本模块无中间件依赖所以数字很干净；.imports 按行数降序展示，接口原样按 jar 名出现顺序返回）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>候选自动配置类 44 个，来自 11 份 .imports（ImportCandidates 合并去重）
+
+spring-boot-autoconfigure-4.1.2.jar     12 行   ← Boot 3 时代"几百个都在这一个 jar"的印象来源
+spring-boot-webflux-4.1.2.jar            9 行
+spring-boot-webmvc-4.1.2.jar             6 行
+spring-boot-servlet-4.1.2.jar            5 行
+spring-boot-tomcat-4.1.2.jar             5 行
+spring-boot-reactor-netty-4.1.2.jar      2 行
+spring-boot-http-codec-4.1.2.jar         1 行
+spring-boot-http-converter-4.1.2.jar     1 行
+spring-boot-jackson-4.1.2.jar            1 行
+spring-boot-netty-4.1.2.jar              1 行
+spring-boot-reactor-4.1.2.jar            1 行
+                                   合计  44 行   = candidateTotal，说明这 11 份文件之间没有重复条目
+
+spring.factories 共 12 份，其中 ours=true 的只有 1 份：demo-springboot-startup-0.0.1-SNAPSHOT.jar
+  keys=[FailureAnalyzer, SpringApplicationRunListener]
+  其余 11 份来自 spring-boot / spring-boot-autoconfigure / spring-boot-web-server / spring-aop …
+factoriesCarriesEnableAutoConfiguration = false   ← 老教程"往 spring.factories 追加自动配置类"在 Boot 4 无效</code></pre>
+  </div>
+
+  <div class="callout danger">
+    <div class="ico">×</div>
+    <p><span class="title">写错类名是静默失效</span>
+      <code>.imports</code> 里一行类名拼错，不会有任何报错：它只是进不了候选集合，
+      连条件报告里都查不到这个源。想验证名单，就对照 <code>candidateTotal</code>
+      与 <code>/autoconfig/search?contains=</code> 的结果（场景 3）。</p>
+  </div>
+
+  <h3 id="an-conditional">2.4 @Conditional 家族：21 个注解，其实只有 11 个类</h3>
+  <p>
+    初学者把 <code>@ConditionalOnXxx</code> 当成一个很大的家族，实际处理它们的类很少。
+    本接口把每个注解头上挂的 <code>@Conditional(…)</code> 反查出来并按类分桶——
+    桶的数量（11）比注解数量（21）小得多，这就是「家族比想象中小」的证据。
+  </p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 条件注解 → Condition 类 反查</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>curl -s "http://localhost:9014/api/startup/annotations/conditional?includeUserCondition=true"</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /annotations/conditional（实测，注解 21 个 / Condition 类 11 个；按服务的注解数降序展示，接口原样按注解声明顺序返回）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>OnBeanCondition           ← ConditionalOnBean, ConditionalOnMissingBean,
+                            ConditionalOnSingleCandidate, ConditionalOnMissingFilterBean
+OnPropertyCondition       ← ConditionalOnProperty, ConditionalOnBooleanProperty,
+                            ConditionalOnProperties, ConditionalOnBooleanProperties
+OnClassCondition          ← ConditionalOnClass, ConditionalOnMissingClass, ConditionalOnCheckpointRestore
+OnWebApplicationCondition ← ConditionalOnWebApplication, ConditionalOnNotWebApplication
+OnWarDeploymentCondition  ← ConditionalOnWarDeployment, ConditionalOnNotWarDeployment
+OnJndiCondition           ← ConditionalOnJndi
+OnJavaCondition           ← ConditionalOnJava
+OnCloudPlatformCondition  ← ConditionalOnCloudPlatform
+OnThreadingCondition      ← ConditionalOnThreading
+OnExpressionCondition     ← ConditionalOnExpression
+OnResourceCondition       ← ConditionalOnResource
+
+（对照组）@Conditional(FeatureColorCondition)  ← 本模块自己写的条件，见 场景 3</code></pre>
+  </div>
+
+  <p>
+    「一个 Condition 类服务多个注解」有直接好处：<code>@ConditionalOnProperty</code> 与
+    <code>@ConditionalOnBooleanProperty</code> 的判定逻辑完全同源，后者只是把
+    <code>havingValue</code> 默认成 <code>true</code> 的语法糖。
+    查 <code>OnPropertyCondition</code> 一个类的行为，就同时懂了四个注解。
+    而 <code>ConditionalOnProperty</code> 的成员实测是
+    <code>['name', 'value', 'prefix', 'havingValue', 'matchIfMissing']</code>——
+    场景 3 那个开关的全部语义就在这五个参数里。
+  </p>
+
+  <div class="callout">
+    <div class="ico">i</div>
+    <p><span class="title">用户侧写条件不需要新注解</span>
+      最后一行是本模块自己写的 <code>FeatureColorCondition</code>：它不配任何
+      <code>@ConditionalOnXxx</code>，而是直接 <code>@Conditional(自己的类)</code> 并继承
+      <code>SpringBootCondition</code>，就能把自己的判断打进条件报告。
+      「Boot 提供了 21 个注解」和「你也能加一个」用的是同一个根：<code>@Conditional</code>。</p>
+  </div>
+
+  <h3 id="an-provenance">2.5 容器里 191 个 Bean，分别是谁注册的</h3>
+  <p>
+    前两节讲「谁来注册」，这一节看「注册的结果」。遍历 <code>getBeanDefinitionNames()</code>，
+    用三个可靠信号打来源标签：<code>factoryMethodName</code> 非空 → <code>@Bean</code> 方法产物；
+    类名命中 <code>ImportCandidates</code> 名单 → 自动配置导入；
+    定义对象是 <code>ScannedGenericBeanDefinition</code> → 组件扫描产物；
+    Bean 名等于类全限定名 → <code>@Import</code> 导入。
+  </p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · Bean 定义来源分析</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>curl -s http://localhost:9014/api/startup/annotations/provenance</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /annotations/provenance（实测，总定义 191；接口原样按来源首次出现排序，此处按数量降序展示）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>@Bean 方法（ConfigurationClassBeanDefinitionReader）   90
+框架基础设施                                          30
+@Import 导入的配置类                                   27
+组件扫描（@ComponentScan）                             23
+自动配置导入（.imports → DeferredImportSelector）        20
+其它（显式 register / 内联注册）                          1
+                                                合计  191
+
+byDefinitionClass {ConfigurationClassBeanDefinition: 89, AnnotatedGenericBeanDefinition: 64,
+                   ScannedGenericBeanDefinition: 23, RootBeanDefinition: 15}
+
+本模块的 34 个 Bean 里，三种来源同框：
+  startupFeatureApiBasic      ConfigurationClassBeanDefinition  @Bean 方法
+  featureEnableDemoConfig     ScannedGenericBeanDefinition      组件扫描     (cglib=true)
+  com.example.demo.startup.annotations.feature.StartupFeatureBasicConfig
+                              AnnotatedGenericBeanDefinition    @Import 导入  ← 名字就是类全限定名
+
+excludeFilters 的证据（类路径上有=true，容器里没有=已剔除）：
+  modeProbeApp / lifecycleProbeApp / probeApp / featureProbeApp  四个全部命中</code></pre>
+  </div>
+
+  <p>读这份数字的三个抓手：</p>
+  <ul>
+    <li><strong>44 个候选 → 20 个进容器</strong>。剩下的被条件挡掉了，这正是 场景 3 条件报告存在意义；
+      而 27 个「<code>@Import</code> 导入的配置类」是别的配置类通过 <code>@Import</code> 拉进来的，
+      它们不在候选名单里。</li>
+    <li><strong>自动配置只贡献了 20 + 一部分 <code>@Bean</code> 方法</strong>：90 个 <code>@Bean</code>
+      产物里绝大多数来自自动配置类的方法。所以「Bean 定义从 6 跳到 191」不是玄学，是这两桶。</li>
+    <li><strong>那 1 个「其它」是主类自己</strong>。<code>SpringApplication</code> 拿到你的主类后
+      直接 <code>register</code>，走的是最朴素的注册路径——它不在扫描结果里，也不是 <code>@Import</code>。</li>
+  </ul>
+
+  <div class="callout tip">
+    <div class="ico">≡</div>
+    <p><span class="title">一眼认出 Bean 是怎么进来的</span>
+      扫描产物 = 首字母小写短名（<code>featureEnableDemoConfig</code>）；
+      <code>@Import</code> / 自动配置导入 = 类全限定名当 Bean 名
+      （<code>com.example.demo…StartupFeatureBasicConfig</code>）；
+      <code>@Bean</code> 方法 = 方法名（<code>startupFeatureApiBasic</code>）。
+      以后在 <code>/actuator/beans</code> 或日志里看到一长串 FQN，就知道它是被"导入"的而不是被"扫"的。</p>
+  </div>
+
+  <h3 id="an-proxy">2.6 @Configuration(proxyBeanMethods)：唯一区别落在实例个数</h3>
+  <p>
+    <code>@Bean</code> 方法里互相调用是每个人都会写的代码。两档配置的代码<strong>逐字相同</strong>，
+    只差 <code>proxyBeanMethods</code> 一个参数，结果用计数器和一个身份哈希就能测出来。
+  </p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">java · annotations/proxymethod/ 两档配置（节选）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>@Configuration                                   // full 模式：类会被 CGLIB 增强
+public class ProxyMethodFullConfig {
+    @Bean public HandleSlave slaveFull() { return new HandleSlave("full"); }
+    @Bean public HandleMaster masterFull() {
+        return new HandleMaster("full", slaveFull());   // ← 这个"方法互调"是被拦截的关键点
+    }
+}
+
+@Configuration(proxyBeanMethods = false)         // lite 模式：不增强，方法互调就是普通 Java 调用
+public class ProxyMethodLiteConfig {
+    @Bean public HandleSlave slaveLite() { return new HandleSlave("lite"); }
+    @Bean public HandleMaster masterLite() {
+        return new HandleMaster("lite", slaveLite());   // 普通调用 → 又 new 了一个，且不进容器
+    }
+}
+
+// HandleSlave 每被 new 一次就自增一次自己的档位计数，于是"创建了几个"变成可读的数字</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 两档并排</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>curl -s http://localhost:9014/api/startup/annotations/proxymethods</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /annotations/proxymethods（实测）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>full  档： configClassRuntime = ProxyMethodFullConfig$$SpringCGLIB$$0   cglibEnhanced = true
+         masterHoldsIdentity = 1773117761
+         containerIdentity   = 1773117761   → sameInstance = true
+         HandleSlave 创建数 = 1
+lite  档： configClassRuntime = ProxyMethodLiteConfig                    cglibEnhanced = false
+         masterHoldsIdentity = 1046467249
+         containerIdentity   = 1852349264   → sameInstance = false
+         HandleSlave 创建数 = 2
+
+两档合计创建 HandleSlave 3 个（容器里 2 个 + 容器外 1 个"孤儿"）</code></pre>
+  </div>
+
+  <p>
+    结论只有一句：<strong>lite 不是「不注册 Bean」，而是「不代理方法」</strong>。
+    两个 Bean 定义照常存在、照常是单例，区别仅在 <code>masterLite()</code> 里那句
+    <code>slaveLite()</code> 不再被拦回容器，于是多出一个不进容器的实例。
+    Boot 自己的自动配置在 Boot 4 大量使用 <code>@AutoConfiguration</code>（默认 lite），
+    因为它们之间不需要方法互调，少一层 CGLIB 就少一份启动开销。
+  </p>
+
+  <h3 id="an-enable">2.7 自己写一个 @EnableXxx：@Import + 一个选择器就是全部魔法</h3>
+  <p>
+    把前面所有零件合起来用一次：<code>@EnableStartupFeature</code> 是本模块手写的注解，
+    成员 <code>mode</code> 决定导入哪个配置类。<code>javap</code> 出来的
+    <code>@EnableConfigurationProperties</code> 和 <code>@EnableAutoConfiguration</code>
+    同样是「一个 <code>@Import</code>」，形状完全一致。
+  </p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">java · annotations/feature/EnableStartupFeature.java + StartupFeatureSelector.java（节选）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)      // 丢了 RUNTIME，Spring 在运行期根本读不到这个注解
+@Import(StartupFeatureSelector.class)    // ← @EnableXxx 的全部机制就这一行
+public @interface EnableStartupFeature {
+    String mode() default "basic";
+}
+
+public class StartupFeatureSelector implements ImportSelector {
+    @Override
+    public String[] selectImports(AnnotationMetadata importingClassMetadata) {
+        // importingClassMetadata 是"标了 @EnableStartupFeature 的那个类"的元数据，
+        // 靠它才能把注解上的 mode 取出来——这是 @EnableXxx 能带参数的原因
+        Map&lt;String, Object&gt; attrs = importingClassMetadata
+                .getAnnotationAttributes(EnableStartupFeature.class.getName());
+        String mode = (String) attrs.getOrDefault("mode", "basic");
+        String[] imports = switch (mode) {
+            // 返回"类名字符串"而不是 Class：延迟到后续阶段才加载，可选依赖才敢这么写
+            case "full"  -&gt; new String[]{StartupFeatureFullConfig.class.getName()};
+            default      -&gt; new String[]{StartupFeatureBasicConfig.class.getName()};
+        };
+        HISTORY.add(new Resolution(importingClassMetadata.getClassName(), mode, List.of(imports)));
+        return imports;
+    }
+}</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 触发两条链路并读回绑定结果</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># residentBasic：主应用里 @EnableStartupFeature（默认 basic）
+# childFull：接口内部另起一个 NONE 子应用，标 @EnableStartupFeature(mode = "full")
+#            并传命令行参数 --demo.startup.annotations.retries=7，跑完立刻 close()
+curl -s http://localhost:9014/api/startup/annotations/feature</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /annotations/feature（实测）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>selectorHistory（选择器真的被调用过两次，谁标的注解、选了哪条都记着）：
+  importingClass=…FeatureEnableDemoConfig  mode=basic  imports=[…StartupFeatureBasicConfig]
+  importingClass=…FeatureProbeApp          mode=full   imports=[…StartupFeatureFullConfig]
+
+basic 档（主应用，191 个定义）        full 档（子应用，89 个定义）
+  apiBeanNames=[startupFeatureApiBasic]   apiBeanNames=[startupFeatureApiFull]
+  propertiesBeanNames=[]（没有属性 Bean）  propertiesBeanNames=[demo.startup.annotations-com.example…
+  apiSummary=basic/boundRetries=0/               .StartupFeatureProperties]
+            boundNames=[]                   apiSummary=full/boundRetries=7/boundNames=[alpha, beta, gamma]
+                                          boundValues=[names=[alpha, beta, gamma], retries=7,
+                                                       featureLabel=loose-binding-works]
+
+autoConfigSelectorClass=org.springframework.boot.autoconfigure.AutoConfigurationImportSelector
+autoConfigSelectorIsDeferred=true     ← 它实现 DeferredImportSelector，所以排在所有用户配置之后展开
+contextClass：主应用 AnnotationConfigServletWebServerApplicationContext / 子应用 AnnotationConfigApplicationContext</code></pre>
+  </div>
+
+  <p>这一份输出里有四个可以带走的结论：</p>
+  <ul>
+    <li><strong>同一个注解，两种 mode，得到两个不同的配置类</strong>。
+      <code>@EnableXxx</code> 的"魔法"到此为止：<code>@Import</code> + 一个 <code>ImportSelector</code>。</li>
+    <li><strong>属性 Bean 的名字很怪，但正是证据</strong>：
+      <code>demo.startup.annotations-com.example…StartupFeatureProperties</code>
+      这个「prefix-FQN」形式是 <code>@EnableConfigurationProperties</code> 注册时的固定命名，
+      看到它就说明属性 Bean 是被"注册"进来的，不是被扫描到的。</li>
+    <li><strong><code>retries=7</code> 而不是 yaml 里的 2</strong>：命令行参数（<code>--key=value</code>）
+      的优先级压过 <code>application.yaml</code>；<code>names=[alpha, beta, gamma]</code> 则来自 yaml 的逗号串——
+      宽松绑定把一串文本变成了 <code>List&lt;String&gt;</code>。</li>
+    <li><strong>这个接口不是幂等的</strong>：每调用一次就多起一个子应用、<code>selectorHistory</code>
+      就多一条（实测两次调用后从 2 条变 3 条），子应用耗时也在 207ms / 303ms / 353ms 之间浮动。
+      确定性落在 <code>mode</code>、<code>imports</code> 和绑定值上，不落在时间上。</li>
+  </ul>
+
+  <div class="callout warn">
+    <div class="ico">!</div>
+    <p><span class="title">这些类什么时候跑？全在 refresh() 里</span>
+      上面 17 行映射里的处理器，几乎都挂在同一个地方：
+      <code>ConfigurationClassPostProcessor</code>（一个 <code>BeanFactoryPostProcessor</code>），
+      它在 <code>refresh()</code> 的 <code>invokeBeanFactoryPostProcessors</code> 这一步启动。
+      这就把「注解 → 类」接上了下一章的时间线：<code>contextLoaded</code> 时只有 6 个定义，
+      因为这一步还没发生；<code>refresh()</code> 走完，191 个定义全在里面。</p>
+  </div>
+</section>
+
+<section id="model">
+  <h2><span class="no">03</span>心智模型</h2>
+  <div class="callout">
+    <div class="ico">i</div>
+    <p><span class="title">一句话纠正最大的误解</span>
+      很多人以为 <code>run()</code> 就是「创建容器」，Bean 定义在启动前就都排好了。
+      实测：<code>contextLoaded</code> 时只有 <strong>6 个</strong> Bean 定义，refresh 完成后是 <strong>191 个</strong>——
+      自动配置走 <code>DeferredImportSelector</code>，要等 refresh 期间才展开。</p>
+  </div>
+
+  <div class="callout tip">
+    <div class="ico">≈</div>
+    <p><span class="title">类比：毛坯房交接</span>
+      <code>starting</code> 是集合点名，<code>environmentPrepared</code> 是把水电清单（配置）核对完，
+      <code>contextPrepared</code> 是拿到房子（容器实例，空的），<code>contextLoaded</code> 是图纸进场（Bean 定义），
+      <code>refresh()</code> 才是真正施工，<code>started</code> 是验收、<code>ready</code> 是交钥匙可以住人。</p>
+  </div>
+
+  <figure class="diagram">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 920 250" role="img" aria-label="启动链路：上排七个 RunListener 阶段，下排三个容器事件">
+        <text class="dg-muted" x="16" y="34">SpringApplicationRunListener —— 本模块用 7 个回调打点，容器没建也能看见</text>
+        <rect class="dg-box" x="16" y="44" width="118" height="42" rx="8"></rect>
+        <text class="dg-text" x="75" y="70" text-anchor="middle">starting</text>
+        <rect class="dg-box" x="142" y="44" width="118" height="42" rx="8"></rect>
+        <text class="dg-text-sm" x="201" y="62" text-anchor="middle">environment</text>
+        <text class="dg-text-sm" x="201" y="78" text-anchor="middle">Prepared</text>
+        <rect class="dg-box" x="268" y="44" width="118" height="42" rx="8"></rect>
+        <text class="dg-text-sm" x="327" y="62" text-anchor="middle">context</text>
+        <text class="dg-text-sm" x="327" y="78" text-anchor="middle">Prepared</text>
+        <rect class="dg-box" x="394" y="44" width="118" height="42" rx="8"></rect>
+        <text class="dg-text-sm" x="453" y="62" text-anchor="middle">context</text>
+        <text class="dg-text-sm" x="453" y="78" text-anchor="middle">Loaded · 6 个定义</text>
+        <rect class="dg-box-accent" x="520" y="44" width="118" height="42" rx="8"></rect>
+        <text class="dg-accent-text" x="579" y="62" text-anchor="middle">refresh()</text>
+        <text class="dg-muted" x="579" y="78" text-anchor="middle">框架内部，无回调</text>
+        <rect class="dg-box" x="646" y="44" width="118" height="42" rx="8"></rect>
+        <text class="dg-text" x="705" y="70" text-anchor="middle">started</text>
+        <rect class="dg-box" x="772" y="44" width="118" height="42" rx="8"></rect>
+        <text class="dg-text" x="831" y="70" text-anchor="middle">ready</text>
+        <path class="dg-line" d="M134 65 H141"></path>
+        <path class="dg-line" d="M260 65 H267"></path>
+        <path class="dg-line" d="M386 65 H393"></path>
+        <path class="dg-line" d="M512 65 H519"></path>
+        <path class="dg-line" d="M638 65 H645"></path>
+        <path class="dg-line" d="M764 65 H771"></path>
+
+        <text class="dg-muted" x="16" y="150">容器内 @EventListener —— 只有这三个能收到，前面的事件发布时容器还不存在</text>
+        <rect class="dg-box-warn" x="520" y="160" width="118" height="42" rx="8"></rect>
+        <text class="dg-text-sm" x="579" y="178" text-anchor="middle">ContextRefreshed</text>
+        <text class="dg-muted" x="579" y="194" text-anchor="middle">191 个定义</text>
+        <rect class="dg-box-warn" x="646" y="160" width="118" height="42" rx="8"></rect>
+        <text class="dg-text-sm" x="705" y="178" text-anchor="middle">Application</text>
+        <text class="dg-text-sm" x="705" y="192" text-anchor="middle">StartedEvent</text>
+        <rect class="dg-box-ok" x="772" y="160" width="118" height="42" rx="8"></rect>
+        <text class="dg-text-sm" x="831" y="178" text-anchor="middle">Application</text>
+        <text class="dg-text-sm" x="831" y="192" text-anchor="middle">ReadyEvent</text>
+        <path class="dg-line-accent dg-life" d="M579 87 V159"></path>
+        <path class="dg-line" d="M638 181 H645"></path>
+        <path class="dg-line-ok" d="M764 181 H771"></path>
+        <text class="dg-muted" x="16" y="228">自动配置在 refresh 里展开：条件报告 111 个判定源 / 139 条条件，最后落到 Bean 定义总数上</text>
+      </svg>
+    </div>
+    <figcaption>上排是 RunListener 的 7 个阶段（本模块实测打点），下排是 Bean 监听器能收到的 3 个事件。两者写入同一张时间线。</figcaption>
+  </figure>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>误解</th><th>实测事实</th><th>为什么容易记错</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>启动日志的第一行是 <code>starting</code></td>
+          <td>第一行是 <code>[environmentPrepared]</code>，<code>starting</code> 阶段根本没有日志</td>
+          <td>日志系统（LoggingSystem）自己在 environmentPrepared 里才初始化</td>
+        </tr>
+        <tr>
+          <td>Bean 定义在 refresh 前就齐了</td>
+          <td>6 个 → 191 个</td>
+          <td>自动配置是延迟导入选择器，refresh 期间才解析</td>
+        </tr>
+        <tr>
+          <td>条件报告要靠 <code>--debug</code> 打开</td>
+          <td>每次启动都会记录，<code>--debug</code> 只决定打不打印</td>
+          <td>不打印 ≠ 没记录；本模块的接口就是直接读内存里那份报告</td>
+        </tr>
+        <tr>
+          <td>排除一个自动配置只影响它自己</td>
+          <td>实测第二个子应用直接启动失败</td>
+          <td>自动配置之间是有依赖图的集合，不是孤立开关</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="timeline">
+  <h2><span class="no">04</span>场景 1：启动事件时间线</h2>
+  <p class="lead">先把「什么时候发生了什么」变成日志和一张可回看的表，再谈原理。</p>
+
+  <h3 id="timeline-stages">4.1 九个刻度和一串日志</h3>
+  <p>
+    <code>SpringApplicationRunListener</code> 有 7 个回调，阶段名沿用 Boot 内部
+    <code>SpringApplicationRunListeners</code> 的 step 名，这样和 actuator 的
+    <code>/actuator/startup</code> 输出能一一对上。
+  </p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">java · timeline/StartupTimelineRunListener.java（节选）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>public class StartupTimelineRunListener implements SpringApplicationRunListener, Ordered {
+
+    // SpringFactoriesLoader 约定构造器：参数类型必须严格对应，缺一个就实例化失败
+    public StartupTimelineRunListener(SpringApplication application, String[] args) {
+        this.application = application;
+        this.args = args;
+    }
+
+    @Override
+    public void environmentPrepared(ConfigurableBootstrapContext bootstrapContext,
+            ConfigurableEnvironment environment) {
+        // 能读到配置的最早时机：yaml / 命令行 / 环境变量已全部合入 environment
+        // 实测这里是第一个有日志的阶段——日志系统本身也在这一步才初始化
+        record("environmentPrepared", "Environment 就绪（属性源 "
+                + environment.getPropertySources().size() + " 个），命令行参数 " + args.length + " 个");
+    }
+
+    @Override
+    public void contextLoaded(ConfigurableApplicationContext context) {
+        // 实测此刻只有 6 个 Bean 定义；refresh 之后变成 191 个
+        record("contextLoaded", "Bean 定义已加载，共 " + context.getBeanDefinitionCount() + " 个");
+    }
+}</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 注册方式与启动</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># RunListener 不是 Bean，只能走 spring.factories（Boot 4.1 仍然是这套 SPI）
+cat demo-springboot-startup/src/main/resources/META-INF/spring.factories
+# org.springframework.boot.SpringApplicationRunListener=\
+#   com.example.demo.startup.timeline.StartupTimelineRunListener
+
+# 启动并把日志留档：grep 阶段名就能看到完整时间线
+SERVER_PORT=9014 java -jar demo-springboot-startup/target/demo-springboot-startup-0.0.1-SNAPSHOT.jar | tee /tmp/run.log</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 启动控制台（实测节选，Banner 与 profile 行已省略）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>12:25:46.794 INFO  [main] demo.startup.timeline - [environmentPrepared] Environment 就绪（属性源 8 个），命令行参数 0 个 | +432ms | 距启动 432ms | 线程 main
+12:25:46.876 INFO  [main] demo.startup.timeline - [contextPrepared] 容器已创建未加载：AnnotationConfigServletWebServerApplicationContext | +83ms | 距启动 515ms | 线程 main
+12:25:46.939 INFO  [main] demo.startup.timeline - [contextLoaded] Bean 定义已加载，共 6 个（自动配置尚未导入，refresh 后会跳升） | +63ms | 距启动 579ms | 线程 main
+12:25:48.601 INFO  [main] o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 9014 (http)
+12:25:48.631 INFO  [main] o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 1745 ms
+12:25:49.771 INFO  [main] o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 9014 (http) with context path '/'
+12:25:49.781 INFO  [main] demo.startup.timeline - [ContextRefreshedEvent] 容器 refresh 完成 | +2841ms | 距启动 3420ms | 线程 main
+12:25:49.796 INFO  [main] c.e.demo.startup.StartupApplication - Started StartupApplication in 3.459 seconds (process running for 4.032)
+12:25:49.799 INFO  [main] demo.startup.timeline - [started] 容器 refresh 完成，Boot 计时 3459ms | +2ms | 距启动 3438ms | 线程 main
+12:25:49.806 INFO  [main] demo.startup.timeline - [ready] 应用就绪，可接收请求，Boot 计时 3480ms | +1ms | 距启动 3445ms | 线程 main</code></pre>
+  </div>
+
+  <p>接口把同一条时间线原样回吐，省得翻日志：</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 回看时间线</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 返回 9 条记录：7 个 RunListener 阶段 + 3 个容器事件（started/ready 各出现一次配对事件）
+curl -s http://localhost:9014/api/startup/timeline</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /api/startup/timeline（实测，已转成表格，detail 原文见仓库）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code> seq phase                   source         +耗时   距启动   线程
+  1  starting                RUN_LISTENER      0ms      0ms  main
+  2  environmentPrepared     RUN_LISTENER    432ms    432ms  main
+  3  contextPrepared         RUN_LISTENER     83ms    515ms  main
+  4  contextLoaded           RUN_LISTENER     63ms    579ms  main
+  5  ContextRefreshedEvent   CONTEXT_EVENT  2841ms   3420ms  main
+  6  ApplicationStartedEvent CONTEXT_EVENT    15ms   3435ms  main
+  7  started                 RUN_LISTENER      2ms   3438ms  main
+  8  ApplicationReadyEvent   CONTEXT_EVENT     5ms   3443ms  main
+  9  ready                   RUN_LISTENER      1ms   3445ms  main</code></pre>
+  </div>
+
+  <div class="callout warn">
+    <div class="ico">!</div>
+    <p><span class="title">耗时全部压在 refresh 里</span>
+      阶段 1→4 加起来 579ms，第 5 条（refresh 完成）单独 2841ms——占启动总耗时的八成以上。
+      想优化启动速度，优化的是「创建并实例化这 191 个 Bean 定义」这一段，不是事件广播。</p>
+  </div>
+
+  <h3 id="timeline-two">4.2 两种监听器的视野差</h3>
+  <p>
+    <code>@EventListener</code> 挂在 Bean 上，于是它天然看不见容器建立之前的事件——
+    这是「做不到」，不是「没做」。
+  </p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">java · timeline/StartupEventListener.java（节选）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>@Component
+public class StartupEventListener {
+
+    @EventListener
+    public void onContextRefreshed(ContextRefreshedEvent event) {
+        int beanCount = event.getApplicationContext().getBeanDefinitionCount();
+        // 实测 6 → 191：两个数字必然不同，因为自动配置在 refresh 期间才注册
+        StartupTimelineCollector.recordEvent("ContextRefreshedEvent",
+                "容器 refresh 完成，Bean 定义 " + beanCount + " 个");
+    }
+
+    // ApplicationStartingEvent / ApplicationEnvironmentPreparedEvent
+    // 发布时容器还不存在，@Component 监听器收不到——
+    // 要接早期事件只能 SpringApplication#addListeners，且必须在 run() 之前挂上
+}</code></pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>维度</th><th>SpringApplicationRunListener</th><th>@EventListener（Bean）</th></tr></thead>
+      <tbody>
+        <tr><td>注册方式</td><td><code>META-INF/spring.factories</code></td><td>容器里的普通 Bean</td></tr>
+        <tr><td>最早能看到</td><td><code>starting</code>（进程一起来就回调）</td><td><code>ContextRefreshedEvent</code></td></tr>
+        <tr><td>能否注入依赖</td><td>不能，构造器只给 <code>SpringApplication</code> 和 <code>args</code></td><td>能，随便注入</td></tr>
+        <tr><td>适用场景</td><td>启动观测、埋点、框架级横切</td><td>业务预热、缓存加载、健康检查上报</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="modes">
+  <h2><span class="no">05</span>场景 2：启动模式对比</h2>
+  <p class="lead">同一套代码，改一个枚举值，容器实现类、Bean 数量、WebServer 全变。</p>
+
+  <h3 id="modes-table">5.1 四种模式并排</h3>
+  <p>
+    <code>StartupModesService</code> 在同一个 JVM 里起四个子 <code>SpringApplication</code>，
+    各自采集一份快照后立即 <code>close()</code>——接口是只读的，但代价要写清楚。
+  </p>
+
+  <figure class="diagram">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 920 240" role="img" aria-label="三种 WebApplicationType 对应的容器与 WebServer">
+        <text class="dg-muted" x="16" y="24">WebApplicationType → 容器实现类 → WebServer（实测 Bean 定义数与端口）</text>
+        <rect class="dg-box" x="16" y="40" width="110" height="38" rx="8"></rect>
+        <text class="dg-text" x="71" y="64" text-anchor="middle">NONE</text>
+        <rect class="dg-box" x="16" y="106" width="110" height="38" rx="8"></rect>
+        <text class="dg-text" x="71" y="130" text-anchor="middle">SERVLET</text>
+        <rect class="dg-box" x="16" y="172" width="110" height="38" rx="8"></rect>
+        <text class="dg-text" x="71" y="196" text-anchor="middle">REACTIVE</text>
+
+        <rect class="dg-box" x="170" y="40" width="350" height="38" rx="8"></rect>
+        <text class="dg-text-sm" x="345" y="64" text-anchor="middle">AnnotationConfigApplicationContext</text>
+        <rect class="dg-box-accent" x="170" y="106" width="350" height="38" rx="8"></rect>
+        <text class="dg-text-sm" x="345" y="130" text-anchor="middle">AnnotationConfigServletWebServerApplicationContext</text>
+        <rect class="dg-box-accent" x="170" y="172" width="350" height="38" rx="8"></rect>
+        <text class="dg-text-sm" x="345" y="196" text-anchor="middle">AnnotationConfigReactiveWebServerApplicationContext</text>
+
+        <rect class="dg-box-warn" x="560" y="40" width="340" height="38" rx="8"></rect>
+        <text class="dg-text-sm" x="730" y="64" text-anchor="middle">无 WebServer · 无端口 · 87 个定义</text>
+        <rect class="dg-box-ok" x="560" y="106" width="340" height="38" rx="8"></rect>
+        <text class="dg-text-sm" x="730" y="130" text-anchor="middle">TomcatWebServer : 51985 · 158 个定义</text>
+        <rect class="dg-box-ok" x="560" y="172" width="340" height="38" rx="8"></rect>
+        <text class="dg-text-sm" x="730" y="196" text-anchor="middle">NettyWebServer : 51982 · 134 个定义</text>
+
+        <path class="dg-line" d="M126 59 H169"></path>
+        <path class="dg-line" d="M126 125 H169"></path>
+        <path class="dg-line" d="M126 191 H169"></path>
+        <path class="dg-line" d="M520 59 H559"></path>
+        <path class="dg-line-ok" d="M520 125 H559"></path>
+        <path class="dg-line-ok" d="M520 191 H559"></path>
+      </svg>
+    </div>
+    <figcaption>端口是 <code>--server.port=0</code> 让系统随机分配的，每次运行都不同；Bean 定义数在两次运行里完全一致。</figcaption>
+  </figure>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 四种模式并排跑一遍</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 每个子应用都用 port=0（随机空闲端口）+ setRegisterShutdownHook(false)
+# 否则同一 JVM 里起四个 Web 服务会互相抢 9006
+curl -s http://localhost:9014/api/startup/modes/compare</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /api/startup/modes/compare（实测）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>mode          容器实现类                                          Bean  WebServer        端口    子应用耗时
+NONE          AnnotationConfigApplicationContext                   87   无               无        580ms
+REACTIVE      AnnotationConfigReactiveWebServerApplicationContext 134   NettyWebServer    51982    1571ms
+SERVLET       AnnotationConfigServletWebServerApplicationContext  158   TomcatWebServer   51985    1743ms
+AUTO-DEDUCED  AnnotationConfigServletWebServerApplicationContext  158   TomcatWebServer   51990    1676ms</code></pre>
+  </div>
+
+  <div class="callout">
+    <div class="ico">i</div>
+    <p><span class="title">Bean 数量差 = 你为 Web 能力付的税</span>
+      NONE 只有 87 个定义，SERVLET 158 个：多出来的 71 个几乎全是 DispatcherServlet、
+      错误页、静态资源、HttpMessageConverter 这类 Web 基础设施。
+      定时任务、批处理、CLI 用 NONE，不是「省内存」的问题，是根本不需要装这套东西。</p>
+  </div>
+
+  <div class="callout danger">
+    <div class="ico">×</div>
+    <p><span class="title">AUTO-DEDUCED 这次是 SERVLET，但下次不一定</span>
+      Boot 4.0.1 起 <code>WebApplicationType.deduce()</code> 遍历 <code>Deducer</code> SPI，
+      谁先命中谁说了算。本模块同时依赖 webmvc 和 webflux，推断结果完全由类路径顺序决定——
+      实测这次给出 SERVLET，但<strong>这不是你能控制的</strong>。
+      要么只留一种 Web 依赖，要么显式 <code>setWebApplicationType</code>。</p>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">java · modes/StartupModesService.java（节选，为什么用命令行参数）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>SpringApplication application = new SpringApplication(ModeProbeApp.class);
+application.setWebApplicationType(type);
+application.setBannerMode(Banner.Mode.OFF);          // 四次启动别刷四遍 Banner
+application.setLogStartupInfo(false);
+application.setRegisterShutdownHook(false);          // 手动 close 负责生命周期，不留 hook
+// 必须走命令行参数：setDefaultProperties 的优先级最低，压不过子应用读到的 application.yaml。
+// 早先用 setDefaultProperties 传端口时，子应用照旧绑 yaml 里的 9006，直接和主应用撞端口失败。
+ConfigurableApplicationContext context = application.run("--server.port=0");</code></pre>
+  </div>
+
+  <h3 id="modes-port">5.2 端口冲突的异常链</h3>
+  <p>端口占用是启动失败里最高频的一种，值得看清它的异常链长什么样——场景 5 的「内置分析器」正是从这条链上认领异常。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 让接口自己造一次冲突</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 接口内部：new ServerSocket(0) 先占住一个刚分配的空闲端口，再让 SERVLET 子应用去绑它
+curl -s http://localhost:9014/api/startup/modes/port-in-use</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /api/startup/modes/port-in-use（实测）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>mode PORT-IN-USE | outcome FAILED | port 无 | ms 669
+failureClass  ApplicationContextException
+failureMessage Failed to start bean 'webServerStartStop'
+  ｜根因: BindException: Address already in use
+  ｜异常链: ApplicationContextException -&gt; PortInUseException -&gt; IllegalArgumentException
+           -&gt; LifecycleException -&gt; BindException -&gt;</code></pre>
+  </div>
+
+  <div class="callout warn">
+    <div class="ico">!</div>
+    <p><span class="title">阻塞用的 ServerSocket 必须活过整个子应用启动</span>
+      第一版把它写成只在取到端口号那一刻存在的局部变量，Tomcat 立刻就能抢到同一个端口，
+      实验十次里成功三四次。教学 demo 里「偶发的失败」比「没有失败」更糟——
+      现在用 try-with-resources 把 Socket 的生命周期横跨 <code>application.run(...)</code>。</p>
+  </div>
+
+  <p>真实进程撞端口时（默认端口 9006 已被占用后再启动一次），控制台由内置分析器接管：</p>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 第二次启动撞 9006（实测，整段 38 行日志、0 条堆栈帧）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>10:32:10.258 INFO  [main] o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 9006 (http)
+10:32:10.845 WARN  [main] o.s.b.w.s.s.c.AnnotationConfigServletWebServerApplicationContext -
+  Exception encountered during context initialization - cancelling refresh attempt:
+  org.springframework.context.ApplicationContextException: Failed to start bean 'webServerStartStop'
+10:32:10.859 INFO  [main] demo.startup.timeline - [failed] 启动中断：org.springframework.context.ApplicationContextException | +1530ms
+10:32:10.878 ERROR [main] o.s.b.d.LoggingFailureAnalysisReporter -
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Web server failed to start. Port 9006 was already in use.
+
+Action:
+
+Identify and stop the process that's listening on port 9006 or configure this application to listen on another port.</code></pre>
+  </div>
+
+  <p>
+    两个细节：① <code>Tomcat initialized with port 9006</code> 仍然打印了——
+    <strong>初始化成功、绑定阶段才失败</strong>，所以「看到 Tomcat initialized」不代表端口没问题；
+    ② 同 JVM 的子应用失败时也会打印同一份报告，因为 <code>reportFailure()</code> 在
+    <code>SpringApplication.run()</code> 内部，跟是不是独立进程无关。
+  </p>
+</section>
+
+<section id="autoconfig">
+  <h2><span class="no">06</span>场景 3：自动配置与条件报告</h2>
+  <p class="lead">「为什么这个 Bean 没装载」——答案一直在内存里，只是默认不打印。</p>
+
+  <h3 id="ac-report">6.1 报告一直在记，只是不打印</h3>
+
+  <figure class="diagram">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 920 170" role="img" aria-label="自动配置从清单到 Bean 定义的漏斗">
+        <rect class="dg-box" x="16" y="34" width="180" height="56" rx="10"></rect>
+        <text class="dg-text-sm" x="106" y="56" text-anchor="middle">AutoConfiguration.imports</text>
+        <text class="dg-muted" x="106" y="74" text-anchor="middle">各模块 jar 里的清单文件</text>
+        <rect class="dg-box" x="250" y="34" width="180" height="56" rx="10"></rect>
+        <text class="dg-text-sm" x="340" y="56" text-anchor="middle">候选 111 个判定源</text>
+        <text class="dg-muted" x="340" y="74" text-anchor="middle">含嵌套配置与本模块 @Bean</text>
+        <rect class="dg-box-warn" x="484" y="34" width="200" height="56" rx="10"></rect>
+        <text class="dg-text-sm" x="584" y="56" text-anchor="middle">139 条条件判定</text>
+        <text class="dg-muted" x="584" y="74" text-anchor="middle">85 命中 / 54 落选 / 6 个类无条件</text>
+        <rect class="dg-box-ok" x="738" y="34" width="170" height="56" rx="10"></rect>
+        <text class="dg-text-sm" x="823" y="56" text-anchor="middle">注册为 Bean 定义</text>
+        <text class="dg-muted" x="823" y="74" text-anchor="middle">refresh 后共 191 个</text>
+        <path class="dg-line" d="M196 62 H249"></path>
+        <path class="dg-line" d="M430 62 H483"></path>
+        <path class="dg-line-ok" d="M684 62 H737"></path>
+        <text class="dg-muted" x="16" y="126">条件在「Bean 定义注册阶段」求值，远早于 Bean 实例化——所以条件里绝对不能 getBean()</text>
+        <text class="dg-muted" x="16" y="150">6 个无条件类同样会注册，只是报告里没有它们的条目：查不到 ≠ 判定为 false</text>
+      </svg>
+    </div>
+    <figcaption>本模块默认启动实测：<code>/api/startup/autoconfig</code> 的四个计数。</figcaption>
+  </figure>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 直接读内存里那份报告</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># ConditionEvaluationReport.find(beanFactory) —— 每次启动都有，不依赖任何开关
+curl -s http://localhost:9014/api/startup/autoconfig</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /api/startup/autoconfig（实测）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>available True  totalSources 111  totalConditions 139  matched 85  unmatched 54  unconditional 6  exclusions []
+ - AutoConfigDemoConfig#grayReleaseBean   | FeatureColorCondition | matched=False
+   | 属性 demo.startup.autoconfig.feature-color 当前值="orange"，判定规则=值包含 green
+ - AutoConfigDemoConfig#propertyToggleBean | OnPropertyCondition  | matched=False
+   | @ConditionalOnProperty (demo.startup.autoconfig.property-toggle=true) found different value in property ...
+ hint 查看某个类为什么没装载：GET /api/startup/autoconfig/search?contains=类名关键词</code></pre>
+  </div>
+
+  <p>想看官方那份原文（500 行刷屏）也可以，本模块用 <code>--debug</code> 实测过结构：</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 打印完整条件报告</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># debug=true 只影响打印；报告本身在默认启动里就已经记全了
+SERVER_PORT=9017 java -jar demo-springboot-startup/target/demo-springboot-startup-0.0.1-SNAPSHOT.jar --debug
+grep -n "CONDITIONS EVALUATION REPORT\|Positive matches\|Negative matches\|Exclusions:\|Unconditional classes" /tmp/debug.log</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 报告骨架位置（实测整份日志 506 行）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>41:CONDITIONS EVALUATION REPORT
+45:Positive matches:
+240:Negative matches:
+476:Exclusions:
+482:Unconditional classes:
+
+   # 第 68 行起，自动配置的命中理由是一条一条列出来的：
+   DispatcherServletAutoConfiguration matched:
+      - @ConditionalOnClass found required class 'org.springframework.web.servlet.DispatcherServlet' (OnClassCondition)
+      - found 'session' scope (OnWebApplicationCondition)
+
+   # 第 247 行起，自定义条件的中文解释原样出现在 Negative matches 里：
+   AutoConfigDemoConfig#grayReleaseBean:
+      Did not match:
+         - 属性 demo.startup.autoconfig.feature-color 当前值="orange"，判定规则=值包含 green (FeatureColorCondition)</code></pre>
+  </div>
+
+  <h3 id="ac-condition">6.2 让条件自己解释为什么</h3>
+  <p>
+    普通 <code>Condition</code> 只回答 true/false；继承 <code>SpringBootCondition</code> 后，
+    框架会把 <code>getMatchOutcome</code> 返回的「布尔 + 一句话」一起记进报告。
+    排障时这句话就是省掉半小时的关键。
+  </p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">java · autoconfig/FeatureColorCondition.java</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>public class FeatureColorCondition extends SpringBootCondition {
+
+    static final String PROPERTY = "demo.startup.autoconfig.feature-color";
+
+    @Override
+    public ConditionOutcome getMatchOutcome(ConditionContext context, AnnotatedTypeMetadata metadata) {
+        // context.getEnvironment() 是条件阶段唯一安全的取值通道：
+        // 此时属性源已全部就位（environmentPrepared 早已完成）
+        String value = context.getEnvironment().getProperty(PROPERTY);
+        // null 要显式处理：getProperty 缺失时返回 null，直接 equals 会 NPE 炸掉启动
+        boolean matched = value != null &amp;&amp; value.toLowerCase().contains("green");
+        String explain = "属性 " + PROPERTY + " 当前值=\"" + value + "\"，判定规则=值包含 green";
+        return matched ? ConditionOutcome.match(explain) : ConditionOutcome.noMatch(explain);
+    }
+}</code></pre>
+  </div>
+
+  <p>把两个开关一起打开再启动一次，对比同一份报告：</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 开关前后对比</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 默认：两个条件都落选（property-toggle=false；feature-color=orange）
+DEMO_PROPERTY_TOGGLE=true DEMO_FEATURE_COLOR=green SERVER_PORT=9016 \
+  java -jar demo-springboot-startup/target/demo-springboot-startup-0.0.1-SNAPSHOT.jar
+
+# 用关键词检索，只关心自己那几条
+curl -s 'http://localhost:9016/api/startup/autoconfig/search?contains=AutoConfigDemoConfig'</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · 开关打开后（实测）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>totalSources 111  totalConditions 139  matched 87  unmatched 52     # 默认启动是 85 / 54
+
+ - AutoConfigDemoConfig#grayReleaseBean   | FeatureColorCondition | matched=True
+   | 属性 demo.startup.autoconfig.feature-color 当前值="green"，判定规则=值包含 green
+ - AutoConfigDemoConfig#propertyToggleBean | OnPropertyCondition  | matched=True
+   | @ConditionalOnProperty (demo.startup.autoconfig.property-toggle=true) matched</code></pre>
+  </div>
+
+  <div class="callout warn">
+    <div class="ico">!</div>
+    <p><span class="title">同一个配置类里的多个 @Bean 会共享类级条件</span>
+      方法级条件覆盖类级条件；<code>@ConditionalOnProperty</code> 只做字符串比较，
+      不会把 <code>"TRUE"</code>、<code>"1"</code> 之外的奇怪写法当 true。
+      另外条件一旦被记录，改代码不重启数字不会变——报告反映的是那次启动的快照。</p>
+  </div>
+
+  <h3 id="ac-exclude">6.3 反例：排除一个自动配置会发生什么</h3>
+  <p>
+    这是本模块最值得记住的一个实验。<strong>预想</strong>：排除 <code>DispatcherServletAutoConfiguration</code>
+    后容器还在监听，只是没人接收请求，探针 404。<strong>实测</strong>：第二个子应用压根起不来。
+  </p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">java · autoconfig/AutoConfigService.java（excludeDemo 节选）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>ProbeRun baseline = startProbeChild(List.of("--server.port=0"));
+ProbeRun excluded = startProbeChild(List.of("--server.port=0",
+        // 包名必须是 Boot 4 的 org.springframework.boot.webmvc.autoconfigure——
+        // 写 Boot 2/3 的旧包名既不报错也不生效（实测：旧包名时探针仍 200）
+        "--spring.autoconfigure.exclude=org.springframework.boot.webmvc.autoconfigure"
+                + ".DispatcherServletAutoConfiguration"));
+// 两次唯一差异就是这一行排除项；探针路由与探针应用同包，baseline 一定能命中</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 跑这个反例实验</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>curl -s http://localhost:9014/api/startup/autoconfig/exclude-demo</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /autoconfig/exclude-demo（实测）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>baselinePort 52009   baselineBeanCount 158   baselineStatus 200
+excludedOutcome FAILED
+excludedFailureClass ApplicationContextException
+excludedFailureMessage Unable to start web server
+  ｜根因: NoSuchBeanDefinitionException: No qualifying bean of type
+         'org.springframework.boot.webmvc.autoconfigure.DispatcherServletPath' available
+conclusion 已验证：排除 DispatcherServletAutoConfiguration 后子应用根本没起来——
+           ErrorMvcAutoConfiguration 需要它提供的 DispatcherServletPath。
+           结论：自动配置不是孤立开关，是一个有依赖图的集合，排除要连坐评估
+costMillis 1069</code></pre>
+  </div>
+
+  <div class="compare">
+    <div class="box good">
+      <h4>baseline（不排除）</h4>
+      <ul>
+        <li>容器：<code>AnnotationConfigServletWebServerApplicationContext</code></li>
+        <li>Bean 定义 158 个，随机端口 52009</li>
+        <li>探针 <code>GET /api/startup/probe/ping</code> → <strong>200 pong</strong></li>
+      </ul>
+    </div>
+    <div class="box bad">
+      <h4>excluded（排除一个自动配置）</h4>
+      <ul>
+        <li><code>ApplicationContextException: Unable to start web server</code></li>
+        <li>根因是缺 <code>DispatcherServletPath</code> 这个 Bean</li>
+        <li>没有端口、没有 404——refresh 阶段就中断了</li>
+      </ul>
+    </div>
+  </div>
+
+  <p>
+    机制：<code>ErrorMvcAutoConfiguration#errorPageCustomizer</code> 需要注入
+    <code>DispatcherServletPath</code>，而这个 Bean 恰好由被排除的那个自动配置提供。
+    排除项写进 <code>application.yaml</code> 时不会有任何告警，直到某个凌晨发布失败。
+  </p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · Boot 4 的自动配置类名（旧包名不报错也不生效）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 清单原文在 spring-boot-autoconfigure-4.1.2.jar!/META-INF/spring/*.imports
+curl -s http://localhost:9014/api/startup/autoconfig/list</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /autoconfig/list（实测）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>present  org.springframework.boot.webmvc.autoconfigure.DispatcherServletAutoConfiguration
+present  org.springframework.boot.webmvc.autoconfigure.WebMvcAutoConfiguration
+present  org.springframework.boot.webflux.autoconfigure.WebFluxAutoConfiguration
+present  org.springframework.boot.reactor.netty.autoconfigure.NettyReactiveWebServerAutoConfiguration
+absent   org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration</code></pre>
+  </div>
+
+  <div class="callout danger">
+    <div class="ico">×</div>
+    <p><span class="title">「查不到」和「判定为 false」是两回事</span>
+      Boot 4 把自动配置拆进各技术模块，<code>DataSourceAutoConfiguration</code> 属于 jdbc 模块，
+      本模块类路径上根本没有它，所以它连「候选」都不是——
+      <code>search?contains=DataSource</code> 实测返回 <code>[]</code>，
+      而条件落选的类（如 grayReleaseBean）会带着中文原因出现在结果里。
+      按 Boot 2/3 包名 <code>org.springframework.boot.autoconfigure.web.servlet.*</code> 写的教程与排除项，
+      在这里全部失效。</p>
+  </div>
+</section>
+
+<section id="beanlife">
+  <h2><span class="no">07</span>场景 4：Bean 生命周期</h2>
+  <p class="lead">背顺序不如打点：一个标本 Bean，把每个回调站点写进轨迹，跑一次就有权威答案。</p>
+
+  <h3 id="bl-order">7.1 实测 17 条打点</h3>
+
+  <figure class="diagram">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 920 300" role="img" aria-label="Bean 生命周期站点图，三行推进，BPP 把对象换成代理">
+        <rect class="dg-box" x="16" y="30" width="165" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="98" y="48" text-anchor="middle">1 constructor</text>
+        <text class="dg-muted" x="98" y="62" text-anchor="middle">构造注入完成</text>
+        <rect class="dg-box" x="191" y="30" width="165" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="273" y="48" text-anchor="middle">2 populate-bean</text>
+        <text class="dg-muted" x="273" y="62" text-anchor="middle">字段 / setter / @Value</text>
+        <rect class="dg-box" x="366" y="30" width="165" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="448" y="48" text-anchor="middle">3–5 aware-*</text>
+        <text class="dg-muted" x="448" y="62" text-anchor="middle">BeanName / CL / BF</text>
+        <rect class="dg-box" x="541" y="30" width="165" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="623" y="48" text-anchor="middle">6 aware-app-context</text>
+        <text class="dg-muted" x="623" y="62" text-anchor="middle">容器内置 BPP 触发</text>
+        <rect class="dg-box" x="716" y="30" width="188" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="810" y="48" text-anchor="middle">7 bpp-before</text>
+        <text class="dg-muted" x="810" y="62" text-anchor="middle">用户 BPP，返回原对象</text>
+
+        <rect class="dg-box-warn" x="716" y="110" width="188" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="810" y="128" text-anchor="middle">8 post-construct</text>
+        <text class="dg-muted" x="810" y="142" text-anchor="middle">实测排在 bpp-before 之后</text>
+        <rect class="dg-box-warn" x="541" y="110" width="165" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="623" y="128" text-anchor="middle">9 initializing-bean</text>
+        <text class="dg-muted" x="623" y="142" text-anchor="middle">afterPropertiesSet</text>
+        <rect class="dg-box-warn" x="366" y="110" width="165" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="448" y="128" text-anchor="middle">10 init-method</text>
+        <text class="dg-muted" x="448" y="142" text-anchor="middle">@Bean(initMethod)</text>
+        <rect class="dg-box-accent" x="191" y="110" width="165" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="273" y="128" text-anchor="middle">11 bpp-after</text>
+        <text class="dg-muted" x="273" y="142" text-anchor="middle">返回 JDK 代理，换脸</text>
+        <rect class="dg-box-accent" x="16" y="110" width="165" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="98" y="128" text-anchor="middle">12–13 使用</text>
+        <text class="dg-muted" x="98" y="142" text-anchor="middle">proxy-invoke / target</text>
+
+        <rect class="dg-box-danger" x="16" y="210" width="165" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="98" y="228" text-anchor="middle">14 pre-destroy</text>
+        <text class="dg-muted" x="98" y="242" text-anchor="middle">@PreDestroy</text>
+        <rect class="dg-box-danger" x="191" y="210" width="165" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="273" y="228" text-anchor="middle">15 disposable-bean</text>
+        <text class="dg-muted" x="273" y="242" text-anchor="middle">接口回调</text>
+        <rect class="dg-box-danger" x="366" y="210" width="165" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="448" y="228" text-anchor="middle">16 destroy-method</text>
+        <text class="dg-muted" x="448" y="242" text-anchor="middle">@Bean(destroyMethod)</text>
+        <rect class="dg-box" x="541" y="210" width="230" height="40" rx="8"></rect>
+        <text class="dg-text-sm" x="656" y="228" text-anchor="middle">仅 context.close() 触发</text>
+        <text class="dg-muted" x="656" y="242" text-anchor="middle">进程还活着就永远看不到这三站</text>
+
+        <path class="dg-line" d="M181 50 H190"></path>
+        <path class="dg-line" d="M356 50 H365"></path>
+        <path class="dg-line" d="M531 50 H540"></path>
+        <path class="dg-line" d="M706 50 H715"></path>
+        <path class="dg-line" d="M890 70 V90 H810 V109"></path>
+        <path class="dg-line" d="M715 130 H706"></path>
+        <path class="dg-line" d="M540 130 H531"></path>
+        <path class="dg-line" d="M365 130 H356"></path>
+        <path class="dg-line" d="M190 130 H181"></path>
+        <path class="dg-line-danger" d="M98 150 V209"></path>
+        <path class="dg-line-danger" d="M181 230 H190"></path>
+        <path class="dg-line-danger" d="M356 230 H365"></path>
+        <path class="dg-line" d="M596 230 H771"></path>
+      </svg>
+    </div>
+    <figcaption>站点顺序为 /api/startup/beanlife/trace 实测结果；序号按轨迹记录聚合后的逻辑站排列，接口里是 17 条记录（target-method 出现两次）。</figcaption>
+  </figure>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 每次调用都新建一个标本再销毁它</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 内部：起 NONE 子容器 → getBean(接口) → 调 greet() 两次 → close() → 再取轨迹
+curl -s http://localhost:9014/api/startup/beanlife/trace</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /api/startup/beanlife/trace（实测 17 条，detail 已缩写）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>runMarker RUN-1793241329958  instanceKey RUN-1793241329958#2  proxyWrappedTotal 2
+greetResult: hello from bean 'lifecycleDemoBean' via lifecycle-service
+             (fieldInjected=true, setterInjected=true, tag=RUN-1793241329958, ready=READY)
+
+ seq stage
+ 12  constructor               构造注入完成，fieldDependency=null（字段注入还没发生）
+ 13  populate-bean             字段注入=true，setter 注入完成，@Value tag=RUN-1793241329958
+ 14  aware-bean-name           beanName=lifecycleDemoBean
+ 15  aware-classloader         classLoader=TomcatEmbeddedWebappClassLoader
+ 16  aware-bean-factory        beanFactory=DefaultListableBeanFactory
+ 17  aware-application-context context=AnnotationConfigApplicationContext
+ 18  bpp-before                返回原对象（返回 null 会导致该 Bean 被丢弃）
+ 19  post-construct            @PostConstruct：实测排在用户 BPP.before 之后
+ 20  initializing-bean         afterPropertiesSet
+ 21  init-method               @Bean(initMethod) 执行，readyFlag=READY
+ 22  bpp-after                 返回 JDK 动态代理替换原对象（容器从此只认代理）
+ 23  proxy-invoke              调用落在代理上（$Proxy60），反射转发给目标对象
+ 24  target-method             greet() 到达真实对象
+ 25  target-method             greet() 到达真实对象（第二次调用）
+ 26  pre-destroy               @PreDestroy：销毁三件套的第一个入口
+ 27  disposable-bean           DisposableBean.destroy
+ 28  destroy-method            @Bean(destroyMethod) 执行完毕，本次实例生命周期闭合</code></pre>
+  </div>
+
+  <div class="callout">
+    <div class="ico">i</div>
+    <p><span class="title">seq 从 12 开始不是 bug</span>
+      主应用自己也有一个常驻标本（seq 1–11），接口用 <code>instanceKey</code> 把不同实例的轨迹隔开。
+      <code>LifecycleTraceRecorder</code> 的 key 规则是 <code>标记#序号</code>，
+      这样同一个 JVM 里反复调接口也能各看各的。</p>
+  </div>
+
+  <div class="callout warn">
+    <div class="ico">!</div>
+    <p><span class="title">别背「@PostConstruct 一定在 BeanPostProcessor 之前」</span>
+      实测顺序是 <code>bpp-before</code> → <code>post-construct</code>。
+      两者都发生在「初始化前」这一轮遍历里，先后取决于容器里 BPP 的注册顺序，
+      而注册顺序又受依赖关系影响——这类顺序不要靠记，打点是唯一可靠的答案。</p>
+  </div>
+
+  <h3 id="bl-proxy">7.2 BPP 把对象换成代理</h3>
+
+  <div class="code">
+    <div class="code-head"><span class="path">java · beanlife/LifecycleTraceProcessor.java（节选）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>@Component
+public class LifecycleTraceProcessor implements BeanPostProcessor {
+
+    @Override
+    public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+        if (!(bean instanceof LifecycleDemoBean target)) {
+            return bean;   // 非演示 Bean 原样返回：否则框架 Bean 全被包成代理
+        }
+        record(key, "bpp-after", "返回 JDK 动态代理替换原对象");
+        return Proxy.newProxyInstance(bean.getClass().getClassLoader(),
+                new Class&lt;?&gt;[] { LifecycleDemoApi.class },      // JDK 代理只认接口
+                (proxyObject, method, args) -> {
+                    record(key, "proxy-invoke",
+                            "调用落在代理上（" + proxyObject.getClass().getSimpleName() + "）");
+                    return method.invoke(target, args);        // 反射转发给真实对象
+                });
+    }
+}</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 对照组：进程还活着的那个常驻实例</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>curl -s http://localhost:9014/api/startup/beanlife/resident</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · curl /beanlife/resident（实测停在 11 站，无销毁记录）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>[{"seq":1, "stage":"constructor",             "instanceKey":"#1", "threadName":"main"},
+ {"seq":6, "stage":"aware-application-context","instanceKey":"#1", "threadName":"main"},
+ {"seq":11,"stage":"bpp-after",                "instanceKey":"#1", "threadName":"main"}]
+# 中间条目已省略；11 站之后没有 pre-destroy / disposable-bean / destroy-method</code></pre>
+  </div>
+
+  <p>三处对照值得看：</p>
+  <ul>
+    <li><strong>线程</strong>：常驻实例全部在 <code>main</code>；实验实例全部在 <code>http-nio-9014-exec-*</code>——
+      Bean 是<strong>第一次被请求时</strong>才创建的，不是启动时。</li>
+    <li><strong>类加载器</strong>：常驻实例 <code>aware-classloader</code> 是 <code>LaunchedClassLoader</code>，
+      子容器实例是 <code>TomcatEmbeddedWebappClassLoader</code>，容器不同，上下文就不同。</li>
+    <li><strong>取 Bean 的方式</strong>：必须 <code>getBean(LifecycleDemoApi.class)</code>。
+      写 <code>getBean(LifecycleDemoBean.class)</code> 会 <code>ClassCastException</code>——
+      容器里存的代理只实现接口。Spring 对无接口的类改用 CGLIB，正是为了绕开这个坑。</li>
+  </ul>
+</section>
+
+<section id="failure">
+  <h2><span class="no">08</span>场景 5：启动失败双结局</h2>
+  <p class="lead">同一次 <code>@PostConstruct</code> 抛异常，有没有人认领，输出差 21 行、30 条堆栈帧。</p>
+
+  <div class="code">
+    <div class="code-head"><span class="path">java · failure/StartupFailureGuard.java（节选）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>@PostConstruct
+public void check() {
+    switch (mode) {
+        case "analyzer" -> throw new StartupConfigException(     // 有分析器认领 → 三行报告
+                "demo.startup.fail.mode 被显式设置为 analyzer",
+                "demo.startup.fail.mode", "analyzer",
+                "把配置项改为 none 正常启动；analyzer/raw 只用于演示两种失败输出。");
+        case "raw" -> throw new IllegalStateException(           // 没人认领 → 满屏堆栈
+                "没有分析器认领的裸异常：模拟第三方库在初始化时抛出的错误",
+                new RuntimeException("底层调用失败",
+                        new java.net.ConnectException("connection refused (simulated)")));
+        default -> { /* none：正常启动 */ }
+    }
+}</code></pre>
+  </div>
+
+  <figure class="diagram">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 920 210" role="img" aria-label="启动异常经过 FailureAnalyzers 分两条路">
+        <rect class="dg-box-danger" x="16" y="60" width="200" height="46" rx="10"></rect>
+        <text class="dg-text-sm" x="116" y="80" text-anchor="middle">refresh 期间抛异常</text>
+        <text class="dg-muted" x="116" y="96" text-anchor="middle">SpringApplication 捕获</text>
+        <rect class="dg-box" x="286" y="60" width="200" height="46" rx="10"></rect>
+        <text class="dg-text-sm" x="386" y="80" text-anchor="middle">FailureAnalyzers</text>
+        <text class="dg-muted" x="386" y="96" text-anchor="middle">沿 cause 链找认领者</text>
+        <rect class="dg-box-ok" x="576" y="20" width="330" height="46" rx="10"></rect>
+        <text class="dg-text-sm" x="741" y="40" text-anchor="middle">有人认领：LoggingFailureAnalysisReporter</text>
+        <text class="dg-muted" x="741" y="56" text-anchor="middle">APPLICATION FAILED TO START + Description + Action</text>
+        <rect class="dg-box-warn" x="576" y="110" width="330" height="46" rx="10"></rect>
+        <text class="dg-text-sm" x="741" y="130" text-anchor="middle">无人认领：SpringApplication</text>
+        <text class="dg-muted" x="741" y="146" text-anchor="middle">ERROR Application run failed + 完整堆栈</text>
+        <path class="dg-line" d="M216 83 H285"></path>
+        <path class="dg-line-ok" d="M486 70 C530 70 530 43 575 43"></path>
+        <path class="dg-line" d="M486 96 C530 96 530 133 575 133"></path>
+        <text class="dg-muted" x="16" y="186">认领方式：AbstractFailureAnalyzer&lt;T&gt; 的泛型参数 T —— 写成 @Component 无效，analyzer 必须注册在 spring.factories</text>
+      </svg>
+    </div>
+    <figcaption>两条分支都在同一份日志里出现过，本模块用两个环境变量各跑一次。</figcaption>
+  </figure>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 两种结局各跑一次</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>DEMO_FAIL_MODE=analyzer java -jar demo-springboot-startup/target/demo-springboot-startup-0.0.1-SNAPSHOT.jar
+DEMO_FAIL_MODE=raw     java -jar demo-springboot-startup/target/demo-springboot-startup-0.0.1-SNAPSHOT.jar
+# 两次 exit code 都是 1；差别只在控制台的最后一段</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · analyzer 那次（实测 42 行日志、0 条堆栈帧）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>10:24:43.904 ERROR [main] o.s.b.d.LoggingFailureAnalysisReporter -
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+配置项取值非法：
+  demo.startup.fail.mode=analyzer
+
+Action:
+
+把配置项改为 none 正常启动；analyzer/raw 只用于演示两种失败输出。临时验证命令见 README 第 6 节
+
+（本报告由自定义 StartupConfigFailureAnalyzer 生成；同一异常若没有认领的 analyzer，
+ 控制台会打印完整堆栈——见场景 5 的 raw 对照组）</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · raw 那次（实测 63 行日志、30 条堆栈帧、3 层 Caused by）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>10:24:51.946 ERROR [main] o.s.boot.SpringApplication - Application run failed
+org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'startupFailureGuard': Invocation of init method failed
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor.postProcessBeforeInitialization(...:220)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(...:1807)
+	... （中间 24 帧省略）
+	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:28)
+Caused by: java.lang.IllegalStateException: 没有分析器认领的裸异常：模拟第三方库在初始化时抛出的错误
+	at com.example.demo.startup.failure.StartupFailureGuard.check(StartupFailureGuard.java:59)
+	... 23 common frames omitted
+Caused by: java.lang.RuntimeException: 底层调用失败
+	... 29 common frames omitted
+Caused by: java.net.ConnectException: connection refused (simulated)
+	... 29 common frames omitted</code></pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>输出</th><th>日志行数</th><th>堆栈帧</th><th>Caused by</th><th>首行</th></tr></thead>
+      <tbody>
+        <tr><td><code>analyzer</code></td><td>42</td><td>0</td><td>0</td><td><code>APPLICATION FAILED TO START</code></td></tr>
+        <tr><td><code>raw</code></td><td>63</td><td>30</td><td>3</td><td><code>ERROR o.s.boot.SpringApplication - Application run failed</code></td></tr>
+        <tr><td>端口被占（内置分析器）</td><td>38</td><td>0</td><td>0</td><td><code>APPLICATION FAILED TO START</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <div class="ico">!</div>
+    <p><span class="title">三个必须知道的坑</span>
+      ① analyzer 只能写在 <code>META-INF/spring.factories</code>，写成 <code>@Component</code> 无效——
+      它跑在容器建立失败之后，容器里的 Bean 取不到；
+      ② 多个 analyzer 认领同一异常时只取一个，别指望「全都执行」；
+      ③ 认领靠泛型声明的异常类型沿 cause 链下钻，业务代码要把真实原因包成 cause 抛出，
+      裸抛一个没人认领的自定义异常，输出退回堆栈墙。</p>
+  </div>
+
+  <p>工程取舍也演示一下：本模块对未知取值<strong>只警告不打断</strong>——
+    教学 demo 不该因为属性拼错把自己锁死；生产里「配置非法就拒绝启动」才是对的，
+    让 analyzer 把这件事说清楚即可。</p>
+</section>
+
+<section id="edge">
+  <h2><span class="no">09</span>边界与反例汇总</h2>
+  <p class="lead">把踩过的坑集中放这儿，每条都有对应的实测位置。</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>反例 / 边界</th><th>实测表现</th><th>正确做法</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>场景 0：配置类既被扫描又被 <code>@Import</code></td>
+          <td>第一版没给 feature 配置加 <code>excludeFilters</code>，启动直接失败：
+              <code>NoUniqueBeanDefinitionException: expected single matching bean but found 2:
+              startupFeatureApiBasic, startupFeatureApiFull</code></td>
+          <td>用 <code>excludeFilters</code> 让扫描让路，只留 <code>@Import</code> 这一条路线</td>
+        </tr>
+        <tr>
+          <td>场景 0：用 <code>getBeanClassName()</code> 判断 <code>@Bean</code> 的来源</td>
+          <td>工厂方法定义的 <code>beanClassName</code> 是 <code>null</code>，本模块一半 Bean 从统计里消失</td>
+          <td>问容器：<code>context.getType(beanName)</code> 会解析工厂方法返回类型</td>
+        </tr>
+        <tr>
+          <td>场景 0：用 URL 里含模块名判断「这份 spring.factories 是不是我的」</td>
+          <td>打成可执行 jar 后资源 URL 是 <code>jar:nested:/…/app.jar/!BOOT-INF/lib/…!/…</code>，
+              <strong>12 份全部命中</strong>，ours 判定失效</td>
+          <td>先归一化出容器名再比对；<code>locatedIn</code> 只有 1 份带模块 jar 名</td>
+        </tr>
+        <tr>
+          <td>场景 0：照抄 Boot 3 教程写 <code>SearchStrategy.PRESENT</code> / <code>META_ANNOTATIONS</code></td>
+          <td>编译不过。实测本应用 <code>countByStrategy</code> 只有四个键，值全是 12
+              ——策略不影响元注解展开</td>
+          <td>Spring 7 只有 <code>DIRECT / INHERITED_ANNOTATIONS / SUPERCLASS / TYPE_HIERARCHY</code></td>
+        </tr>
+        <tr>
+          <td>场景 0：把 <code>/annotations/feature</code> 当幂等接口反复点</td>
+          <td>每调用一次就多起一个子应用：<code>selectorHistory</code> 从 2 条变 3 条，
+              子应用耗时在 207 / 303 / 353ms 之间浮动</td>
+          <td>确定的是 <code>mode</code>、<code>imports</code> 与绑定值；时间类字段别拿去断言</td>
+        </tr>
+        <tr>
+          <td>按 Boot 2/3 包名写 <code>spring.autoconfigure.exclude</code></td>
+          <td>不报错、也不生效，探针仍返回 200</td>
+          <td>Boot 4 用 <code>org.springframework.boot.&lt;技术&gt;.autoconfigure.*</code>，见 <code>/autoconfig/list</code></td>
+        </tr>
+        <tr>
+          <td>排除被其他自动配置依赖的那一个</td>
+          <td>子应用 <code>ApplicationContextException</code>，连端口都没监听</td>
+          <td>排除前先在条件报告里查它提供了什么 Bean</td>
+        </tr>
+        <tr>
+          <td>类路径同时有 webmvc 与 webflux，且不指定模式</td>
+          <td>AUTO-DEDUCED 这次是 SERVLET，结果由 Deducer 顺序决定</td>
+          <td>删掉一种依赖，或显式 <code>setWebApplicationType</code></td>
+        </tr>
+        <tr>
+          <td>用 <code>setDefaultProperties</code> 给子应用换端口</td>
+          <td>优先级最低，压不过子应用的 <code>application.yaml</code>，实测撞主应用端口</td>
+          <td>用命令行参数 <code>--server.port=0</code>（优先级最高）</td>
+        </tr>
+        <tr>
+          <td>想在 <code>@Bean</code> 方法里 <code>getBean()</code></td>
+          <td>条件求值发生在定义注册阶段，远早于实例化，会直接拿不到</td>
+          <td>条件里只读 <code>ConditionContext.getEnvironment()</code></td>
+        </tr>
+        <tr>
+          <td>把「报告里没有」读成「条件判定为 false」</td>
+          <td><code>search?contains=DataSource</code> 返回 <code>[]</code>：类根本不在类路径上</td>
+          <td>先看 <code>unconditionalClasses</code> 和 <code>/autoconfig/list</code> 的可见性</td>
+        </tr>
+        <tr>
+          <td>指望 <code>@PreDestroy</code> 在进程运行中触发</td>
+          <td>常驻实例轨迹停在 <code>bpp-after</code>，没有销毁站</td>
+          <td>销毁只在 <code>context.close()</code>（或 JVM shutdown hook）里执行</td>
+        </tr>
+        <tr>
+          <td>被代理的 Bean 用具体类去取</td>
+          <td><code>ClassCastException</code>：容器里存的代理只实现接口</td>
+          <td>按接口取；无接口的类 Spring 会用 CGLIB</td>
+        </tr>
+        <tr>
+          <td><code>limit</code> 参数随便传</td>
+          <td><code>limit&lt;=0</code> 结果空转，超大把上千条灌进响应</td>
+          <td>控制器里 clamp 到 [1, 200]</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="run">
+  <h2><span class="no">10</span>运行与速查</h2>
+
+  <div class="code">
+    <div class="code-head"><span class="path">bash · 全套验证命令（按场景顺序）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code># 0) 编译 + 23 个单测（不需要任何中间件）
+./mvnw -pl demo-springboot-startup -am test
+
+# 1) 启动（默认 9006；验证时用 9014 避免和其它 demo 撞端口）
+SERVER_PORT=9014 java -jar demo-springboot-startup/target/demo-springboot-startup-0.0.1-SNAPSHOT.jar
+
+# 2) 场景 0（注解与类，7 个接口）
+curl -s http://localhost:9014/api/startup/annotations          # 注解 → 类 总表
+curl -s "http://localhost:9014/api/startup/annotations/tree"   # 元注解树
+curl -s http://localhost:9014/api/startup/annotations/conditional
+curl -s http://localhost:9014/api/startup/annotations/spi      # .imports / spring.factories
+curl -s http://localhost:9014/api/startup/annotations/provenance   # 191 个定义的来源
+curl -s http://localhost:9014/api/startup/annotations/proxymethods
+curl -s http://localhost:9014/api/startup/annotations/feature  # 手写 @EnableXxx 全链路
+
+# 3) 场景 1~4
+curl -s http://localhost:9014/api/startup/timeline            # 场景 1
+curl -s http://localhost:9014/api/startup/modes/compare       # 场景 2
+curl -s http://localhost:9014/api/startup/autoconfig          # 场景 3
+curl -s http://localhost:9014/api/startup/beanlife/trace      # 场景 4
+DEMO_FAIL_MODE=analyzer java -jar ...                          # 场景 5（需重启进程）</code></pre>
+  </div>
+
+  <div class="code out">
+    <div class="code-head"><span class="path">执行结果 · ./mvnw -pl demo-springboot-startup -o test（实测；各条 curl 的返回见对应小节）</span><button class="copy" data-copy>复制</button></div>
+    <pre><code>[INFO] ----------------&lt; com.example:demo-springboot-startup &gt;-----------------
+[INFO] Running com.example.demo.startup.StartupTimelineTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.988 s
+[INFO] Running com.example.demo.startup.AutoConfigReportTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.146 s
+[INFO] Running com.example.demo.startup.AnnotationMechanicsTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.458 s
+[INFO] Running com.example.demo.startup.StartupModesTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.224 s
+[INFO] Running com.example.demo.startup.StartupConfigFailureAnalyzerTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s
+[INFO] Running com.example.demo.startup.BeanLifecycleTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.516 s
+[INFO] Tests run: 23, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+[INFO] Total time:  16.586 s</code></pre>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>环境变量</th><th>默认值</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td><code>SERVER_PORT</code></td><td>9006</td><td>应用端口。9001~9003 是 IDEA 常驻服务，9004 demo-redis、9005 demo-jvm</td></tr>
+        <tr><td><code>DEMO_PROPERTY_TOGGLE</code></td><td>false</td><td>场景 3 的 <code>@ConditionalOnProperty</code> 开关</td></tr>
+        <tr><td><code>DEMO_FEATURE_COLOR</code></td><td>orange</td><td>场景 3 自定义条件的输入，值里含 <code>green</code> 才放行</td></tr>
+        <tr><td><code>DEMO_ANNOTATION_NAMES</code></td><td>alpha,beta,gamma</td><td>场景 0：宽松绑定把逗号串变成 <code>List&lt;String&gt;</code></td></tr>
+        <tr><td><code>DEMO_ANNOTATION_RETRIES</code></td><td>2</td><td>场景 0：<code>full</code> 档属性值；子应用用命令行参数覆盖成 7</td></tr>
+        <tr><td><code>DEMO_ANNOTATION_LABEL</code></td><td>loose-binding-works</td><td>场景 0：验证 <code>feature-label</code> → <code>featureLabel</code> 的松散命名</td></tr>
+        <tr><td><code>DEMO_FAIL_MODE</code></td><td>none</td><td>场景 5：<code>analyzer</code> / <code>raw</code> 会让启动失败</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>接口</th><th>方法</th><th>参数</th><th>返回要点</th></tr></thead>
+      <tbody>
+        <tr><td><code>/api/startup</code></td><td>GET</td><td>—</td><td>六个场景（0~5）的触发方式与观察点，含真实端口</td></tr>
+        <tr><td><code>/api/startup/timeline</code></td><td>GET</td><td>—</td><td>9 条时间线记录：phase / source / 耗时 / 线程 / detail</td></tr>
+        <tr><td><code>/api/startup/modes/compare</code></td><td>GET</td><td>—</td><td>四种模式的容器类、Bean 定义数、WebServer、端口、耗时</td></tr>
+        <tr><td><code>/api/startup/modes/port-in-use</code></td><td>GET</td><td>—</td><td>一次真实端口冲突的异常链（outcome=FAILED）</td></tr>
+        <tr><td><code>/api/startup/autoconfig</code></td><td>GET</td><td>—</td><td>报告计数 + 本模块三个演示条件的判定消息</td></tr>
+        <tr><td><code>/api/startup/autoconfig/search</code></td><td>GET</td><td><code>contains</code>、<code>limit</code>（clamp 1~200）</td><td>按关键词命中 source / 条件类 / 判定消息</td></tr>
+        <tr><td><code>/api/startup/autoconfig/list</code></td><td>GET</td><td><code>contains</code></td><td>Boot 4 自动配置类名 + 类路径可见性</td></tr>
+        <tr><td><code>/api/startup/autoconfig/exclude-demo</code></td><td>GET</td><td>—</td><td>baseline 与 excluded 两次子应用并排结果</td></tr>
+        <tr><td><code>/api/startup/beanlife/trace</code></td><td>GET</td><td>—</td><td>17 条生命周期打点（新建实例并销毁）</td></tr>
+        <tr><td><code>/api/startup/beanlife/resident</code></td><td>GET</td><td>—</td><td>主容器常驻实例的轨迹（停在 bpp-after）</td></tr>
+        <tr><td><code>/api/startup/probe/ping</code></td><td>GET</td><td>—</td><td>排除实验用的存活探针</td></tr>
+        <tr><td><code>/api/startup/annotations</code></td><td>GET</td><td>—</td><td>注解 → 干活类 17 行对照表，逐行验证类路径可见</td></tr>
+        <tr><td><code>/api/startup/annotations/tree</code></td><td>GET</td><td><code>className</code>（留空=主类）</td><td>元注解树 + 四种 SearchStrategy 计数 + 别名对照</td></tr>
+        <tr><td><code>/api/startup/annotations/conditional</code></td><td>GET</td><td><code>includeUserCondition</code></td><td>21 个条件注解 → 11 个 Condition 类的分桶</td></tr>
+        <tr><td><code>/api/startup/annotations/spi</code></td><td>GET</td><td>—</td><td>全类路径 .imports / spring.factories 清单与候选总数</td></tr>
+        <tr><td><code>/api/startup/annotations/provenance</code></td><td>GET</td><td>—</td><td>191 个 Bean 定义的来源分类、CGLIB 增强、excludeFilters 证据</td></tr>
+        <tr><td><code>/api/startup/annotations/proxymethods</code></td><td>GET</td><td>—</td><td>proxyBeanMethods true/false 两档的实例计数与身份对照</td></tr>
+        <tr><td><code>/api/startup/annotations/feature</code></td><td>GET</td><td>—</td><td>手写 @EnableXxx 的选择器调用史 + basic/full 两档绑定值</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="small muted">所有接口都是只读的；会重启的只有内部起落的子应用，跑完立即 <code>close()</code>，不残留端口。</p>
+</section>
+
+<section id="map">
+  <h2><span class="no">11</span>代码地图</h2>
+  <p class="lead">按场景找文件，比按包名字猜快。</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>场景</th><th>文件</th><th>一句话职责</th></tr></thead>
+      <tbody>
+        <tr><td>—</td><td><code>StartupApplication.java</code></td><td>唯一入口；<code>excludeFilters</code> 挡掉 3 个探针应用 + 2 个 feature 配置 + 1 个 @Enable 宿主</td></tr>
+        <tr><td>—</td><td><code>resources/META-INF/spring.factories</code></td><td>注册 RunListener 与 FailureAnalyzer（这两类 SPI 仍走 spring.factories）</td></tr>
+        <tr><td>0</td><td><code>annotations/AnnotationClassMapService.java</code></td><td>注解 → 干活类 17 行对照表，逐行 <code>Class.forName</code> 验证</td></tr>
+        <tr><td>0</td><td><code>annotations/AnnotationTreeService.java</code></td><td>JDK 递归树 + Spring 合并视图；SearchStrategy 计数、别名对照</td></tr>
+        <tr><td>0</td><td><code>annotations/SpiFileService.java</code></td><td>扫全类路径的 .imports 与 spring.factories，报候选总数</td></tr>
+        <tr><td>0</td><td><code>annotations/ConditionFamilyService.java</code></td><td>21 个条件注解按 Condition 类分桶（反查表）</td></tr>
+        <tr><td>0</td><td><code>annotations/BeanProvenanceService.java</code></td><td>191 个定义的来源分类：扫描 / 导入 / @Bean / 框架</td></tr>
+        <tr><td>0</td><td><code>annotations/ProxyMethodService.java</code> + <code>proxymethod/</code></td><td>proxyBeanMethods 两档标本，计数器 + identityHashCode</td></tr>
+        <tr><td>0</td><td><code>annotations/FeatureDemoService.java</code> + <code>feature/</code></td><td>手写 @EnableStartupFeature、ImportSelector、属性绑定</td></tr>
+        <tr><td>1</td><td><code>timeline/StartupTimelineRunListener.java</code></td><td>7 个阶段回调打点；用静态引用把主应用和子应用区分开</td></tr>
+        <tr><td>1</td><td><code>timeline/StartupTimelineCollector.java</code></td><td>静态时间线：RunListener 不是 Bean，只能这样搭桥</td></tr>
+        <tr><td>1</td><td><code>timeline/StartupEventListener.java</code></td><td>对照组：Bean 监听器只收得到容器建立后的 3 个事件</td></tr>
+        <tr><td>2</td><td><code>modes/StartupModesService.java</code></td><td>进程内起四个子应用采集快照；端口冲突实验</td></tr>
+        <tr><td>2</td><td><code>modes/ModeSnapshot.java</code></td><td>快照 record，含根因与异常链</td></tr>
+        <tr><td>3</td><td><code>autoconfig/AutoConfigService.java</code></td><td>读条件报告、检索、Boot 4 类名清单、排除实验</td></tr>
+        <tr><td>3</td><td><code>autoconfig/FeatureColorCondition.java</code></td><td>自定义条件：自己给出中文判定依据</td></tr>
+        <tr><td>3</td><td><code>autoconfig/AutoConfigDemoConfig.java</code></td><td>三种条件形态宿主（开关注解 / 自定义 / 无条件）</td></tr>
+        <tr><td>3</td><td><code>autoconfig/probe/</code></td><td>排除实验的探针应用与路由（包位置是控制变量）</td></tr>
+        <tr><td>4</td><td><code>beanlife/LifecycleDemoBean.java</code></td><td>生命周期标本：三类回调全部打点</td></tr>
+        <tr><td>4</td><td><code>beanlife/LifecycleTraceProcessor.java</code></td><td>BPP：只包装演示 Bean，实测换成 JDK 代理</td></tr>
+        <tr><td>4</td><td><code>beanlife/LifecycleTraceRecorder.java</code></td><td>静态轨迹 + <code>instanceKey</code> 隔离多次实验</td></tr>
+        <tr><td>4</td><td><code>beanlife/LifecycleBeanLifeService.java</code></td><td>NONE 子容器编排：取代理、调两次、close 后再取轨迹</td></tr>
+        <tr><td>5</td><td><code>failure/StartupFailureGuard.java</code></td><td><code>@PostConstruct</code> 按模式抛两种异常</td></tr>
+        <tr><td>5</td><td><code>failure/StartupConfigFailureAnalyzer.java</code></td><td>把异常翻成 DESCRIPTION / ACTION 两可执行报告</td></tr>
+        <tr><td>全部</td><td><code>controller/</code></td><td>索引、时间线、模式、自动配置、注解探针五组只读接口</td></tr>
+        <tr><td>全部</td><td><code>src/test/java/…</code></td><td>6 个测试类 23 个用例：注解映射、元注解树、SPI 清单、来源分类、顺序断言、模式断言、认领断言</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="small">
+    接口与实测输出：<a href="../demo-springboot-startup/README.md">demo-springboot-startup/README.md</a>；
+    可执行请求段：<code>api-examples.http</code> 第 37–56 条。
+  </p>
+</section>
+
+      <footer>
+        <p><strong>Spring Boot 启动原理</strong> · 代码与实测记录来自 demo-springboot-startup 模块（零中间件依赖）</p>
+        <p>核对日期 2026-10-29 · 命令与返回一一对应；改代码请同步更新本文数字。</p>
+      </footer>
+    </div>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var toggle = document.getElementById('themeToggle');
+
+    function syncToggleLabel() {
+      if (toggle) toggle.textContent = root.dataset.theme === 'dark' ? '浅色' : '深色';
+    }
+    syncToggleLabel();
+
+    if (toggle) {
+      toggle.addEventListener('click', function () {
+        var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        try { localStorage.setItem('tech-guide-theme', next); } catch (e) { /* ignore */ }
+        syncToggleLabel();
+      });
+    }
+
+    document.querySelectorAll('[data-copy]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var block = btn.closest('.code');
+        var code = block ? block.querySelector('code') : null;
+        if (!code) return;
+        var text = code.innerText;
+        var done = function () {
+          var old = btn.textContent;
+          btn.textContent = '已复制';
+          setTimeout(function () { btn.textContent = old; }, 1400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done).catch(function () { fallback(text, done); });
+        } else {
+          fallback(text, done);
+        }
+      });
+    });
+
+    function fallback(text, done) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+      document.body.removeChild(ta);
+      done();
+    }
+
+    var links = Array.prototype.slice.call(document.querySelectorAll('.toc a[href^="#"]'));
+    var byId = {};
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      byId[id] = a;
+    });
+    var targets = Object.keys(byId).map(function (id) { return document.getElementById(id); }).filter(Boolean);
+
+    function setActive(id) {
+      links.forEach(function (a) { a.classList.remove('active'); });
+      var link = byId[id];
+      if (link) link.classList.add('active');
+    }
+
+    function onScroll() {
+      var y = window.scrollY + 140;
+      var current = targets.length ? targets[0] : null;
+      for (var i = 0; i < targets.length; i++) {
+        var top = targets[i].getBoundingClientRect().top + window.scrollY;
+        if (top <= y) current = targets[i];
+      }
+      if (current) setActive(current.id);
+      var bar = document.querySelector('.progress span');
+      if (bar) {
+        var max = document.documentElement.scrollHeight - window.innerHeight;
+        bar.style.width = (max > 0 ? Math.min(100, Math.max(0, window.scrollY / max * 100)) : 0) + '%';
+      }
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    onScroll();
+  })();
+</script>
+</body>
+</html>
+

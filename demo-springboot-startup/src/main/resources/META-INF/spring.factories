@@ -1,0 +1,8 @@
+# Boot 4.1 仍用 META-INF/spring.factories 加载 SpringApplicationRunListener / FailureAnalyzer
+# （自动配置才迁移到 META-INF/spring/*.imports；两套机制并存，本文件是场景 1 和场景 5 的注册入口）
+
+org.springframework.boot.SpringApplicationRunListener=\
+com.example.demo.startup.timeline.StartupTimelineRunListener
+
+org.springframework.boot.diagnostics.FailureAnalyzer=\
+com.example.demo.startup.failure.StartupConfigFailureAnalyzer

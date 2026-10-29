@@ -1,0 +1,38 @@
+spring:
+  application:
+    # 启动本模块不需要任何外部中间件（无 DB / 无 Redis / 无 MQ）
+    name: demo-springboot-startup
+
+server:
+  # 9001~9003 是 IDEA 常驻服务，9004 demo-redis、9005 demo-jvm；本模块用 9006
+  port: ${SERVER_PORT:9006}
+
+demo:
+  startup:
+    annotations:
+      # 场景 0 的属性绑定载体（@ConfigurationProperties(prefix = "demo.startup.annotations")）。
+      # 只有 @EnableStartupFeature(mode = "full") 才会把它注册成 Bean，
+      # 所以 basic 档调用 /annotations/feature 时 propertiesBeanNames 是空数组——
+      # 这正是「@ConfigurationProperties 自己不注册 Bean」的实测证据
+      names: ${DEMO_ANNOTATION_NAMES:alpha,beta,gamma}
+      retries: ${DEMO_ANNOTATION_RETRIES:2}
+      # 松散绑定观察点：feature-label / featureLabel / FEATURE_LABEL 三种写法等价
+      feature-label: ${DEMO_ANNOTATION_LABEL:loose-binding-works}
+    autoconfig:
+      # 场景 3 的 @ConditionalOnProperty 开关：默认关闭，
+      # 用 DEMO_PROPERTY_TOGGLE=true 重启即可看到条件报告由 noMatch 变 match
+      property-toggle: ${DEMO_PROPERTY_TOGGLE:false}
+      # FeatureColorCondition 的判定输入：值含 green 即装载灰度 Bean
+      feature-color: ${DEMO_FEATURE_COLOR:orange}
+    fail:
+      # none=正常启动；analyzer=抛可分析异常（场景 5 友好报告）；raw=抛裸异常（场景 5 原始堆栈）
+      # 只能改完重启进程观测：启动失败的应用没有接口可点
+      mode: ${DEMO_FAIL_MODE:none}
+
+logging:
+  level:
+    root: INFO
+    com.example.demo: INFO
+  pattern:
+    # 与 demo-redis 保持一致：时间 + 线程名，启动阶段耗时分析必须看得见线程
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
