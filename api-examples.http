@@ -1,11 +1,14 @@
 ### DDD 事件驱动 Demo —— 手工验证脚本（IntelliJ HTTP Client / VS Code REST Client 可直接执行）
 ### 建议顺序：先执行「下单」，把返回的 orderId 填到下面的变量里
-### 三个服务需分别启动：订单 9001、库存 9002、积分 9003
+### 三个服务需分别启动：订单 9001、库存 9002、积分 9003；
+### 锁 Demo 单独启动在 9007，启动原理 Demo 单独启动在 9006
 
 @orderHost = http://localhost:9001
 @inventoryHost = http://localhost:9002
 @loyaltyHost = http://localhost:9003
 @redisHost = http://localhost:9004
+@lockHost = http://localhost:9007
+@startupHost = http://localhost:9006
 @orderId = ORD-XXXXXXXX
 
 ### 1. 下单（总价 399 × 2 = 798）
@@ -132,3 +135,118 @@ GET {{redisHost}}/api/redis/cache/delay/executed
 
 ### 26. 缓存：确定性复现旧值回填
 POST {{redisHost}}/api/redis/cache/race?id=99
+
+### ---------------------------------------------------------------------------
+### Java 锁 Demo（先启动 demo-concurrency，端口 9007）
+### ---------------------------------------------------------------------------
+
+### 27. 场景索引
+GET {{lockHost}}/api/lock
+
+### 28. synchronized：互斥 / 反例
+GET {{lockHost}}/api/lock/synchronized?locked=true&holdMillis=600
+GET {{lockHost}}/api/lock/synchronized?locked=false&holdMillis=600
+
+### 29. ReentrantLock：重入与 AQS 队列
+GET {{lockHost}}/api/lock/reentrant?waiters=9&holdMillis=300
+
+### 30. 公平 vs 非公平
+GET {{lockHost}}/api/lock/fairness?fair=true&threads=8&rounds=5
+GET {{lockHost}}/api/lock/fairness?fair=false&threads=8&rounds=5
+
+### 31. 等待期中断：synchronized / lockInterruptibly
+GET {{lockHost}}/api/lock/interrupt?mode=synchronized&holdMillis=1200&interruptAfterMillis=200
+GET {{lockHost}}/api/lock/interrupt?mode=reentrant&holdMillis=1200&interruptAfterMillis=200
+
+### 32. 死锁：复现 / 固定顺序修复
+GET {{lockHost}}/api/lock/deadlock?fixed=false&holdMillis=100
+GET {{lockHost}}/api/lock/deadlock?fixed=true&holdMillis=100
+
+### 33. 计数：丢更新 / 四种写法吞吐对比
+GET {{lockHost}}/api/lock/counter/lost-updates?threads=8&iterations=2000
+GET {{lockHost}}/api/lock/counter/compare?threads=8&iterations=100000&rounds=3
+
+### 34. 租约锁：自然过期 vs 看门狗续期
+GET {{lockHost}}/api/lock/watchdog?leaseMillis=800&holdMillis=2500&watchdog=false
+GET {{lockHost}}/api/lock/watchdog?leaseMillis=800&holdMillis=2500&watchdog=true
+
+### 35. 分段计数：16 个 Cell vs 1 个 Cell
+GET {{lockHost}}/api/lock/counter/striped?threads=32&iterations=100000&cells=16&rounds=3
+GET {{lockHost}}/api/lock/counter/striped?threads=32&iterations=100000&cells=1&rounds=3
+
+### 36. 分片 Map 锁：全局 / 分片 / 热点 key
+GET {{lockHost}}/api/lock/sharded-map?threads=8&keys=64&operations=300&shards=16&workMicros=200
+
+### ---------------------------------------------------------------------------
+### Spring Boot 启动原理 Demo（先启动 demo-springboot-startup，默认端口 9006）
+### 场景 5（启动失败双结局）无法用接口触发，见下面注释里的两条命令
+### ---------------------------------------------------------------------------
+
+### 37. 场景索引：六个场景的触发方式与观察点
+GET {{startupHost}}/api/startup
+
+### 38. 场景 1：启动事件时间线（数据在启动日志里已打好，接口只做回看）
+GET {{startupHost}}/api/startup/timeline
+
+### 39. 场景 2：四种启动模式并排对比（内部起 4 个子应用，用完即关）
+GET {{startupHost}}/api/startup/modes/compare
+
+### 40. 场景 2：端口冲突实验（ServerSocket 先占住随机端口，再让子应用去绑）
+GET {{startupHost}}/api/startup/modes/port-in-use
+
+### 41. 场景 3：条件评估报告概览（matched/unmatched 数量、排除项、本模块三个演示条件）
+GET {{startupHost}}/api/startup/autoconfig
+
+### 42. 场景 3：按关键词查判定原因（自定义条件会给出中文解释）
+GET {{startupHost}}/api/startup/autoconfig/search?contains=FeatureColor
+GET {{startupHost}}/api/startup/autoconfig/search?contains=DispatcherServlet&limit=5
+
+### 43. 场景 3：Boot 4 自动配置类名样例 + 类路径可见性
+GET {{startupHost}}/api/startup/autoconfig/list
+
+### 44. 场景 3：反例实验——排除 DispatcherServletAutoConfiguration 的真实后果
+###      实测第二次子应用直接启动失败（ErrorMvcAutoConfiguration 连坐），不是想象中的 404
+GET {{startupHost}}/api/startup/autoconfig/exclude-demo
+
+### 45. 场景 4：Bean 生命周期完整轨迹（新建 NONE 子容器 → 调用两次 → close，17 条记录）
+GET {{startupHost}}/api/startup/beanlife/trace
+
+### 46. 场景 4：主容器常驻实例（停在 bpp-after，没有销毁站点，因为进程还活着）
+GET {{startupHost}}/api/startup/beanlife/resident
+
+### 47. 探针路由（排除实验用它判断 DispatcherServlet 是否还在接收请求）
+GET {{startupHost}}/api/startup/probe/ping
+
+### 48. 场景 5：启动失败双结局（终端执行，接口触发不了；两次都要重启进程）
+###      友好报告：42 行日志、0 条堆栈帧
+###      DEMO_FAIL_MODE=analyzer java -jar demo-springboot-startup/target/demo-springboot-startup-0.0.1-SNAPSHOT.jar
+###      无人认领：63 行日志、30 条堆栈帧、3 层 Caused by
+###      DEMO_FAIL_MODE=raw     java -jar demo-springboot-startup/target/demo-springboot-startup-0.0.1-SNAPSHOT.jar
+
+### 49. 场景 0：注解 → 干活类 对照表（17 行，每行的类都当场 Class.forName 验证过）
+GET {{startupHost}}/api/startup/annotations
+
+### 50. 场景 0：元注解树（className 留空=解剖本模块主类；treeRows=12 / mergedUniqueTypes=9）
+GET {{startupHost}}/api/startup/annotations/tree
+###      换一个类名就能解剖框架自己的配置类（注意 Boot 4 的包名已拆到 webmvc.autoconfigure）
+GET {{startupHost}}/api/startup/annotations/tree?className=org.springframework.boot.webmvc.autoconfigure.WebMvcAutoConfiguration
+
+### 51. 场景 0：条件注解家族（21 个注解落到 11 个 Condition 类；includeUserCondition 决定是否附自定义对照行）
+GET {{startupHost}}/api/startup/annotations/conditional?includeUserCondition=true
+GET {{startupHost}}/api/startup/annotations/conditional?includeUserCondition=false
+
+### 52. 场景 0：SPI 文件清单（.imports 11 份汇总 44 个候选；spring.factories 12 份，ours 只有本模块那 1 份）
+GET {{startupHost}}/api/startup/annotations/spi
+
+### 53. 场景 0：Bean 定义来源分析（191 个定义分成扫描/导入/@Bean/框架/其它，含 excludeFilters 证据）
+GET {{startupHost}}/api/startup/annotations/provenance
+
+### 54. 场景 0：proxyBeanMethods 两档并排（full same=true 建 1 个；lite same=false 建 2 个，多一个是容器外孤儿）
+GET {{startupHost}}/api/startup/annotations/proxymethods
+
+### 55. 场景 0：手写 @EnableStartupFeature 全链路（选择器调用史 + basic/full 两档 + retries 被命令行覆盖成 7）
+###      注意：这个接口不幂等，每调一次就多起一个 NONE 子应用、selectorHistory 多一条
+GET {{startupHost}}/api/startup/annotations/feature
+
+### 56. 场景 0：非法类名的边界（返回 400 + 提示，而不是 500；异常处理器在 AnnotationProbeController）
+GET {{startupHost}}/api/startup/annotations/tree?className=com.example.NotExist

@@ -18,7 +18,9 @@ demo
 ├── demo-loyalty-service               积分服务（9003，订阅 OrderPaid）
 ├── demo-rabbitmq                      RabbitMQ 基础用法示例（[文档](demo-rabbitmq/README.md)）
 ├── demo-rocketmq                      RocketMQ 基础用法示例（[文档](demo-rocketmq/README.md)）
-└── demo-redis                         Redis 数据类型 / 限流 / 分布式锁 / 缓存一致性（[文档](demo-redis/README.md)）
+├── demo-redis                         Redis 数据类型 / 限流 / 分布式锁 / 缓存一致性（[文档](demo-redis/README.md)）
+├── demo-concurrency                   Java 锁 / AQS / 死锁 / 并发计数（[文档](demo-concurrency/README.md)）
+└── demo-springboot-startup            Spring Boot 注解与类 / 启动链路 / 自动配置 / Bean 生命周期（[文档](demo-springboot-startup/README.md)）
 ```
 
 服务之间只共享**事件契约**，不共享聚合、仓储或代码模块：每个服务各自定义它消费/发布的事件结构。
@@ -162,6 +164,53 @@ docker compose up -d redis mysql
 ```
 
 启动后从 `curl http://localhost:9004/api/redis/types/all` 开始；接口、curl 和实测输出见 [demo-redis/README.md](demo-redis/README.md)，原理图解见 [docs/redis-guide.html](docs/redis-guide.html)。
+
+### MySQL 原理与数据结构（图文教程）
+
+单文件 HTML 教程 [docs/mysql-guide.html](docs/mysql-guide.html)：16KB 页与 B+ 树、页分裂、回表/覆盖索引/最左前缀/索引失效、MVCC 快照读、Buffer Pool 与 redo 刷盘、行锁/间隙锁/死锁，全部结论来自本机 MySQL 8.4 实测（如覆盖索引把逻辑读从 12,043 降到 31、UUID 主键插入慢 2.1 倍、深分页游标法快 2400 倍）。实验脚本在 [docs/mysql-guide-labs/](docs/mysql-guide-labs/)，只需 `docker compose up -d mysql` 即可复现。
+
+### Java 锁 Demo（synchronized / AQS / 死锁 / 计数）
+
+独立模块 `demo-concurrency`（9007），纯内存运行，不依赖 Docker、MySQL 或 Redis：
+
+| 分组 | 覆盖内容 |
+| --- | --- |
+| synchronized | 加锁 / 不加锁对照，BLOCKED 线程快照与栈帧 |
+| ReentrantLock | 三层重入 holdCount、AQS 队列长度与入队顺序、多余 unlock |
+| 公平性 | fair / non-fair 下释放后的排队位置与插队次数 |
+| 中断 | monitorenter 不可中断 vs `lockInterruptibly()` 可中断 |
+| 死锁 | AB-BA 确定性复现、`ThreadMXBean` 检测、固定加锁顺序修复 |
+| 计数 | 丢更新复现，synchronized / AtomicLong / LongAdder 吞吐对比 |
+| 看门狗 | 内存租约锁到期接管 vs lease/3 续期；释放后停止续期、迟到 release 被忽略 |
+| 分段锁 | 手写 Cell 分段计数 vs AtomicLong / LongAdder；分片 Map 锁与热点 key 边界 |
+
+```bash
+./mvnw -pl demo-concurrency test
+./mvnw -pl demo-concurrency spring-boot:run
+```
+
+启动后从 `curl http://localhost:9007/api/lock` 开始；接口与实测输出见 [demo-concurrency/README.md](demo-concurrency/README.md)，原理图解见 [docs/java-lock-guide.html](docs/java-lock-guide.html)。
+
+### Spring Boot 启动原理 Demo（注解与类 / 时间线 / 模式 / 自动配置 / Bean 生命周期 / 失败分析）
+
+独立模块 `demo-springboot-startup`（9006），纯内存运行，不依赖 Docker、MySQL 或 Redis。学习顺序从注解开始——先搞清楚「你写的每个注解点亮了哪个类」，再把注解放回启动时间轴：
+
+| 分组 | 覆盖内容 |
+| --- | --- |
+| 注解与类 | `@SpringBootApplication` 反射递归拆出的元注解树、17 行「注解 → 干活的类 → 容器里多了什么」对照表、`.imports` 与 `spring.factories` 两份 SPI 实测清单（44 个候选自动配置类来自 11 份文件）、191 个 Bean 定义的来源分类、`proxyBeanMethods` 的 CGLIB 差异、自定义 `@EnableXxx` 选择器链路 |
+| 启动事件时间线 | 7 个 `SpringApplicationRunListener` 阶段 + 3 个容器事件的顺序、耗时、线程；`starting` 为什么没有日志 |
+| 启动模式 | NONE / SERVLET / REACTIVE / AUTO-DEDUCED 的容器类、Bean 定义数、WebServer 与端口；端口冲突异常链 |
+| 自动配置 | `ConditionEvaluationReport` 接口化读取、自定义条件的中文判定、开开关前后 matched 数量对比、排除自动配置的真实后果 |
+| Bean 生命周期 | constructor → destroy-method 的 17 条打点记录，`@PostConstruct` 与 BPP 的真实先后、代理替换 |
+| 启动失败 | 自定义 `FailureAnalyzer` 的三行报告 vs 无人认领时的满屏堆栈（42 行 / 63 行实测对比） |
+
+```bash
+./mvnw -pl demo-springboot-startup test
+./mvnw -pl demo-springboot-startup spring-boot:run
+```
+
+启动后从 `curl http://localhost:9006/api/startup/annotations`（注解对照表）或 `curl http://localhost:9006/api/startup`（场景总览）开始；接口与实测输出见 [demo-springboot-startup/README.md](demo-springboot-startup/README.md)，原理图解见 [docs/springboot-startup-guide.html](docs/springboot-startup-guide.html)。
+场景 0 与场景 1~4 都在当前进程内可重复调；场景 5 需要重启进程才能观测（`DEMO_FAIL_MODE=analyzer` / `raw`），失败的应用本身没有接口。
 
 ---
 

@@ -27,6 +27,9 @@
         <module>demo-rabbitmq</module>
         <module>demo-rocketmq</module>
         <module>demo-redis</module>
+        <module>demo-jvm</module>
+        <module>demo-springboot-startup</module>
+        <module>demo-concurrency</module>
     </modules>
 
     <build>
