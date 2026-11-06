@@ -97,5 +97,24 @@ services:
     ports:
       - "18080:8080"
 
+  # EMQX MQTT Broker：教学用轻量级 MQTT 5.0 服务端
+  # Dashboard: http://localhost:18083 (admin/public)
+  emqx:
+    image: emqx/emqx:5.3
+    ports:
+      - "1883:1883"     # MQTT TCP
+      - "18083:18083"   # Dashboard + API
+    environment:
+      EMQX_NAME: emqx
+      EMQX_HOST: 127.0.0.1
+
+  # Seata TC（事务协调者）：AT 模式的服务端，存储用 file（内存），仅教学用。
+  # 控制台 http://localhost:7091（seata/seata），服务端口 8091
+  seata-server:
+    image: apache/seata-server:2.6.0
+    ports:
+      - "8091:8091"
+      - "7091:7091"
+
 volumes:
   mysql-data:

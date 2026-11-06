@@ -30,6 +30,10 @@
         <module>demo-jvm</module>
         <module>demo-springboot-startup</module>
         <module>demo-concurrency</module>
+        <module>demo-txn-order</module>
+        <module>demo-txn-inventory</module>
+        <module>demo-txn-loyalty</module>
+        <module>demo-mqtt</module>
     </modules>
 
     <build>

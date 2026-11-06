@@ -1,0 +1,28 @@
+server:
+  port: ${SERVER_PORT:9005}
+
+# MQTT 连接配置：支持环境变量覆盖，便于隔离验证
+mqtt:
+  broker-url: ${MQTT_BROKER_URL:tcp://localhost:1883}
+  client-id-prefix: ${MQTT_CLIENT_ID_PREFIX:demo-mqtt-}
+  username: ${MQTT_USERNAME:}
+  password: ${MQTT_PASSWORD:}
+  # 默认 QoS：未显式指定时使用
+  default-qos: ${MQTT_DEFAULT_QOS:1}
+  # 连接超时（秒）
+  connection-timeout: ${MQTT_CONNECTION_TIMEOUT:10}
+  # 心跳间隔（秒），保持长连接
+  keep-alive: ${MQTT_KEEP_ALIVE:60}
+  # 是否开启自动重连
+  automatic-reconnect: ${MQTT_AUTOMATIC_RECONNECT:true}
+  # 清理会话：false 时 broker 保留离线订阅的 QoS 1/2 消息
+  clean-session: ${MQTT_CLEAN_SESSION:true}
+
+spring:
+  application:
+    name: demo-mqtt
+
+logging:
+  level:
+    com.example.demo.mqtt: DEBUG
+    org.springframework.integration.mqtt: DEBUG

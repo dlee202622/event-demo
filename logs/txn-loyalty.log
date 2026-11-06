@@ -1,0 +1,85 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.2)
+
+10:55:10.909 INFO  [main] o.a.s.c.l.EnhancedServiceLoader$InnerEnhancedServiceLoader - Ignore load compatible class io.seata.config.ExtConfigurationProvider, because is not assignable from origin type org.apache.seata.config.ExtConfigurationProvider
+10:55:11.181 INFO  [main] o.a.s.config.ConfigurationFactory - load Configuration from :FileConfiguration$$EnhancerByCGLIB$$9e6bf6fd
+10:55:11.239 INFO  [main] c.e.d.txn.loyalty.LoyaltyApplication - Starting LoyaltyApplication v0.0.1-SNAPSHOT using Java 21.0.13 with PID 18696 (/Users/donglee/IdeaProjects/demo/demo-txn-loyalty/target/demo-txn-loyalty-0.0.1-SNAPSHOT.jar started by donglee in /Users/donglee/IdeaProjects/demo)
+10:55:11.241 INFO  [main] c.e.d.txn.loyalty.LoyaltyApplication - No active profile set, falling back to 1 default profile: "default"
+10:55:13.500 WARN  [main] o.s.c.s.PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.apache.seata.spring.boot.autoconfigure.SeataCoreAutoConfiguration' of type [org.apache.seata.spring.boot.autoconfigure.SeataCoreAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor []? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+10:55:13.501 WARN  [main] o.s.c.s.PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'springApplicationContextProvider' of type [org.apache.seata.spring.boot.autoconfigure.provider.SpringApplicationContextProvider] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor []? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+10:55:13.504 WARN  [main] o.s.c.s.PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.apache.seata.spring.boot.autoconfigure.SeataAutoConfiguration' of type [org.apache.seata.spring.boot.autoconfigure.SeataAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor []? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+10:55:13.693 WARN  [main] o.s.c.s.PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'failureHandler' of type [org.apache.seata.tm.api.DefaultFailureHandlerImpl] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor []? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+10:55:13.746 WARN  [main] o.s.c.s.PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'springCloudAlibabaConfiguration' of type [org.apache.seata.spring.boot.autoconfigure.properties.SpringCloudAlibabaConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [globalTransactionScanner]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+10:55:13.762 WARN  [main] o.s.c.s.PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'seataProperties' of type [org.apache.seata.spring.boot.autoconfigure.properties.SeataProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [globalTransactionScanner]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+10:55:13.812 INFO  [main] o.a.s.s.b.a.SeataAutoConfiguration - Automatically configure Seata
+10:55:13.865 INFO  [main] o.a.s.c.l.EnhancedServiceLoader$InnerEnhancedServiceLoader - Load compatible class io.seata.spring.annotation.ScannerChecker
+10:55:13.977 INFO  [main] o.a.s.c.l.EnhancedServiceLoader$InnerEnhancedServiceLoader - Load compatible class io.seata.integration.tx.api.remoting.RemotingParser
+10:55:13.979 INFO  [main] o.a.s.s.a.GlobalTransactionScanner - Initializing Global Transaction Clients ... 
+10:55:14.200 INFO  [main] o.a.s.c.l.EnhancedServiceLoader$InnerEnhancedServiceLoader - Load compatible class io.seata.core.auth.AuthSigner
+10:55:14.205 INFO  [main] o.a.s.c.r.n.AbstractNettyRemotingClient - register channel event listener: org.apache.seata.core.rpc.netty.TmNettyRemotingClient$2
+10:55:14.227 INFO  [main] o.a.s.c.r.netty.NettyClientBootstrap - client run on MacOS/Windows, fallback to NIO.
+10:55:14.229 INFO  [main] o.a.s.c.r.netty.NettyClientBootstrap - NettyClientBootstrap has started
+10:55:14.233 INFO  [main] o.a.s.d.registry.RegistryFactory - use registry center type: file
+10:55:14.253 INFO  [main] o.a.s.c.l.EnhancedServiceLoader$InnerEnhancedServiceLoader - Load compatible class io.seata.discovery.registry.RegistryProvider
+10:55:14.265 INFO  [main] o.a.s.c.r.n.NettyClientChannelManager - will connect to 127.0.0.1:8091
+10:55:14.276 INFO  [main] o.a.s.c.r.netty.NettyPoolableFactory - NettyPool create channel to transactionRole:TMROLE,address:127.0.0.1:8091,msg:< RegisterTMRequest{version='2.6.0', applicationId='demo-txn-loyalty', transactionServiceGroup='demo_txn_group', extraData='ak=null
+digest=demo_txn_group,192.168.3.20,1793674514274
+timestamp=1793674514274
+authVersion=V4
+vgroup=demo_txn_group
+ip=192.168.3.20
+'} >
+10:55:14.616 INFO  [NettyClientSelector_TMROLE_1_1_24] o.a.s.c.l.EnhancedServiceLoader$InnerEnhancedServiceLoader - Load compatible class io.seata.core.serializer.Serializer
+10:55:14.696 INFO  [main] o.a.s.c.r.n.TmNettyRemotingClient - register TM success. client version:2.6.0, server version:2.6.0,channel:[id: 0x7f3b5c25, L:/127.0.0.1:52785 - R:/127.0.0.1:8091]
+10:55:14.697 INFO  [main] o.a.s.c.r.netty.NettyPoolableFactory - register success, cost 216 ms, version:2.6.0,role:TMROLE,channel:[id: 0x7f3b5c25, L:/127.0.0.1:52785 - R:/127.0.0.1:8091]
+10:55:14.698 INFO  [main] o.a.s.s.a.GlobalTransactionScanner - Transaction Manager Client is initialized. applicationId[demo-txn-loyalty] txServiceGroup[demo_txn_group]
+10:55:14.733 INFO  [main] o.a.s.c.l.EnhancedServiceLoader$InnerEnhancedServiceLoader - Load compatible class io.seata.core.model.ResourceManager
+10:55:14.742 INFO  [main] o.a.seata.rm.datasource.AsyncWorker - Async Commit Buffer Limit: 10000
+10:55:14.759 INFO  [main] o.a.s.r.d.xa.ResourceManagerXA - ResourceManagerXA init ...
+10:55:14.778 INFO  [main] o.a.s.c.r.netty.NettyClientBootstrap - client run on MacOS/Windows, fallback to NIO.
+10:55:14.779 INFO  [main] o.a.s.c.r.netty.NettyClientBootstrap - NettyClientBootstrap has started
+10:55:14.779 INFO  [main] o.a.s.c.r.n.AbstractNettyRemotingClient - register channel event listener: org.apache.seata.core.rpc.netty.RmNettyRemotingClient$1
+10:55:14.779 INFO  [main] o.a.s.s.a.GlobalTransactionScanner - Resource Manager is initialized. applicationId[demo-txn-loyalty] txServiceGroup[demo_txn_group]
+10:55:14.780 INFO  [main] o.a.s.s.a.GlobalTransactionScanner - Global Transaction Clients are initialized. 
+10:55:14.860 INFO  [main] o.a.s.s.a.GlobalTransactionScanner - The needed enhancement business beans are : []
+10:55:14.892 INFO  [main] o.a.s.c.l.EnhancedServiceLoader$InnerEnhancedServiceLoader - Load compatible class io.seata.core.context.ContextCore
+10:55:15.691 INFO  [main] o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 9010 (http)
+10:55:15.765 INFO  [main] o.a.catalina.core.StandardService - Starting service [Tomcat]
+10:55:15.766 INFO  [main] o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.27]
+10:55:15.863 INFO  [main] o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 4443 ms
+10:55:16.422 INFO  [main] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+10:55:16.994 INFO  [main] com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@19105a87
+10:55:16.997 INFO  [main] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+10:55:17.260 INFO  [main] o.a.s.c.r.n.NettyClientChannelManager - will connect to 127.0.0.1:8091
+10:55:17.260 INFO  [main] o.a.s.c.r.n.RmNettyRemotingClient - RM will register :jdbc:mysql://localhost:3306/demo_txn_c
+10:55:17.261 INFO  [main] o.a.s.c.r.netty.NettyPoolableFactory - NettyPool create channel to transactionRole:RMROLE,address:127.0.0.1:8091,msg:< RegisterRMRequest{resourceIds='jdbc:mysql://localhost:3306/demo_txn_c', version='2.6.0', applicationId='demo-txn-loyalty', transactionServiceGroup='demo_txn_group', extraData='null'} >
+10:55:17.280 INFO  [main] o.a.s.c.r.n.RmNettyRemotingClient - register RM success. client version:2.6.0, server version:2.6.0,channel:[id: 0x2d1f97bd, L:/127.0.0.1:52794 - R:/127.0.0.1:8091]
+10:55:17.280 INFO  [main] o.a.s.c.r.netty.NettyPoolableFactory - register success, cost 9 ms, version:2.6.0,role:RMROLE,channel:[id: 0x2d1f97bd, L:/127.0.0.1:52794 - R:/127.0.0.1:8091]
+10:55:17.288 INFO  [main] o.a.s.s.a.d.SeataAutoDataSourceProxyCreator - Auto proxy data source 'dataSource' by 'AT' mode.
+10:55:18.368 INFO  [main] o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 9010 (http) with context path '/'
+10:55:18.379 INFO  [main] c.e.d.txn.loyalty.LoyaltyApplication - Started LoyaltyApplication in 8.851 seconds (process running for 10.217)
+10:55:19.582 INFO  [http-nio-9010-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+10:55:19.582 INFO  [http-nio-9010-exec-1] o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+10:55:19.584 INFO  [http-nio-9010-exec-1] o.s.web.servlet.DispatcherServlet - Completed initialization in 1 ms
+Exception in thread "tableMetaRefresh_1_1" java.lang.NoClassDefFoundError: com/fasterxml/jackson/core/JsonProcessingException
+	at org.apache.seata.rm.datasource.ConnectionProxy.<init>(ConnectionProxy.java:51)
+	at org.apache.seata.rm.datasource.DataSourceProxy.getConnection(DataSourceProxy.java:213)
+	at org.apache.seata.rm.datasource.sql.struct.TableMetaCacheFactory$TableMetaRefreshHolder.lambda$new$0(TableMetaCacheFactory.java:159)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at io.netty.util.concurrent.FastThreadLocalRunnable.run(FastThreadLocalRunnable.java:30)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: java.lang.ClassNotFoundException: com.fasterxml.jackson.core.JsonProcessingException
+	at java.base/java.net.URLClassLoader.findClass(URLClassLoader.jav11:20:29.872 WARN  [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=21m55s170ms).
+11:38:29.327 WARN  [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=17m29s412ms).
+11:54:32.880 WARN  [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m33s541ms).
+er delta=21m55s164ms).
+11:38:41.831 WARN  [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=17m29s414ms).
+11:54:15.365 WARN  [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m33s534ms).

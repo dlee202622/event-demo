@@ -10,6 +10,7 @@
 @lockHost = http://localhost:9007
 @startupHost = http://localhost:9006
 @jvmHost = http://localhost:9005
+@mqttHost = http://localhost:9005
 @orderId = ORD-XXXXXXXX
 
 ### 1. 下单（总价 399 × 2 = 798）
@@ -330,3 +331,94 @@ Content-Type: application/json
 
 ### 74. 场景 1：直方图（jcmd GC.class_histogram 同一口径；all=true 看全部，all=false 只看可达）
 GET {{jvmHost}}/api/jvm/histogram?all=false
+
+################################################################################
+# MQTT 演示接口（demo-mqtt 模块，端口 9005）
+# 前置：docker compose up -d emqx
+# 使用顺序：先订阅（subscribe）→ 再发布（publish）→ 查询消息（messages）
+################################################################################
+
+### ==================== 场景 1：基础发布/订阅 ====================
+
+### 75. 订阅主题（必须先订阅，再发布才能收到）
+POST {{mqttHost}}/api/mqtt/pubsub/subscribe?topic=sensor/temperature
+
+### 76. 发布消息到已订阅的主题
+POST {{mqttHost}}/api/mqtt/pubsub/publish?topic=sensor/temperature&payload=25.5°C&qos=1
+
+### 77. 查询收到的消息
+GET {{mqttHost}}/api/mqtt/pubsub/messages?topic=sensor/temperature
+
+### 78. 清空消息记录
+DELETE {{mqttHost}}/api/mqtt/pubsub/messages?topic=sensor/temperature
+
+### 79. 取消订阅
+DELETE {{mqttHost}}/api/mqtt/pubsub/subscribe?topic=sensor/temperature
+
+### ==================== 场景 2：QoS 三级对比 ====================
+
+### 80. 订阅 QoS 0 测试主题（至多一次）
+POST {{mqttHost}}/api/mqtt/qos/subscribe?qos=0
+
+### 81. 订阅 QoS 1 测试主题（至少一次）
+POST {{mqttHost}}/api/mqtt/qos/subscribe?qos=1
+
+### 82. 订阅 QoS 2 测试主题（恰好一次）
+POST {{mqttHost}}/api/mqtt/qos/subscribe?qos=2
+
+### 83. 向 QoS 0 主题发布消息（发送 QoS = 目标 QoS = 0）
+POST {{mqttHost}}/api/mqtt/qos/publish?targetQos=0&payload=qos0-test
+
+### 84. 向 QoS 1 主题发布消息（发送 QoS = 目标 QoS = 1）
+POST {{mqttHost}}/api/mqtt/qos/publish?targetQos=1&payload=qos1-test
+
+### 85. 向 QoS 2 主题发布消息（发送 QoS = 目标 QoS = 2）
+POST {{mqttHost}}/api/mqtt/qos/publish?targetQos=2&payload=qos2-test
+
+### 86. QoS 降级测试：向 QoS 1 主题发布，但发送方用 QoS 0
+### 预期：订阅者收到时 receivedQos=0（取发送方和订阅方较小值）
+POST {{mqttHost}}/api/mqtt/qos/publish?targetQos=1&payload=qos-downgrade-test&publishQos=0
+
+### 87. 查询各 QoS 级别收到的消息
+GET {{mqttHost}}/api/mqtt/qos/messages?qos=0
+
+### 88. 查询 QoS 接收计数器（对比各级别实际收到多少条）
+GET {{mqttHost}}/api/mqtt/qos/counters
+
+### 89. 重置 QoS 测试状态
+DELETE {{mqttHost}}/api/mqtt/qos/reset
+
+### ==================== 场景 3：通配符订阅 ====================
+
+### 90. 订阅单层通配符（+ 匹配一个层级）
+### sensor/+/temp 会匹配 sensor/room1/temp、sensor/room2/temp
+### 但不匹配 sensor/room1/floor2/temp（多层级）
+POST {{mqttHost}}/api/mqtt/wildcard/subscribe?topicFilter=sensor/%2B/temp
+
+### 91. 订阅多层通配符（# 匹配零个或多个层级）
+### device/# 会匹配 device、device/001、device/001/status 等所有以 device 开头的主题
+POST {{mqttHost}}/api/mqtt/wildcard/subscribe?topicFilter=device/%23
+
+### 92. 发布到匹配单层通配符的主题
+POST {{mqttHost}}/api/mqtt/wildcard/publish?topic=sensor/room1/temp&payload=26°C
+
+### 93. 发布到不匹配单层通配符的主题（多了一层）
+### sensor/+/temp 不会匹配 sensor/room1/floor2/temp
+POST {{mqttHost}}/api/mqtt/wildcard/publish?topic=sensor/room1/floor2/temp&payload=27°C
+
+### 94. 发布到匹配多层通配符的主题
+POST {{mqttHost}}/api/mqtt/wildcard/publish?topic=device/001/status&payload=online
+
+### 95. 查询单层通配符订阅收到的消息
+### 预期：只收到 sensor/room1/temp 的消息，不收到 sensor/room1/floor2/temp
+GET {{mqttHost}}/api/mqtt/wildcard/messages?topicFilter=sensor/+/temp
+
+### 96. 查询多层通配符订阅收到的消息
+### 预期：收到所有 device/... 的消息
+GET {{mqttHost}}/api/mqtt/wildcard/messages?topicFilter=device/#
+
+### 97. 清空通配符订阅消息
+DELETE {{mqttHost}}/api/mqtt/wildcard/messages?topicFilter=sensor/+/temp
+
+### 98. 取消通配符订阅
+DELETE {{mqttHost}}/api/mqtt/wildcard/subscribe?topicFilter=sensor/%2B/temp

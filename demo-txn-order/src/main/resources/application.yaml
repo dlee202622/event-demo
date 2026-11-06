@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: demo-txn-order
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/demo_txn_a?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&characterEncoding=utf8}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:123456}
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+server:
+  port: ${SERVER_PORT:9008}
+
+demo:
+  txn:
+    order:
+      # 参与者地址：隔离验证时指向别的端口即可
+      inventory-base-url: ${INVENTORY_BASE_URL:http://localhost:9009}
+      loyalty-base-url: ${LOYALTY_BASE_URL:http://localhost:9010}
+      localmsg:
+        # 本地消息表重投间隔（毫秒）：教程用它演示最终一致的收敛速度
+        relay-interval-ms: ${LOCALMSG_RELAY_INTERVAL_MS:500}
+        # 重试上限：超过后消息置 DEAD，订单标记失败，等待人工介入
+        max-retries: ${LOCALMSG_MAX_RETRIES:10}
+
+# Seata AT 模式：vgroup 通过静态 grouplist 直连 TC（demo 不引注册中心）。
+# docker compose up -d seata-server 后生效；测试与无 Seata 环境用 SEATA_ENABLED=false 关闭
+seata:
+  enabled: ${SEATA_ENABLED:true}
+  application-id: demo-txn-order
+  tx-service-group: demo_txn_group
+  data-source-proxy-mode: AT
+  service:
+    vgroup-mapping:
+      demo_txn_group: default
+    grouplist:
+      default: ${SEATA_SERVER:127.0.0.1:8091}
+
+logging:
+  level:
+    root: INFO
+    com.example.demo: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"

@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: demo-txn-inventory
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/demo_txn_b?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&characterEncoding=utf8}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:123456}
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
+
+server:
+  port: ${SERVER_PORT:9009}
+
+demo:
+  txn:
+    inventory:
+      # TCC 空回滚/悬挂防护开关：默认开启，教程里先关掉复现三大异常再打开对比
+      tcc-guard-enabled: ${TCC_GUARD_ENABLED:true}
+
+# Seata AT 分支端（RM）：数据源自动被代理，undo_log 记录前后镜像。
+# 不依赖注册中心，vgroup 静态映射直连 TC；测试用 SEATA_ENABLED=false 关闭
+seata:
+  enabled: ${SEATA_ENABLED:true}
+  application-id: demo-txn-inventory
+  tx-service-group: demo_txn_group
+  data-source-proxy-mode: AT
+  service:
+    vgroup-mapping:
+      demo_txn_group: default
+    grouplist:
+      default: ${SEATA_SERVER:127.0.0.1:8091}
+
+# Hikari 连接池默认 10 个连接：2PC Prepare 阶段每个未决事务会占住 1 个连接不释放，
+# 若并发 Prepare 超过池上限，后续请求会在 getTransaction 处排队——这正是
+# “2PC 参与者持有资源导致吞吐下降”的微观体现，教程里有对应实验
+logging:
+  level:
+    root: INFO
+    com.example.demo: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"

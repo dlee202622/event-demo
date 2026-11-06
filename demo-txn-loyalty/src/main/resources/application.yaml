@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: demo-txn-loyalty
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/demo_txn_c?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&characterEncoding=utf8}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:123456}
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
+
+server:
+  port: ${SERVER_PORT:9010}
+
+demo:
+  txn:
+    loyalty:
+      # TCC 空回滚/悬挂防护开关：默认开启，教程里先关掉复现三大异常再打开对比
+      tcc-guard-enabled: ${TCC_GUARD_ENABLED:true}
+
+# Seata AT 分支端（RM）：与 B 完全对称，undo_log 记录前后镜像
+seata:
+  enabled: ${SEATA_ENABLED:true}
+  application-id: demo-txn-loyalty
+  tx-service-group: demo_txn_group
+  data-source-proxy-mode: AT
+  service:
+    vgroup-mapping:
+      demo_txn_group: default
+    grouplist:
+      default: ${SEATA_SERVER:127.0.0.1:8091}
+
+logging:
+  level:
+    root: INFO
+    com.example.demo: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"

@@ -18,6 +18,7 @@ demo
 ├── demo-loyalty-service               积分服务（9003，订阅 OrderPaid）
 ├── demo-rabbitmq                      RabbitMQ 基础用法示例（[文档](demo-rabbitmq/README.md)）
 ├── demo-rocketmq                      RocketMQ 基础用法示例（[文档](demo-rocketmq/README.md)）
+├── demo-mqtt                          MQTT 协议演示：发布订阅 / QoS 三级 / 通配符（[文档](demo-mqtt/README.md)）
 ├── demo-redis                         Redis 数据类型 / 限流 / 分布式锁 / 缓存一致性（[文档](demo-redis/README.md)）
 ├── demo-concurrency                   Java 锁 / AQS / 死锁 / 并发计数（[文档](demo-concurrency/README.md)）
 ├── demo-springboot-startup            Spring Boot 注解与类 / 启动链路 / 自动配置 / Bean 生命周期（[文档](demo-springboot-startup/README.md)）
@@ -165,6 +166,23 @@ docker compose up -d redis mysql
 ```
 
 启动后从 `curl http://localhost:9004/api/redis/types/all` 开始；接口、curl 和实测输出见 [demo-redis/README.md](demo-redis/README.md)，原理图解见 [docs/redis-guide.html](docs/redis-guide.html)。
+
+### MQTT 协议 Demo（发布订阅 / QoS / 通配符）
+
+独立模块 `demo-mqtt`（9005），基于 EMQX Broker 演示 MQTT 协议核心特性：
+
+| 场景 | 覆盖内容 |
+| --- | --- |
+| 基础发布/订阅 | 主题订阅、消息发布、接收查询；观察"先订阅再发布"的必要性 |
+| QoS 三级对比 | QoS 0/1/2 独立订阅、QoS 降级（发送方与订阅方取较小值）、接收计数对比 |
+| 通配符订阅 | `+` 单层通配 vs `#` 多层通配、匹配规则验证、系统主题 `$SYS` 特殊处理 |
+
+```bash
+docker compose up -d emqx
+./mvnw -pl demo-mqtt spring-boot:run
+```
+
+启动后从 `curl http://localhost:9005/api/mqtt/pubsub/subscribe?topic=test/hello` 开始；接口与 curl 见 [demo-mqtt/README.md](demo-mqtt/README.md)。EMQX Dashboard 在 <http://localhost:18083>（admin/public）。
 
 ### MySQL 原理与数据结构（图文教程）
 
